@@ -83,13 +83,9 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result
 	if len(files) == 0 {
 		return result, fmt.Errorf("no Codex rollout JSONL files found")
 	}
-	state, err := loadImportState(store)
+	state, appender, err := loadImportState(store)
 	if err != nil {
 		return result, err
-	}
-	appender, err := store.NewAppender()
-	if err != nil {
-		return result, fmt.Errorf("open evidence appender: %w", err)
 	}
 	for _, path := range files {
 		result.FilesExamined++
@@ -144,12 +140,12 @@ func collectRollouts(sourcePath string) ([]string, error) {
 	return files, nil
 }
 
-func loadImportState(store *ledger.Store) (*importState, error) {
+func loadImportState(store *ledger.Store) (*importState, *ledger.Appender, error) {
 	state := &importState{
 		knownIDs:        map[string]struct{}{},
 		committedOffset: map[string]int64{},
 	}
-	err := store.VisitRecords(func(record ledger.Record) error {
+	appender, err := store.NewAppenderAfterVisit(func(record ledger.Record) error {
 		event := record.Event
 		state.knownIDs[event.EventID] = struct{}{}
 		if event.Source.Agent != ledger.AgentCodex ||
@@ -166,9 +162,9 @@ func loadImportState(store *ledger.Store) (*importState, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("load Codex import state: %w", err)
+		return nil, nil, fmt.Errorf("load Codex import state: %w", err)
 	}
-	return state, nil
+	return state, appender, nil
 }
 
 func importFile(
