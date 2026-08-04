@@ -15,6 +15,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
+	"github.com/rrrrrredy/agent-memory-system/internal/review"
 )
 
 func main() {
@@ -82,9 +83,115 @@ func run(args []string) error {
 			return deriveUsageError()
 		}
 		return runDerive(args[1:])
+	case "review":
+		if len(args) < 2 {
+			return reviewUsageError()
+		}
+		return runReview(args[1:])
 	default:
 		return usageError()
 	}
+}
+
+func runReview(args []string) error {
+	switch args[0] {
+	case "apply":
+		return runReviewApply(args[1:])
+	case "status":
+		return runReviewStatus(args[1:])
+	case "verify":
+		return runReviewVerify(args[1:])
+	default:
+		return reviewUsageError()
+	}
+}
+
+func runReviewApply(args []string) error {
+	flags := flag.NewFlagSet("review apply", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	candidateGeneration := flags.String("candidates", "", "candidate generation path or directory name (required)")
+	requestPath := flags.String("file", "", "review request JSON file, or - for stdin (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *candidateGeneration == "" || *requestPath == "" {
+		return errors.New("review apply requires --root, --candidates, and --file")
+	}
+	reader := os.Stdin
+	var file *os.File
+	var err error
+	if *requestPath != "-" {
+		file, err = os.Open(*requestPath)
+		if err != nil {
+			return fmt.Errorf("open review request: %w", err)
+		}
+		defer file.Close()
+		reader = file
+	}
+	request, err := review.DecodeRequest(reader)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := review.Apply(store, *candidateGeneration, request)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
+func runReviewStatus(args []string) error {
+	flags := flag.NewFlagSet("review status", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	candidateGeneration := flags.String("candidates", "", "candidate generation path or directory name (required)")
+	candidateID := flags.String("candidate", "", "candidate id (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *candidateGeneration == "" || *candidateID == "" {
+		return errors.New("review status requires --root, --candidates, and --candidate")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := review.GetStatus(store, *candidateGeneration, *candidateID)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
+func runReviewVerify(args []string) error {
+	flags := flag.NewFlagSet("review verify", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" {
+		return errors.New("review verify requires --root")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	report := review.Verify(store)
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(report); err != nil {
+		return err
+	}
+	if len(report.Issues) > 0 {
+		return errors.New("candidate review verification failed")
+	}
+	return nil
 }
 
 func runDerive(args []string) error {
@@ -221,7 +328,11 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor|import|capture|derive> [options]")
+	return errors.New("usage: agentmem <init|doctor|import|capture|derive|review> [options]")
+}
+
+func reviewUsageError() error {
+	return errors.New("usage: agentmem review <apply|status|verify> [options]")
 }
 
 func deriveUsageError() error {

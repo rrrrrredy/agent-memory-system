@@ -68,6 +68,10 @@ A `review_ready` candidate is still untrusted review material. It is not a
 validated candidate or promoted memory, and it is never automatically eligible
 for promotion.
 
+A review transition MUST bind the candidate content hash, expected prior state,
+human reviewer attestation, confirmed scope, and evidence basis in an
+append-only record. Validation alone does not create promoted memory.
+
 Compaction continuity analysis MUST distinguish confirmed correction evidence
 from lexical omission risk and unavailable compacted representations. A missing
 phrase alone is not proof that the task goal drifted.
