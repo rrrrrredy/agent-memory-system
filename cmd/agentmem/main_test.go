@@ -33,6 +33,12 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "codex inject flags", args: []string{"inject", "codex"}, message: "requires --root and --repo"},
 		{name: "claude inject flags", args: []string{"inject", "claude-code"}, message: "requires --root and --repo"},
 		{name: "opencode inject flags", args: []string{"inject", "opencode"}, message: "requires --root and --repo"},
+		{name: "missing backup subcommand", args: []string{"backup"}, message: "backup <keygen|create|verify|restore>"},
+		{name: "unknown backup subcommand", args: []string{"backup", "unknown"}, message: "backup <keygen|create|verify|restore>"},
+		{name: "backup keygen flags", args: []string{"backup", "keygen"}, message: "requires --identity"},
+		{name: "backup create flags", args: []string{"backup", "create"}, message: "requires --root, --output, and at least one --recipient"},
+		{name: "backup verify flags", args: []string{"backup", "verify"}, message: "requires --archive and at least one --identity"},
+		{name: "backup restore flags", args: []string{"backup", "restore"}, message: "requires --archive, --target, and at least one --identity"},
 		{name: "missing review subcommand", args: []string{"review"}, message: "review <apply|status|verify>"},
 		{name: "unknown review subcommand", args: []string{"review", "unknown"}, message: "review <apply|status|verify>"},
 		{name: "review apply flags", args: []string{"review", "apply"}, message: "requires --root, --candidates, and --file"},
@@ -85,6 +91,12 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 				t.Fatalf("run(%v) error = %v, want message containing %q", test.args, err, test.message)
 			}
 		})
+	}
+}
+
+func TestVersionCommand(t *testing.T) {
+	if err := run([]string{"version"}); err != nil {
+		t.Fatal(err)
 	}
 }
 

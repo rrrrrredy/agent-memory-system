@@ -134,7 +134,7 @@ func TestMCPServerKeepsAccessScopesInTrustedConfiguration(t *testing.T) {
 		Name:      "memory_search",
 		Arguments: map[string]any{"query": "Claude memory Codex", "project": "spoofed"},
 	})
-	if err == nil {
+	if err == nil && (response == nil || !response.IsError) {
 		t.Fatalf("untrusted scope override was accepted: response=%+v", response)
 	}
 	response, err = clientSession.CallTool(ctx, &mcp.CallToolParams{

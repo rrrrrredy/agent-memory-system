@@ -27,3 +27,19 @@ jobs:
       - run: go vet ./...
       - run: go build ./cmd/agentmem
       - run: node --test integrations/opencode/crash-safe-jsonl.test.mjs integrations/opencode/opencode-retrieval.test.mjs
+      - name: Check macOS installer syntax
+        if: runner.os != 'Windows'
+        run: sh -n scripts/install.sh
+      - name: Check Windows installer syntax
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/install.ps1'), [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }

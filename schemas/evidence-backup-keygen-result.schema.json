@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/evidence-backup-keygen-result.schema.json",
+  "title": "Evidence backup key generation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "key_type", "recipient", "identity_path", "privacy"],
+  "properties": {
+    "schema_version": {"const": "evidence-backup-keygen-result/v1alpha1"},
+    "key_type": {"const": "mlkem768x25519"},
+    "recipient": {"type": "string", "pattern": "^age1pq1[0-9a-z]+$"},
+    "identity_path": {"type": "string", "minLength": 1},
+    "privacy": {"const": "secret_local_only"}
+  }
+}

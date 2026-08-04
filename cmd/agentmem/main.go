@@ -8,13 +8,17 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/rrrrrredy/agent-memory-system/adapters/claudecode"
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
 	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
 	"github.com/rrrrrredy/agent-memory-system/internal/autosync"
+	"github.com/rrrrrredy/agent-memory-system/internal/backup"
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
+	"github.com/rrrrrredy/agent-memory-system/internal/diagnostics"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/evaluation"
 	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
@@ -26,6 +30,12 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/retrieval"
 	"github.com/rrrrrredy/agent-memory-system/internal/review"
 	"github.com/rrrrrredy/agent-memory-system/internal/ruleapproval"
+)
+
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
 )
 
 func main() {
@@ -40,6 +50,15 @@ func run(args []string) error {
 		return usageError()
 	}
 	switch args[0] {
+	case "version":
+		return encodeIndented(map[string]any{
+			"schema_version": "agent-memory-version/v1alpha1",
+			"version":        version,
+			"commit":         commit,
+			"build_date":     buildDate,
+			"go_version":     runtime.Version(),
+			"platform":       runtime.GOOS + "/" + runtime.GOARCH,
+		})
 	case "init":
 		flags := flag.NewFlagSet("init", flag.ContinueOnError)
 		root := flags.String("root", "", "local evidence root (required)")
@@ -58,6 +77,9 @@ func run(args []string) error {
 	case "doctor":
 		flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
 		root := flags.String("root", "", "local evidence root (required)")
+		repository := flags.String("repo", "", "optional portable memory Git repository")
+		requireRepository := flags.Bool("require-repo", false,
+			"require and verify a portable memory Git repository")
 		clearWriterLock := flags.Bool("clear-stale-writer-lock", false,
 			"remove the writer lock after independently verifying no ledger writer is active")
 		if err := flags.Parse(args[1:]); err != nil {
@@ -89,14 +111,14 @@ func run(args []string) error {
 			}
 			return nil
 		}
-		report := store.Verify()
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(report); err != nil {
+		report := diagnostics.Run(context.Background(), store, diagnostics.Options{
+			Repository: *repository, RequireRepository: *requireRepository,
+		})
+		if err := encodeIndented(report); err != nil {
 			return err
 		}
-		if len(report.Issues) > 0 {
-			return errors.New("evidence verification failed")
+		if !report.Ready {
+			return errors.New("agent memory diagnostic checks failed")
 		}
 		return nil
 	case "import":
@@ -114,6 +136,11 @@ func run(args []string) error {
 			return captureUsageError()
 		}
 		return runCapture(args[1:])
+	case "backup":
+		if len(args) < 2 {
+			return backupUsageError()
+		}
+		return runBackup(args[1:])
 	case "derive":
 		if len(args) < 2 {
 			return deriveUsageError()
@@ -161,6 +188,108 @@ func run(args []string) error {
 		return runSync(args[1:])
 	default:
 		return usageError()
+	}
+}
+
+type repeatedStrings []string
+
+func (values *repeatedStrings) String() string {
+	return strings.Join(*values, ",")
+}
+
+func (values *repeatedStrings) Set(value string) error {
+	*values = append(*values, value)
+	return nil
+}
+
+func runBackup(args []string) error {
+	switch args[0] {
+	case "keygen":
+		flags := flag.NewFlagSet("backup keygen", flag.ContinueOnError)
+		identity := flags.String("identity", "", "new private recovery identity path outside Git (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *identity == "" {
+			return errors.New("backup keygen requires --identity")
+		}
+		result, err := backup.GenerateIdentity(*identity)
+		if err != nil {
+			return err
+		}
+		return encodeIndented(result)
+	case "create":
+		flags := flag.NewFlagSet("backup create", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		output := flags.String("output", "", "new encrypted archive path outside Git (required)")
+		var recipients repeatedStrings
+		flags.Var(&recipients, "recipient", "native age recipient; repeat for independent recovery keys")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *output == "" || len(recipients) == 0 {
+			return errors.New("backup create requires --root, --output, and at least one --recipient")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, err := backup.Create(store, backup.CreateOptions{
+			Output: *output, Recipients: recipients,
+		})
+		if err != nil {
+			return err
+		}
+		return encodeIndented(result)
+	case "verify":
+		flags := flag.NewFlagSet("backup verify", flag.ContinueOnError)
+		archive := flags.String("archive", "", "encrypted evidence archive (required)")
+		maxBytes := flags.Int64("max-bytes", backup.DefaultMaxPlaintextBytes,
+			"maximum authenticated plaintext bytes")
+		maxFiles := flags.Int("max-files", backup.DefaultMaxFiles,
+			"maximum authenticated archive files")
+		var identities repeatedStrings
+		flags.Var(&identities, "identity", "native age private identity file; may be repeated")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *archive == "" || len(identities) == 0 {
+			return errors.New("backup verify requires --archive and at least one --identity")
+		}
+		result, verifyErr := backup.Verify(backup.VerifyOptions{
+			Archive: *archive, IdentityPaths: identities,
+			MaxPlaintextBytes: *maxBytes, MaxFiles: *maxFiles,
+		})
+		if err := encodeIndented(result); err != nil {
+			return err
+		}
+		return verifyErr
+	case "restore":
+		flags := flag.NewFlagSet("backup restore", flag.ContinueOnError)
+		archive := flags.String("archive", "", "encrypted evidence archive (required)")
+		target := flags.String("target", "", "new local evidence directory outside Git (required)")
+		maxBytes := flags.Int64("max-bytes", backup.DefaultMaxPlaintextBytes,
+			"maximum restored plaintext bytes")
+		maxFiles := flags.Int("max-files", backup.DefaultMaxFiles,
+			"maximum restored files")
+		var identities repeatedStrings
+		flags.Var(&identities, "identity", "native age private identity file; may be repeated")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *archive == "" || *target == "" || len(identities) == 0 {
+			return errors.New("backup restore requires --archive, --target, and at least one --identity")
+		}
+		result, restoreErr := backup.Restore(backup.RestoreOptions{
+			Archive: *archive, IdentityPaths: identities, Target: *target,
+			MaxPlaintextBytes: *maxBytes, MaxFiles: *maxFiles,
+		})
+		if err := encodeIndented(result); err != nil {
+			return err
+		}
+		return restoreErr
+	default:
+		return backupUsageError()
 	}
 }
 
@@ -1449,7 +1578,11 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor|import|inject|capture|derive|eval|review|promote|rule-approval|portable|recall|serve|sync> [options]")
+	return errors.New("usage: agentmem <version|init|doctor|import|inject|capture|backup|derive|eval|review|promote|rule-approval|portable|recall|serve|sync> [options]")
+}
+
+func backupUsageError() error {
+	return errors.New("usage: agentmem backup <keygen|create|verify|restore> [options]")
 }
 
 func reviewUsageError() error {

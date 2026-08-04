@@ -1,0 +1,64 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go test ./...
+      - run: go vet ./...
+      - run: node --test integrations/opencode/crash-safe-jsonl.test.mjs integrations/opencode/opencode-retrieval.test.mjs
+      - name: Build release archives
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME}"
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p dist
+          for target in windows/amd64 windows/arm64 darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            name="agentmem_${version}_${goos}_${goarch}"
+            directory="dist/${name}"
+            mkdir -p "${directory}"
+            binary="agentmem"
+            if [ "${goos}" = "windows" ]; then
+              binary="agentmem.exe"
+            fi
+            GOOS="${goos}" GOARCH="${goarch}" go build \
+              -trimpath -buildvcs=false \
+              -ldflags "-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA} -X main.buildDate=${build_date}" \
+              -o "${directory}/${binary}" ./cmd/agentmem
+            cp LICENSE README.md "${directory}/"
+            if [ "${goos}" = "windows" ]; then
+              (cd "${directory}" && zip -q -r "../${name}.zip" .)
+            else
+              tar -C "${directory}" -czf "dist/${name}.tar.gz" .
+            fi
+          done
+          (cd dist && sha256sum ./*.zip ./*.tar.gz > SHA256SUMS)
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          args=(--verify-tag --generate-notes --title "${GITHUB_REF_NAME}")
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${GITHUB_REF_NAME}" "${args[@]}" dist/SHA256SUMS dist/*.zip dist/*.tar.gz

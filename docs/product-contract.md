@@ -110,6 +110,12 @@ phrase alone is not proof that the task goal drifted.
   that enter one through a directory link.
 - Optional raw-evidence disaster recovery uses encrypted snapshots and a backend
   fully separate from the readable memory Git repository.
+- Backup decryption identities are never stored with backup objects. Creation
+  and verification bind authenticated ciphertext to a versioned file manifest,
+  the evidence chain, and referenced blobs.
+- Restore is no-overwrite and must pass complete verification in staging before
+  a new evidence directory is committed. A restored logical store is a disaster
+  replacement, not an active-active replica.
 - The public tool repository and private personal-memory repository are
   separate.
 - The private memory repository contains only reviewed, redacted promoted

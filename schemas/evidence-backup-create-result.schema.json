@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/evidence-backup-create-result.schema.json",
+  "title": "Encrypted evidence backup creation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "backup_id", "created_at", "archive_sha256", "archive_bytes", "source_device_id", "source_records", "files", "plaintext_bytes", "recipients", "privacy"],
+  "properties": {
+    "schema_version": {"const": "evidence-backup-create-result/v1alpha1"},
+    "backup_id": {"type": "string", "pattern": "^backup-[a-f0-9]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "archive_sha256": {"$ref": "#/$defs/hash"},
+    "archive_bytes": {"type": "integer", "minimum": 1},
+    "source_device_id": {"type": "string", "minLength": 1},
+    "source_records": {"type": "integer", "minimum": 0},
+    "source_last_record_hash": {"$ref": "#/$defs/hash"},
+    "files": {"type": "integer", "minimum": 1},
+    "plaintext_bytes": {"type": "integer", "minimum": 1},
+    "recipients": {"type": "integer", "minimum": 1},
+    "privacy": {"const": "encrypted_local_evidence"}
+  },
+  "$defs": {"hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+}

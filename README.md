@@ -9,9 +9,9 @@ evidence stays local by default. Only reviewed, redacted, promoted memories may
 enter a separate private Git repository.
 
 > Status: v1alpha1 foundation. Evidence capture, review and promotion, portable
-> memory, verified Git synchronization, bounded cross-Agent retrieval, and the
-> evidence-bound evaluation core are implemented; encrypted evidence backup
-> remains in development.
+> memory, verified Git synchronization, bounded cross-Agent retrieval,
+> evidence-bound evaluation, and authenticated encrypted backup and recovery
+> are implemented.
 
 ## Product boundary
 
@@ -57,6 +57,8 @@ canonical data and is never merged through Git.
 - `internal/gitsync`: append-only Git history validation and explicit synchronization
 - `internal/retrieval`: verified ranking, bounded context, and local use receipts
 - `internal/evaluation`: frozen corpora, attestations, metrics, gates, and run verification
+- `internal/backup`: age-encrypted evidence snapshots, streaming verification, and no-overwrite restore
+- `internal/diagnostics`: full local and private-repository recovery checks
 - `internal/mcpserver`: shared Codex, Claude Code, and OpenCode query surface
 - `internal/secretscan`: deterministic, non-echoing sensitive-content detection
 - `internal/ruleapproval`: separate revision-, surface-, and target-bound rule authorization
@@ -69,9 +71,10 @@ canonical data and is never merged through Git.
 
 ## Development
 
-Go 1.24 or newer is required.
+Go 1.25 or newer is required.
 
 ```text
+go run ./cmd/agentmem version
 go test ./...
 go run ./cmd/agentmem init --root <local-data-directory>
 go run ./cmd/agentmem import codex --root <local-data-directory> --path <rollout-file-or-directory>
@@ -108,7 +111,11 @@ go run ./cmd/agentmem eval corpus baseline --root <local-data-directory> --corpu
 go run ./cmd/agentmem eval attest --root <local-data-directory> --file <evaluation-attestation.json>
 go run ./cmd/agentmem eval run --root <local-data-directory> --file <evaluation-input.json> --repo <private-memory-directory> --enforce
 go run ./cmd/agentmem eval verify --root <local-data-directory> --suite <suite-id> --run <run-id>
-go run ./cmd/agentmem doctor --root <local-data-directory>
+go run ./cmd/agentmem backup keygen --identity <separate-private-key-file>
+go run ./cmd/agentmem backup create --root <local-data-directory> --output <encrypted-archive> --recipient <age-recipient>
+go run ./cmd/agentmem backup verify --archive <encrypted-archive> --identity <separate-private-key-file>
+go run ./cmd/agentmem backup restore --archive <encrypted-archive> --identity <separate-private-key-file> --target <new-local-data-directory>
+go run ./cmd/agentmem doctor --root <local-data-directory> --repo <private-memory-directory> --require-repo
 ```
 
 The JSONL importers store exact append segments as content-addressed local
@@ -200,12 +207,33 @@ must be recorded first as append-only case attestations, and a run cannot pass
 on empty samples or unresolved evidence. See
 [continuous-learning evaluation](docs/evaluation.md).
 
+`backup create` produces one authenticated age archive outside every Git
+worktree. It verifies the ledger before capture, rejects active writers and
+links, hashes every included file while capturing, archiving, and rechecking,
+and aborts if the source changes.
+`backup verify` checks ciphertext, manifest, file hashes, ledger records, and
+blob references without extracting plaintext. Restore targets must not exist;
+successful recovery appends a local restore record before committing the new
+store. See [encrypted evidence backup and recovery](docs/backup-recovery.md).
+
+`doctor` verifies the complete local learning state. With `--repo` it also
+checks the portable repository and reachable Git history; `--require-repo`
+makes that repository mandatory for new-device acceptance.
+
+Tagged releases publish checksum-listed Windows, macOS, and Linux binaries.
+The installers under `scripts` replace only the Windows or macOS executable and
+never edit evidence, Agent configuration, hooks, or synchronization schedules.
+
 ## Safety
 
 - Never paste or attach raw evidence to GitHub issues or pull requests.
 - The evidence ledger refuses roots inside Git worktrees.
 - Never point Git synchronization at a Codex, Claude Code, or OpenCode internal
   state directory.
+- Keep every backup identity separate from both its encrypted archive and the
+  private promoted-memory Git repository.
+- Never restore one logical evidence store onto two devices that will continue
+  writing concurrently.
 - No candidate experience is automatically injected into future tasks.
 - Any portable-repository verification issue blocks the whole retrieval.
 - A memory must carry provenance, scope, status, and evidence before promotion.

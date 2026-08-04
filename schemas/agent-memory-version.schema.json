@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/agent-memory-version.schema.json",
+  "title": "Agent Memory System binary version",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "version", "commit", "build_date", "go_version", "platform"],
+  "properties": {
+    "schema_version": {"const": "agent-memory-version/v1alpha1"},
+    "version": {"type": "string", "minLength": 1},
+    "commit": {"type": "string", "minLength": 1},
+    "build_date": {"type": "string", "minLength": 1},
+    "go_version": {"type": "string", "minLength": 1},
+    "platform": {"type": "string", "pattern": "^[a-z0-9]+/[a-z0-9]+$"}
+  }
+}

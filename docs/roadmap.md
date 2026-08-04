@@ -49,6 +49,8 @@ No raw evidence is migrated when the private repository is created.
 
 ## M4: Retrieval, evaluation, and recovery
 
+Status: implemented in the v1alpha1 foundation.
+
 - Cross-agent local query and MCP retrieval.
 - Bounded injection with provenance and adoption receipts.
 - Continuous-learning regression suite using frozen legacy cards and rollouts.

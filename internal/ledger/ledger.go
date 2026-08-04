@@ -604,19 +604,31 @@ func lastRecordHash(path string) (string, error) {
 }
 
 func (s *Store) Verify() VerificationReport {
-	report := VerificationReport{Issues: []string{}}
 	path := filepath.Join(s.root, filepath.FromSlash(eventsPath))
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return report
+		return VerificationReport{Issues: []string{}}
 	}
 	if err != nil {
+		report := VerificationReport{Issues: []string{}}
 		report.Issues = append(report.Issues, fmt.Sprintf("open ledger: %v", err))
 		return report
 	}
 	defer file.Close()
+	return VerifyReader(file, s.verifyBlob)
+}
 
-	reader := bufio.NewReader(file)
+// VerifyReader checks an evidence ledger stream and delegates content-addressed
+// blob validation to verifyBlob. It is used by encrypted-backup verification so
+// an archive can be checked without writing plaintext evidence to temporary
+// storage.
+func VerifyReader(source io.Reader, verifyBlob func(BlobRef) string) VerificationReport {
+	report := VerificationReport{Issues: []string{}}
+	if source == nil {
+		report.Issues = append(report.Issues, "ledger reader is required")
+		return report
+	}
+	reader := bufio.NewReader(source)
 	previous := ""
 	lineNumber := 0
 	for {
@@ -654,7 +666,11 @@ func (s *Store) Verify() VerificationReport {
 			}
 			if record.Event.Payload != nil && record.Event.Payload.Blob != nil {
 				report.BlobsChecked++
-				if issue := s.verifyBlob(*record.Event.Payload.Blob); issue != "" {
+				issue := "blob verifier is required"
+				if verifyBlob != nil {
+					issue = verifyBlob(*record.Event.Payload.Blob)
+				}
+				if issue != "" {
 					report.Issues = append(report.Issues,
 						fmt.Sprintf("line %d %s", lineNumber, issue))
 				}

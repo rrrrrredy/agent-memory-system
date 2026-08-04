@@ -133,6 +133,12 @@ Controls:
 - scheduled integrity checks and restore drills;
 - no use of the promoted-memory Git repository as evidence backup.
 
+The integrated backup path uses native age hybrid keys, an encrypted manifest,
+two-pass source hashing, streaming ciphertext and ledger verification, and a
+no-overwrite staging restore. It refuses operation locks, links, Git-contained
+destinations, undeclared entries, and path traversal. The private identity is
+never written into an archive or sidecar.
+
 ## Out of scope
 
 - Preventing a fully compromised local administrator from reading unlocked
