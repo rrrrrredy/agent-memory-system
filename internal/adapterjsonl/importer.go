@@ -175,8 +175,17 @@ func loadImportState(store *ledger.Store, spec Spec) (*importState, *ledger.Appe
 		event := record.Event
 		state.knownIDs[event.EventID] = struct{}{}
 		if event.Source.Agent != spec.Agent || event.Source.Adapter != spec.AdapterName ||
-			event.Source.SourcePathHash == "" || event.Source.ByteEnd == nil ||
-			event.Kind == ledger.KindSourceSnapshot {
+			event.Source.SourcePathHash == "" || event.Kind == ledger.KindSourceSnapshot {
+			return nil
+		}
+		if event.Kind == ledger.KindGap &&
+			strings.HasPrefix(event.Completeness.Reason, "source_truncated") {
+			if resetOffset, ok := truncationResetOffset(event.Source); ok {
+				state.committedOffset[event.Source.SourcePathHash] = resetOffset
+			}
+			return nil
+		}
+		if event.Source.ByteEnd == nil {
 			return nil
 		}
 		committed := event.Kind != ledger.KindGap ||
@@ -434,6 +443,7 @@ func queueTruncationGap(
 		result.EventsSkipped++
 		return
 	}
+	previousValue, currentValue := previousOffset, currentSize
 	event := ledger.Event{
 		SchemaVersion: ledger.SchemaVersion, EventID: eventID, Kind: ledger.KindGap,
 		ObservedAt: ObservedFileTime(modifiedAt, recordedAt), RecordedAt: recordedAt.UTC(),
@@ -442,6 +452,8 @@ func queueTruncationGap(
 			DeviceID: store.DeviceID(), OS: runtime.GOOS, ThreadID: threadID,
 			SourcePathHash: sourcePathHash,
 			SourceCursor:   fmt.Sprintf("truncated:%d-to-%d", previousOffset, currentSize),
+			ByteStart:      &previousValue,
+			ByteEnd:        &currentValue,
 		},
 		Completeness: ledger.Completeness{Status: ledger.CompletenessPartial,
 			Reason: "source_truncated: previously committed bytes are no longer present at this path"},
@@ -452,6 +464,19 @@ func queueTruncationGap(
 	result.EventsAppended++
 	result.GapsAppended++
 	result.Kinds[string(ledger.KindGap)]++
+}
+
+func truncationResetOffset(source ledger.Source) (int64, bool) {
+	if source.ByteEnd != nil {
+		return *source.ByteEnd, true
+	}
+	const marker = "-to-"
+	index := strings.LastIndex(source.SourceCursor, marker)
+	if index < 0 {
+		return 0, false
+	}
+	value, err := strconv.ParseInt(source.SourceCursor[index+len(marker):], 10, 64)
+	return value, err == nil && value >= 0
 }
 
 func HashSourcePath(path string) (string, error) {

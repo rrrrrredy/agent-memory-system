@@ -177,6 +177,14 @@ func TestTruncationAppendsGapInsteadOfSilentlyRewinding(t *testing.T) {
 	if result.GapsAppended != 1 || result.SourceSegments != 1 || result.EventsAppended != 2 {
 		t.Fatalf("truncation was not made explicit: %+v", result)
 	}
+	restarted, err := ImportPath(store, source, Options{Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restarted.GapsAppended != 0 || restarted.SourceSegments != 0 ||
+		restarted.EventsAppended != 0 || restarted.BytesCaptured != 0 {
+		t.Fatalf("truncation reset was not recovered from the ledger: %+v", restarted)
+	}
 }
 
 func TestSharedImporterPreservesLegacyCodexEventIDs(t *testing.T) {
