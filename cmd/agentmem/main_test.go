@@ -31,6 +31,11 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "rule approval apply flags", args: []string{"rule-approval", "apply"}, message: "requires --root and --file"},
 		{name: "rule approval status flags", args: []string{"rule-approval", "status"}, message: "requires --root, --memory, --revision, --surface, and --target"},
 		{name: "rule approval verify flags", args: []string{"rule-approval", "verify"}, message: "requires --root"},
+		{name: "missing portable subcommand", args: []string{"portable"}, message: "portable <init|export|verify>"},
+		{name: "unknown portable subcommand", args: []string{"portable", "unknown"}, message: "portable <init|export|verify>"},
+		{name: "portable init flags", args: []string{"portable", "init"}, message: "requires --repo"},
+		{name: "portable export flags", args: []string{"portable", "export"}, message: "requires --root and --repo"},
+		{name: "portable verify flags", args: []string{"portable", "verify"}, message: "requires --repo"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

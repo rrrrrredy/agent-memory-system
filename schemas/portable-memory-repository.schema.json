@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/portable-memory-repository.schema.json",
+  "title": "Agent Memory System portable memory repository",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "layout"],
+  "properties": {
+    "schema_version": {"const": "portable-memory-repository/v1alpha1"},
+    "layout": {"const": "immutable-markdown-revisions"}
+  }
+}

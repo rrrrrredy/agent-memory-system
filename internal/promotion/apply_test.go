@@ -68,6 +68,15 @@ func TestPromotionSupersessionAndRevocation(t *testing.T) {
 		superseded.Revision.Text != updated.Text {
 		t.Fatalf("unexpected supersession: %+v", superseded.Revision)
 	}
+	histories, err := ListHistories(fixture.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(histories) != 1 || histories[0].MemoryID != promoted.Revision.MemoryID ||
+		len(histories[0].Revisions) != 2 ||
+		histories[0].Revisions[1].RevisionID != superseded.Revision.RevisionID {
+		t.Fatalf("unexpected promotion history: %+v", histories)
+	}
 	wasCurrent, err := RevisionWasCurrentAt(
 		fixture.store, promoted.Revision.MemoryID, promoted.Revision.RevisionID,
 		promoted.Revision.RecordedAt,

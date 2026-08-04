@@ -157,3 +157,8 @@ type VerificationReport struct {
 	LastRecordSHA256 string   `json:"last_record_sha256,omitempty"`
 	Issues           []string `json:"issues"`
 }
+
+type History struct {
+	MemoryID  string     `json:"memory_id"`
+	Revisions []Revision `json:"revisions"`
+}
