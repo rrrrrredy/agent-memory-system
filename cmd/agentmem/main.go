@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rrrrrredy/agent-memory-system/adapters/claudecode"
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
@@ -62,35 +63,53 @@ func run(args []string) error {
 		}
 		return nil
 	case "import":
-		if len(args) < 2 || args[1] != "codex" {
-			return errors.New("usage: agentmem import codex --root <local-evidence-directory> --path <rollout-file-or-directory>")
+		if len(args) < 2 {
+			return importUsageError()
 		}
-		flags := flag.NewFlagSet("import codex", flag.ContinueOnError)
-		root := flags.String("root", "", "local evidence root (required)")
-		path := flags.String("path", "", "Codex rollout file or directory (required)")
-		full := flags.Bool("full-reconcile", false, "re-read all source bytes and append only changed events")
-		if err := flags.Parse(args[2:]); err != nil {
-			return err
-		}
-		if *root == "" || *path == "" {
-			return errors.New("import codex requires --root and --path")
-		}
-		store, err := ledger.Open(*root)
-		if err != nil {
-			return err
-		}
-		result, err := codex.ImportPath(store, *path, codex.Options{FullReconcile: *full})
-		if err != nil {
-			return err
-		}
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(result)
+		return runImport(args[1:])
 	default:
 		return usageError()
 	}
 }
 
+func runImport(args []string) error {
+	agent := args[0]
+	if agent != "codex" && agent != "claude" {
+		return importUsageError()
+	}
+	flags := flag.NewFlagSet("import "+agent, flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	path := flags.String("path", "", agent+" transcript file or directory (required)")
+	full := flags.Bool("full-reconcile", false, "re-read all source bytes and append only changed events")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" || *path == "" {
+		return fmt.Errorf("import %s requires --root and --path", agent)
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	var result any
+	switch agent {
+	case "codex":
+		result, err = codex.ImportPath(store, *path, codex.Options{FullReconcile: *full})
+	case "claude":
+		result, err = claudecode.ImportPath(store, *path, claudecode.Options{FullReconcile: *full})
+	}
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor|import codex> [options]")
+	return errors.New("usage: agentmem <init|doctor|import> [options]")
+}
+
+func importUsageError() error {
+	return errors.New("usage: agentmem import <codex|claude> --root <local-evidence-directory> --path <source-file-or-directory>")
 }
