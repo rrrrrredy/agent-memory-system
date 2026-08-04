@@ -18,11 +18,18 @@ stable provider API. It preserves every captured byte before parsing it.
   `agentmem import claude-home`, including spilled tool results, subagent
   transcripts, file-history snapshots, plans, tasks, debug logs, paste/image
   attachments, session metadata, and crash markers.
+- exact lifecycle-hook stdin through a streaming, immutable local spool, plus
+  `agentmem capture reconcile claude-code` for combined spool and Claude-home
+  reconciliation;
+- explicit gaps for missing transcript paths, partial hook input, unavailable
+  source artifacts, and transcript hints outside the configured Claude home.
 
-## Required before claiming complete Claude Code capture
+## Operational requirements
 
-- hook-driven wake-up hints plus periodic reconciliation;
-- fixture updates when Claude Code changes its undocumented transcript schema.
+- Enable the desired lifecycle hooks only after explicit approval.
+- Run reconciliation at session boundaries and periodically; a hook is a
+  durable wake-up hint, not the historical source of truth.
+- Update fixtures when Claude Code changes its undocumented transcript schema.
 
 Configuration, OAuth state, plugins, config backups, and generic caches are
 outside the process-evidence allowlist. Adding any of them requires a separate

@@ -4,12 +4,13 @@
   "title": "Agent Memory System diagnostic report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "checked_at", "platform", "evidence", "reviews", "promotions", "rule_approvals", "retrieval", "repository_checked", "ready", "issues", "privacy"],
+  "required": ["schema_version", "checked_at", "platform", "evidence", "hook_spools", "reviews", "promotions", "rule_approvals", "retrieval", "repository_checked", "ready", "issues", "privacy"],
   "properties": {
     "schema_version": {"const": "agent-memory-doctor-report/v1alpha1"},
     "checked_at": {"type": "string", "format": "date-time"},
     "platform": {"type": "string", "pattern": "^[a-z0-9]+/[a-z0-9]+$"},
     "evidence": {"$ref": "#/$defs/evidence"},
+    "hook_spools": {"$ref": "#/$defs/hookSpools"},
     "reviews": {"$ref": "#/$defs/reviews"},
     "promotions": {"$ref": "#/$defs/promotions"},
     "rule_approvals": {"$ref": "#/$defs/ruleApprovals"},
@@ -32,6 +33,20 @@
         "blobs_checked": {"type": "integer", "minimum": 0},
         "last_record_hash": {"$ref": "#/$defs/hash"},
         "issues": {"$ref": "#/$defs/stringIssues"}
+      }
+    },
+    "hookSpools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "files_checked", "complete_captures", "partial_captures", "raw_bytes", "issues", "privacy"],
+      "properties": {
+        "schema_version": {"const": "hook-spool-verification/v1alpha1"},
+        "files_checked": {"type": "integer", "minimum": 0},
+        "complete_captures": {"type": "integer", "minimum": 0},
+        "partial_captures": {"type": "integer", "minimum": 0},
+        "raw_bytes": {"type": "integer", "minimum": 0},
+        "issues": {"$ref": "#/$defs/stringIssues"},
+        "privacy": {"const": "local_only"}
       }
     },
     "reviews": {

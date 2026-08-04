@@ -13,6 +13,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
 	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
+	"github.com/rrrrrredy/agent-memory-system/internal/hookcapture"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -118,6 +119,44 @@ func TestBuildClustersClaudeBoundaryAndSummary(t *testing.T) {
 		episode.Compactions[0].Status != episodes.ContinuityPreserved {
 		t.Fatalf("Claude compaction boundary was not joined to its summary: %+v",
 			episode.Compactions)
+	}
+}
+
+func TestBuildResolvesHookPromptAndCompactionSummary(t *testing.T) {
+	root := t.TempDir()
+	store, err := ledger.Init(filepath.Join(root, "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt := `{"session_id":"hook-episode","transcript_path":"C:\\sessions\\hook.jsonl",` +
+		`"hook_event_name":"UserPromptSubmit","prompt":"You must keep audit logs."}`
+	if _, err := hookcapture.Capture(store, ledger.AgentClaudeCode, strings.NewReader(prompt),
+		hookcapture.CaptureOptions{Now: func() time.Time {
+			return time.Date(2026, 8, 4, 1, 0, 0, 0, time.UTC)
+		}}); err != nil {
+		t.Fatal(err)
+	}
+	compact := `{"session_id":"hook-episode","transcript_path":"C:\\sessions\\hook.jsonl",` +
+		`"hook_event_name":"PostCompact","compact_summary":"Keep audit logs."}`
+	if _, err := hookcapture.Capture(store, ledger.AgentClaudeCode, strings.NewReader(compact),
+		hookcapture.CaptureOptions{Now: func() time.Time {
+			return time.Date(2026, 8, 4, 1, 0, 1, 0, time.UTC)
+		}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hookcapture.ImportPath(store, ledger.AgentClaudeCode,
+		hookcapture.SpoolRoot(store, ledger.AgentClaudeCode), hookcapture.ImportOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := episodes.Build(store, episodes.BuildOptions{ShardCount: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	episode := readSingleEpisode(t, filepath.Join(result.GenerationPath, "episodes.jsonl"))
+	if len(episode.Statements) != 1 || episode.Statements[0].Text != "You must keep audit logs" ||
+		len(episode.Compactions) != 1 ||
+		episode.Compactions[0].Status != episodes.ContinuityPreserved {
+		t.Fatalf("hook evidence was not reconstructed: %+v", episode)
 	}
 }
 

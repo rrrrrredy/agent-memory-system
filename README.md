@@ -82,6 +82,10 @@ go run ./cmd/agentmem import claude --root <local-data-directory> --path <transc
 go run ./cmd/agentmem import claude-home --root <local-data-directory> --path <claude-home-directory>
 go run ./cmd/agentmem import opencode-export --root <local-data-directory> --path <export-file-or-directory>
 go run ./cmd/agentmem import opencode-events --root <local-data-directory> --path <event-spool-file-or-directory>
+go run ./cmd/agentmem capture hook codex --root <local-data-directory>
+go run ./cmd/agentmem capture hook claude-code --root <local-data-directory>
+go run ./cmd/agentmem capture reconcile codex --root <local-data-directory> --path <codex-rollout-file-or-sessions-directory>
+go run ./cmd/agentmem capture reconcile claude-code --root <local-data-directory> --path <claude-home-directory>
 go run ./cmd/agentmem capture opencode --root <local-data-directory> --staging <non-Git-local-directory>
 go run ./cmd/agentmem derive episodes --root <local-data-directory>
 go run ./cmd/agentmem derive candidates --root <local-data-directory> --episodes <episode-generation>
@@ -124,6 +128,13 @@ segments. Re-running them is idempotent. Use `--full-reconcile` to deliberately
 re-read an entire source and detect earlier in-place changes; the default mode
 starts at the last committed byte. See each adapter's `CAPABILITIES.md` before
 relying on it for complete capture.
+
+Optional Codex and Claude Code lifecycle hooks stream their exact stdin into a
+durable local spool without scanning the ledger, opening the transcript, or
+applying a fixed input-size cutoff. `capture reconcile` later imports that
+spool together with the configured historical source and records missing,
+partial, unreadable, or out-of-root transcript hints as explicit gaps. No hook
+configuration is installed automatically. See [continuous local capture](docs/capture.md).
 
 `claude-home` is the preferred Claude Code reconciliation command. In addition
 to project and subagent transcripts, it captures prompt history and documented

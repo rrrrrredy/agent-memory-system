@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
+	"github.com/rrrrrredy/agent-memory-system/internal/hookcapture"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 	"github.com/rrrrrredy/agent-memory-system/internal/promotion"
 	"github.com/rrrrrredy/agent-memory-system/internal/retrieval"
@@ -31,19 +32,20 @@ type Options struct {
 }
 
 type Report struct {
-	SchemaVersion     string                          `json:"schema_version"`
-	CheckedAt         time.Time                       `json:"checked_at"`
-	Platform          string                          `json:"platform"`
-	Evidence          ledger.VerificationReport       `json:"evidence"`
-	Reviews           review.VerificationReport       `json:"reviews"`
-	Promotions        promotion.VerificationReport    `json:"promotions"`
-	RuleApprovals     ruleapproval.VerificationReport `json:"rule_approvals"`
-	Retrieval         retrieval.VerificationReport    `json:"retrieval"`
-	RepositoryChecked bool                            `json:"repository_checked"`
-	GitSync           *gitsync.VerificationReport     `json:"git_sync,omitempty"`
-	Ready             bool                            `json:"ready"`
-	Issues            []Issue                         `json:"issues"`
-	Privacy           string                          `json:"privacy"`
+	SchemaVersion     string                              `json:"schema_version"`
+	CheckedAt         time.Time                           `json:"checked_at"`
+	Platform          string                              `json:"platform"`
+	Evidence          ledger.VerificationReport           `json:"evidence"`
+	HookSpools        hookcapture.SpoolVerificationReport `json:"hook_spools"`
+	Reviews           review.VerificationReport           `json:"reviews"`
+	Promotions        promotion.VerificationReport        `json:"promotions"`
+	RuleApprovals     ruleapproval.VerificationReport     `json:"rule_approvals"`
+	Retrieval         retrieval.VerificationReport        `json:"retrieval"`
+	RepositoryChecked bool                                `json:"repository_checked"`
+	GitSync           *gitsync.VerificationReport         `json:"git_sync,omitempty"`
+	Ready             bool                                `json:"ready"`
+	Issues            []Issue                             `json:"issues"`
+	Privacy           string                              `json:"privacy"`
 }
 
 func Run(ctx context.Context, store *ledger.Store, options Options) Report {
@@ -63,6 +65,8 @@ func Run(ctx context.Context, store *ledger.Store, options Options) Report {
 	}
 	report.Evidence = store.Verify()
 	appendStrings(&report, "evidence", "integrity_failed", report.Evidence.Issues)
+	report.HookSpools = hookcapture.VerifySpools(store)
+	appendStrings(&report, "hook_spools", "integrity_failed", report.HookSpools.Issues)
 	report.Reviews = review.Verify(store)
 	appendStrings(&report, "reviews", "integrity_failed", report.Reviews.Issues)
 	report.Promotions = promotion.Verify(store)

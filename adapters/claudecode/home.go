@@ -40,7 +40,11 @@ type HomeResult struct {
 // surfaces. It deliberately excludes auth, settings, plugins, config backups,
 // and generic caches because those are not task-process evidence.
 func ImportHome(store *ledger.Store, claudeHome string, options Options) (HomeResult, error) {
-	result := HomeResult{Warnings: []string{}}
+	result := HomeResult{
+		Transcripts:   Result{Kinds: map[string]int{}},
+		PromptHistory: Result{Kinds: map[string]int{}},
+		Warnings:      []string{},
+	}
 	if store == nil {
 		return result, errors.New("store is required")
 	}

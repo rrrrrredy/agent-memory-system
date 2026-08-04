@@ -382,7 +382,8 @@ func extractEventText(_ ledger.Agent, kind ledger.EventKind, raw []byte) string 
 	}
 	if kind == ledger.KindCompaction {
 		for _, key := range []string{"summary", "body", "title", "goal", "goals",
-			"constraint", "constraints", "replacement_history"} {
+			"constraint", "constraints", "replacement_history", "compact_summary",
+			"custom_instructions"} {
 			allowed[key] = struct{}{}
 		}
 	}

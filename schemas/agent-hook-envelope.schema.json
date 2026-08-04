@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/agent-hook-envelope.schema.json",
+  "title": "Agent lifecycle hook capture envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "captured_at",
+    "raw_base64",
+    "raw_sha256",
+    "raw_bytes",
+    "capture_status"
+  ],
+  "properties": {
+    "schema_version": {"const": "agent-hook-envelope/v1alpha1"},
+    "captured_at": {"type": "string", "format": "date-time"},
+    "raw_base64": {"type": "string", "contentEncoding": "base64"},
+    "raw_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "raw_bytes": {"type": "integer", "minimum": 0},
+    "capture_status": {"enum": ["complete", "partial"]},
+    "error_class": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"capture_status": {"const": "partial"}}},
+      "then": {"required": ["error_class"]}
+    },
+    {
+      "if": {"properties": {"capture_status": {"const": "complete"}}},
+      "then": {"not": {"required": ["error_class"]}}
+    }
+  ]
+}

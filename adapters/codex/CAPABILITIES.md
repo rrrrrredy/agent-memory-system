@@ -44,6 +44,12 @@ entire private chain-of-thought.
 
 ## Reconciliation behavior
 
+- `agentmem capture hook codex` streams exact lifecycle-hook stdin into
+  independent immutable local envelopes without a fixed input-size cutoff or a
+  ledger scan.
+- `agentmem capture reconcile codex` imports those envelopes and the configured
+  rollout source; hook transcript paths are audited as hints and never followed
+  outside that source.
 - Default import resumes at the greatest committed byte offset.
 - A terminated invalid JSON record becomes an explicit gap and does not block
   later records.
@@ -63,3 +69,8 @@ daemon processes against the same evidence root until cross-process locking and
 crash-recovery tests are implemented. Default incremental import detects
 append and truncation; detecting arbitrary earlier in-place modification
 requires `--full-reconcile`.
+
+Hook configuration and periodic execution are deployment choices. The CLI
+does not install either one without explicit approval. Hook capture supplies
+wake-up and compaction-boundary evidence; historical rollout reconciliation is
+still required for complete locally available process evidence.

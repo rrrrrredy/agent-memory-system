@@ -22,6 +22,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/evaluation"
 	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
+	"github.com/rrrrrredy/agent-memory-system/internal/hookcapture"
 	"github.com/rrrrrredy/agent-memory-system/internal/hookinject"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 	"github.com/rrrrrredy/agent-memory-system/internal/mcpserver"
@@ -1505,34 +1506,115 @@ func runDeriveCandidates(args []string) error {
 }
 
 func runCapture(args []string) error {
-	if args[0] != "opencode" {
+	switch args[0] {
+	case "opencode":
+		flags := flag.NewFlagSet("capture opencode", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		staging := flags.String("staging", "", "raw staging directory outside Git (required)")
+		binary := flags.String("binary", "opencode", "OpenCode executable")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *staging == "" {
+			return errors.New("capture opencode requires --root and --staging")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		result, captureErr := opencode.CaptureAll(ctx, store, opencode.CaptureOptions{
+			Binary: *binary, StagingRoot: *staging,
+		})
+		if err := encodeIndented(result); err != nil {
+			return err
+		}
+		return captureErr
+	case "hook":
+		return runCaptureHook(args[1:])
+	case "reconcile":
+		return runCaptureReconcile(args[1:])
+	default:
 		return captureUsageError()
 	}
-	flags := flag.NewFlagSet("capture opencode", flag.ContinueOnError)
+}
+
+func runCaptureHook(args []string) error {
+	if len(args) == 0 {
+		return captureUsageError()
+	}
+	agent, err := captureAgent(args[0])
+	if err != nil {
+		return err
+	}
+	flags := flag.NewFlagSet("capture hook "+args[0], flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
-	staging := flags.String("staging", "", "raw staging directory outside Git (required)")
-	binary := flags.String("binary", "opencode", "OpenCode executable")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
-	if *root == "" || *staging == "" {
-		return errors.New("capture opencode requires --root and --staging")
+	if *root == "" {
+		return errors.New("capture hook requires --root")
+	}
+	output := struct {
+		Continue bool `json:"continue"`
+	}{Continue: true}
+	store, openErr := ledger.Open(*root)
+	var captureErr error
+	if openErr == nil {
+		_, captureErr = hookcapture.Capture(store, agent, os.Stdin, hookcapture.CaptureOptions{})
+	} else {
+		captureErr = openErr
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(output); err != nil {
+		return err
+	}
+	if captureErr != nil {
+		fmt.Fprintln(os.Stderr, "agentmem capture warning:", captureErr)
+	}
+	return nil
+}
+
+func runCaptureReconcile(args []string) error {
+	if len(args) == 0 {
+		return captureUsageError()
+	}
+	agent, err := captureAgent(args[0])
+	if err != nil {
+		return err
+	}
+	flags := flag.NewFlagSet("capture reconcile "+args[0], flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	path := flags.String("path", "", "Codex sessions path or Claude Code home (required)")
+	full := flags.Bool("full-reconcile", false, "re-read all source bytes and append only changed events")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" || *path == "" {
+		return errors.New("capture reconcile requires --root and --path")
 	}
 	store, err := ledger.Open(*root)
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	result, captureErr := opencode.CaptureAll(ctx, store, opencode.CaptureOptions{
-		Binary: *binary, StagingRoot: *staging,
+	result, reconcileErr := hookcapture.Reconcile(store, agent, hookcapture.ReconcileOptions{
+		SourcePath: *path, FullReconcile: *full,
 	})
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(result); err != nil {
+	if err := encodeIndented(result); err != nil {
 		return err
 	}
-	return captureErr
+	return reconcileErr
+}
+
+func captureAgent(value string) (ledger.Agent, error) {
+	switch value {
+	case "codex":
+		return ledger.AgentCodex, nil
+	case "claude-code":
+		return ledger.AgentClaudeCode, nil
+	default:
+		return "", captureUsageError()
+	}
 }
 
 func runImport(args []string) error {
@@ -1626,7 +1708,7 @@ func evalUsageError() error {
 }
 
 func captureUsageError() error {
-	return errors.New("usage: agentmem capture opencode --root <local-evidence-directory> --staging <non-Git-local-directory> [--binary opencode]")
+	return errors.New("usage: agentmem capture <opencode --root <local-evidence-directory> --staging <non-Git-local-directory> [--binary opencode]|hook <codex|claude-code> --root <local-evidence-directory>|reconcile <codex|claude-code> --root <local-evidence-directory> --path <agent-source-path> [--full-reconcile]>")
 }
 
 func importUsageError() error {

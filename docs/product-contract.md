@@ -39,6 +39,12 @@ The system MUST distinguish:
 - `not_exposed`: the provider did not make the reasoning artifact available;
 - `not_applicable`: the event is not a reasoning event.
 
+In `evidence-event/v1alpha1`, a non-reasoning `kind` is the canonical
+`not_applicable` representation and the optional `reasoning` object is omitted.
+For a `reasoning` event, the object is mandatory and may never use
+`not_applicable`. Consumers must not interpret an omitted object on another
+event kind as `not_exposed` reasoning.
+
 No implementation may describe `summary_only`, `encrypted_opaque`, or
 `not_exposed` data as complete plaintext reasoning. Local model computation
 does not by itself prove local persistence. Content that never reaches local

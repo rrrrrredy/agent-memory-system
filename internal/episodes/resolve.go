@@ -1,6 +1,7 @@
 package episodes
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rrrrrredy/agent-memory-system/internal/hookcapture"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -55,7 +57,8 @@ func (r *rawResolver) resolve(event ledger.Event) ([]byte, error) {
 		return nil, errors.New("event has no payload")
 	}
 	if event.Payload.Blob != nil {
-		return r.readBlob(*event.Payload.Blob)
+		data, err := r.readBlob(*event.Payload.Blob)
+		return unwrapHookEnvelope(event, data, err)
 	}
 	if event.Payload.Content == nil {
 		return nil, errors.New("event payload has neither content nor blob")
@@ -65,14 +68,30 @@ func (r *rawResolver) resolve(event ledger.Event) ([]byte, error) {
 	var segment sourceSegmentPointer
 	if json.Unmarshal(content, &segment) == nil && segment.SourceSegmentEventID != "" &&
 		segment.ByteStart != nil && segment.ByteEnd != nil {
-		return r.resolveSegment(segment)
+		data, err := r.resolveSegment(segment)
+		return unwrapHookEnvelope(event, data, err)
 	}
 	var document sourceDocumentPointer
 	if json.Unmarshal(content, &document) == nil && document.SourceSnapshotEventID != "" &&
 		document.JSONPointer != "" {
-		return r.resolveDocument(document)
+		data, err := r.resolveDocument(document)
+		return unwrapHookEnvelope(event, data, err)
 	}
-	return content, nil
+	return unwrapHookEnvelope(event, content, nil)
+}
+
+func unwrapHookEnvelope(event ledger.Event, data []byte, resolveErr error) ([]byte, error) {
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	if event.Source.Adapter != hookcapture.AdapterName {
+		return data, nil
+	}
+	_, raw, err := hookcapture.DecodeEnvelope(bytes.TrimSpace(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode hook envelope: %w", err)
+	}
+	return raw, nil
 }
 
 func (r *rawResolver) resolveSegment(pointer sourceSegmentPointer) ([]byte, error) {

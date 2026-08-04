@@ -1,0 +1,81 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"<absolute-agentmem>\" capture hook claude-code --root \"<local-evidence-directory>\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"<absolute-agentmem>\" capture hook claude-code --root \"<local-evidence-directory>\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"<absolute-agentmem>\" capture hook claude-code --root \"<local-evidence-directory>\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"<absolute-agentmem>\" capture hook claude-code --root \"<local-evidence-directory>\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"<absolute-agentmem>\" capture hook claude-code --root \"<local-evidence-directory>\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"<absolute-agentmem>\" capture hook claude-code --root \"<local-evidence-directory>\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"<absolute-agentmem>\" capture hook claude-code --root \"<local-evidence-directory>\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
