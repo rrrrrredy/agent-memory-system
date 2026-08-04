@@ -48,12 +48,16 @@ change or partially append evidence.
 Controls:
 
 - content-addressed blobs and record hash chains;
+- evidence roots rejected inside Git worktrees, including link-aliased paths;
 - durable append followed by sync;
-- single-writer locking before daemon mode;
+- exclusive cross-process evidence-writer locking;
 - verification on open, backup, restore, and evaluation;
 - append-only recovery events instead of rewriting verified history.
 
-The current foundation has hashing, verification, and scoped operation locks.
+The current foundation has hashing, verification, an evidence-writer lock, and
+scoped operation locks. A stale evidence lock is never guessed away; recovery
+requires `doctor --clear-stale-writer-lock` after the operator verifies no writer
+is active.
 Automatic Git synchronization is a finite scheduled process protected by those
 locks, not a resident daemon. A daemon remains out of scope without a stronger
 cross-process lifecycle and signed-checkpoint design.
@@ -109,8 +113,11 @@ Controls:
 
 - task, Agent, OS, device, repository, version, and time scopes;
 - explicit token and item budgets;
+- an independent UTF-8 byte budget;
 - current user instruction outranks recalled memory;
-- provenance displayed with every retrieval;
+- retrieval, exact delivery, adoption, and outcome receipts;
+- trusted scopes supplied by local configuration, never prompt content;
+- complete portable-repository verification with fail-closed reads;
 - compaction continuity tests;
 - no-memory versus memory outcome evaluation.
 

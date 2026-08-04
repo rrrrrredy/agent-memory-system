@@ -88,6 +88,9 @@
         "compaction",
         "system_event",
         "source_snapshot",
+        "memory_retrieval",
+        "memory_injection",
+        "memory_adoption",
         "gap",
         "unknown"
       ]

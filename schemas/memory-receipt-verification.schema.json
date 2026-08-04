@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-receipt-verification.schema.json",
+  "title": "Memory receipt graph verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "retrievals_checked", "injections_checked", "adoptions_checked",
+    "open_retrieval_ids", "issues", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "memory-receipt-verification/v1alpha1"},
+    "retrievals_checked": {"type": "integer", "minimum": 0},
+    "injections_checked": {"type": "integer", "minimum": 0},
+    "adoptions_checked": {"type": "integer", "minimum": 0},
+    "open_retrieval_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^retrieval-.+"},
+      "uniqueItems": true
+    },
+    "issues": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "privacy": {"const": "local_only"}
+  }
+}

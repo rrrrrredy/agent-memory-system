@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-retrieval-receipt.schema.json",
+  "title": "Local memory retrieval receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "receipt_id", "recorded_at", "portable_root", "portable_root_sha256",
+    "request", "request_sha256", "result", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "memory-retrieval-receipt/v1alpha1"},
+    "receipt_id": {"type": "string", "pattern": "^retrieval-.+"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "portable_root": {"type": "string", "minLength": 1},
+    "portable_root_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "request": {"$ref": "memory-retrieval-request.schema.json"},
+    "request_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "result": {"$ref": "memory-retrieval-result.schema.json"},
+    "privacy": {"const": "local_only"}
+  }
+}

@@ -8,8 +8,9 @@ agent runtime makes locally available before deriving memories from it. Raw
 evidence stays local by default. Only reviewed, redacted, promoted memories may
 enter a separate private Git repository.
 
-> Status: early foundation. The evidence protocol, local ledger, and safety
-> boundaries are being implemented before any memory automation is enabled.
+> Status: v1alpha1 foundation. Evidence capture, review and promotion, portable
+> memory, verified Git synchronization, and bounded cross-Agent retrieval are
+> implemented; evaluation and encrypted evidence backup remain in development.
 
 ## Product boundary
 
@@ -53,12 +54,15 @@ canonical data and is never merged through Git.
 - `internal/promotion`: redacted promoted revisions, supersession, and revocation
 - `internal/portable`: private-Git-safe projection and semantic conflict checks
 - `internal/gitsync`: append-only Git history validation and explicit synchronization
+- `internal/retrieval`: verified ranking, bounded context, and local use receipts
+- `internal/mcpserver`: shared Codex, Claude Code, and OpenCode query surface
 - `internal/secretscan`: deterministic, non-echoing sensitive-content detection
 - `internal/ruleapproval`: separate revision-, surface-, and target-bound rule authorization
 - `schemas`: versioned interchange contracts
 - `docs/adr`: architecture decisions
 - `docs/research`: adopt/modify/reject reviews of related projects
 - `adapters`: Codex, Claude Code, and OpenCode evidence adapters
+- `integrations`: optional Agent-native live capture and injection bridges
 - `evals`: continuous-learning and sync reliability evaluations (planned)
 
 ## Development
@@ -92,6 +96,10 @@ go run ./cmd/agentmem portable verify --repo <private-memory-directory>
 go run ./cmd/agentmem sync bootstrap --repo <private-memory-directory> --remote-url <private-git-url>
 go run ./cmd/agentmem sync run --repo <private-memory-directory>
 go run ./cmd/agentmem sync verify --repo <private-memory-directory>
+go run ./cmd/agentmem recall search --root <local-data-directory> --repo <private-memory-directory> --agent codex --query <terms>
+go run ./cmd/agentmem recall context --root <local-data-directory> --repo <private-memory-directory> --agent codex --query <terms> --output text
+go run ./cmd/agentmem recall verify --root <local-data-directory>
+go run ./cmd/agentmem serve mcp --root <local-data-directory> --repo <private-memory-directory> --agent codex
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -168,12 +176,23 @@ same non-interactive synchronization core. Bounded retries, suspension,
 explicit recovery, and a local hash-chained audit make failures observable;
 automation config remains ignored by Git.
 
+`recall search`, `get`, and `context` verify the complete portable repository,
+enforce exact configured scopes, and read only active promoted revisions. The
+deterministic offline baseline has no unrelated fallback and enforces item,
+estimated-token, and UTF-8 byte budgets. A shared local MCP server supports all
+three Agents; optional Codex, Claude Code, and OpenCode injection bridges fail
+open without returning stale or partially verified memory. Retrieval, actual
+delivery, and downstream adoption are recorded separately. See
+[cross-Agent retrieval](docs/retrieval.md).
+
 ## Safety
 
 - Never paste or attach raw evidence to GitHub issues or pull requests.
+- The evidence ledger refuses roots inside Git worktrees.
 - Never point Git synchronization at a Codex, Claude Code, or OpenCode internal
   state directory.
 - No candidate experience is automatically injected into future tasks.
+- Any portable-repository verification issue blocks the whole retrieval.
 - A memory must carry provenance, scope, status, and evidence before promotion.
 - Changes to `AGENTS.md`, Skills, hooks, or global agent configuration require
   explicit user approval.

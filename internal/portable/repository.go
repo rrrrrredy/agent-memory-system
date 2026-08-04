@@ -72,6 +72,28 @@ func VerifyRepository(root string) VerificationReport {
 	return report
 }
 
+// LoadActiveRevisions verifies the complete portable repository before
+// returning its current active heads. Callers must treat any verification
+// issue as a closed trust boundary and ignore the returned slice.
+func LoadActiveRevisions(root string) ([]Revision, VerificationReport) {
+	report, state := loadRepository(root)
+	if len(report.Issues) != 0 {
+		return nil, report
+	}
+	memoryIDs := make([]string, 0, len(state.heads))
+	for memoryID, revision := range state.heads {
+		if revision.Status == StatusActive {
+			memoryIDs = append(memoryIDs, memoryID)
+		}
+	}
+	sort.Strings(memoryIDs)
+	revisions := make([]Revision, 0, len(memoryIDs))
+	for _, memoryID := range memoryIDs {
+		revisions = append(revisions, state.heads[memoryID])
+	}
+	return revisions, report
+}
+
 func IsDataPath(relative string) bool {
 	if relative == "" || relative != path.Clean(relative) ||
 		strings.Contains(relative, "\\") || strings.HasPrefix(relative, "../") ||

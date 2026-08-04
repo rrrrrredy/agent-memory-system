@@ -13,6 +13,9 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/promotion"
 )
 
+// ErrStorageRootsOverlap marks equal, nested, or link-aliased storage roots.
+var ErrStorageRootsOverlap = errors.New("portable repository and local evidence root must be physically separate")
+
 type RepositoryLock struct {
 	path string
 }
@@ -212,9 +215,15 @@ func ensureSeparateRoots(evidenceRoot, repositoryRoot string) error {
 		return fmt.Errorf("resolve portable repository root: %w", err)
 	}
 	if pathsOverlap(evidence, repository) {
-		return errors.New("portable repository and local evidence root must be physically separate")
+		return ErrStorageRootsOverlap
 	}
 	return nil
+}
+
+// EnsureSeparateRoots rejects equal, nested, or link-aliased evidence and
+// portable repository roots.
+func EnsureSeparateRoots(evidenceRoot, repositoryRoot string) error {
+	return ensureSeparateRoots(evidenceRoot, repositoryRoot)
 }
 
 func pathsOverlap(left, right string) bool {

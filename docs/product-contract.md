@@ -106,6 +106,8 @@ phrase alone is not proof that the task goal drifted.
 ## Storage and synchronization
 
 - Raw evidence is local-only by default.
+- The evidence ledger refuses any root inside a Git worktree, including paths
+  that enter one through a directory link.
 - Optional raw-evidence disaster recovery uses encrypted snapshots and a backend
   fully separate from the readable memory Git repository.
 - The public tool repository and private personal-memory repository are
@@ -120,6 +122,23 @@ phrase alone is not proof that the task goal drifted.
   forbidden.
 - Deletions use auditable tombstones or revocations, not unexplained history
   removal.
+
+## Retrieval contract
+
+- Ordinary task retrieval reads only active promoted revisions from the
+  verified portable memory repository.
+- Raw evidence and candidates remain available through separate local forensic
+  and review workflows, never automatic injection.
+- Any repository-integrity or semantic-conflict issue blocks the complete read.
+- Agent, repository, project, and task scopes are exact and come from trusted
+  local configuration rather than model-provided text.
+- Item, estimated-token, and UTF-8 byte limits apply to every delivered block.
+- Retrieval, delivery, adoption, and outcome are recorded as distinct local
+  observations.
+- Hooks and plugins are optional; the common local MCP server is the shared
+  cross-Agent query interface.
+- Agent availability errors fail open without memory. Memory verification fails
+  closed without partial or stale fallback.
 
 ## Evaluation contract
 

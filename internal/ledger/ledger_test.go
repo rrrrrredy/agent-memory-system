@@ -1,6 +1,7 @@
 package ledger
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -312,5 +313,95 @@ func TestAppendBatchBuildsOneVerifiedChain(t *testing.T) {
 	report = store.Verify()
 	if len(report.Issues) != 0 || report.RecordsChecked != len(events)+1 {
 		t.Fatalf("unexpected post-append report: %+v", report)
+	}
+}
+
+func TestWriterLockBlocksConcurrentAppendAndSupportsExplicitRecovery(t *testing.T) {
+	store, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	appender, err := store.NewAppender()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.NewAppender(); err == nil || !errors.Is(err, ErrWriterLocked) {
+		_ = appender.Close()
+		t.Fatalf("concurrent writer was not rejected: %v", err)
+	}
+	if err := appender.Close(); err != nil {
+		t.Fatal(err)
+	}
+	lockPath := filepath.Join(store.Root(), filepath.FromSlash(writerLockPath))
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Fatalf("writer lock remained after close: %v", err)
+	}
+	if err := os.WriteFile(lockPath, []byte("stale\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.NewAppender(); err == nil {
+		t.Fatal("stale writer lock was silently removed")
+	}
+	cleared, err := store.ClearStaleWriterLock()
+	if err != nil || !cleared {
+		t.Fatalf("explicit stale-lock recovery failed: cleared=%v err=%v", cleared, err)
+	}
+	appender, err = store.NewAppender()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := appender.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFailedAppendReleasesWriterLock(t *testing.T) {
+	store, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Append(Event{}); err == nil {
+		t.Fatal("invalid event was accepted")
+	}
+	appender, err := store.NewAppender()
+	if err != nil {
+		t.Fatalf("failed append left writer lock behind: %v", err)
+	}
+	if err := appender.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEvidenceRootInsideGitWorktreeIsRejected(t *testing.T) {
+	worktree := t.TempDir()
+	if err := os.Mkdir(filepath.Join(worktree, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(worktree, "private-evidence")
+	if _, err := Init(root); !errors.Is(err, ErrEvidenceRootInGitWorktree) {
+		t.Fatalf("Git-contained evidence root was not rejected: %v", err)
+	}
+	if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("rejected evidence root was created: %v", err)
+	}
+}
+
+func TestExistingEvidenceStoreStopsWritingAfterGitInitialization(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "private-evidence")
+	store, err := Init(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(root); !errors.Is(err, ErrEvidenceRootInGitWorktree) {
+		t.Fatalf("existing Git-contained store was reopened: %v", err)
+	}
+	if _, err := store.NewAppender(); !errors.Is(err, ErrEvidenceRootInGitWorktree) {
+		t.Fatalf("existing store opened a writer after Git initialization: %v", err)
+	}
+	if _, err := store.PutBlob(strings.NewReader("raw evidence")); !errors.Is(err, ErrEvidenceRootInGitWorktree) {
+		t.Fatalf("existing store wrote a blob after Git initialization: %v", err)
 	}
 }

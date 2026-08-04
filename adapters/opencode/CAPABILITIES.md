@@ -45,6 +45,25 @@ OpenCode configuration requires explicit user approval. Historical export
 reconciliation remains required because a live hook can be absent, interrupted,
 or unable to reconstruct state that predates its installation.
 
+## Optional promoted-memory injection
+
+`integrations/opencode/agent-memory-retrieval.ts` retrieves only verified active
+revisions from the separate portable memory repository. It runs `agentmem`
+directly without a shell, accepts trusted logical scopes only from local
+environment configuration, and enforces bounded output. A missing executable,
+timeout, invalid repository, or malformed response produces no injected memory
+and does not block OpenCode.
+
+The plugin retrieves on `chat.message`, injects through
+`experimental.chat.system.transform`, and refreshes the latest real user prompt
+through `experimental.session.compacting`. These OpenCode hooks are
+version-sensitive and experimental; the shared MCP server is the stable
+fallback. The compatibility baseline is type-checked against
+`@opencode-ai/plugin` 1.18.13. The plugin is disabled unless both the local
+evidence root and portable repository are configured. It is never installed
+automatically and does not replace event capture or historical reconciliation.
+See `docs/retrieval.md`.
+
 `agentmem capture opencode` enumerates native sessions and invokes unsanitized
 exports into a non-Git staging directory. It preserves session-list output,
 per-session stderr, manifests, failed or malformed stdout, and explicit failure

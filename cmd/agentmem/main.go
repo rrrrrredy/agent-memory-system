@@ -17,9 +17,12 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
+	"github.com/rrrrrredy/agent-memory-system/internal/hookinject"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
+	"github.com/rrrrrredy/agent-memory-system/internal/mcpserver"
 	"github.com/rrrrrredy/agent-memory-system/internal/portable"
 	"github.com/rrrrrredy/agent-memory-system/internal/promotion"
+	"github.com/rrrrrredy/agent-memory-system/internal/retrieval"
 	"github.com/rrrrrredy/agent-memory-system/internal/review"
 	"github.com/rrrrrredy/agent-memory-system/internal/ruleapproval"
 )
@@ -54,6 +57,8 @@ func run(args []string) error {
 	case "doctor":
 		flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
 		root := flags.String("root", "", "local evidence root (required)")
+		clearWriterLock := flags.Bool("clear-stale-writer-lock", false,
+			"remove the writer lock after independently verifying no ledger writer is active")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -63,6 +68,25 @@ func run(args []string) error {
 		store, err := ledger.Open(*root)
 		if err != nil {
 			return err
+		}
+		if *clearWriterLock {
+			cleared, err := store.ClearStaleWriterLock()
+			if err != nil {
+				return err
+			}
+			report := store.Verify()
+			if err := encodeIndented(map[string]any{
+				"schema_version":      "evidence-writer-recovery-result/v1alpha1",
+				"writer_lock_cleared": cleared,
+				"verification":        report,
+				"privacy":             "local_only",
+			}); err != nil {
+				return err
+			}
+			if len(report.Issues) > 0 {
+				return errors.New("evidence verification failed")
+			}
+			return nil
 		}
 		report := store.Verify()
 		encoder := json.NewEncoder(os.Stdout)
@@ -79,6 +103,11 @@ func run(args []string) error {
 			return importUsageError()
 		}
 		return runImport(args[1:])
+	case "inject":
+		if len(args) < 2 {
+			return injectUsageError()
+		}
+		return runInject(args[1:])
 	case "capture":
 		if len(args) < 2 {
 			return captureUsageError()
@@ -109,6 +138,16 @@ func run(args []string) error {
 			return portableUsageError()
 		}
 		return runPortable(args[1:])
+	case "recall":
+		if len(args) < 2 {
+			return recallUsageError()
+		}
+		return runRecall(args[1:])
+	case "serve":
+		if len(args) < 2 {
+			return serveUsageError()
+		}
+		return runServe(args[1:])
 	case "sync":
 		if len(args) < 2 {
 			return syncUsageError()
@@ -117,6 +156,291 @@ func run(args []string) error {
 	default:
 		return usageError()
 	}
+}
+
+func runInject(args []string) error {
+	var agent ledger.Agent
+	switch args[0] {
+	case "codex":
+		agent = ledger.AgentCodex
+	case "claude-code":
+		agent = ledger.AgentClaudeCode
+	case "opencode":
+		agent = ledger.AgentOpenCode
+	default:
+		return injectUsageError()
+	}
+	flags := flag.NewFlagSet("inject "+args[0], flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	scopeRepository := flags.String("scope-repository", "", "trusted logical repository scope")
+	scopeProject := flags.String("scope-project", "", "trusted logical project scope")
+	scopeTask := flags.String("scope-task", "", "trusted logical task scope")
+	limit := flags.Int("limit", retrieval.DefaultLimit, "maximum matching memories")
+	tokenBudget := flags.Int("token-budget", 600, "maximum estimated tokens in additional context")
+	byteBudget := flags.Int("byte-budget", 3072, "maximum UTF-8 bytes in additional context")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" || *repository == "" {
+		return errors.New("inject requires --root and --repo")
+	}
+	output, _ := hookinject.Process(os.Stdin, hookinject.Config{
+		EvidenceRoot: *root,
+		PortableRoot: *repository,
+		Agent:        agent,
+		Repository:   *scopeRepository,
+		Project:      *scopeProject,
+		Task:         *scopeTask,
+		Limit:        *limit,
+		TokenBudget:  *tokenBudget,
+		ByteBudget:   *byteBudget,
+	})
+	return json.NewEncoder(os.Stdout).Encode(output)
+}
+
+func runServe(args []string) error {
+	if args[0] != "mcp" {
+		return serveUsageError()
+	}
+	flags := flag.NewFlagSet("serve mcp", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	agent := flags.String("agent", "", "codex, claude_code, opencode, or unknown (required)")
+	thread := flags.String("thread", "", "optional default source thread id")
+	session := flags.String("session", "", "optional default source session id")
+	scopeRepository := flags.String("scope-repository", "", "trusted logical repository scope")
+	scopeProject := flags.String("scope-project", "", "trusted logical project scope")
+	scopeTask := flags.String("scope-task", "", "trusted logical task scope")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" || *repository == "" || *agent == "" {
+		return errors.New("serve mcp requires --root, --repo, and --agent")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	return mcpserver.Run(ctx, mcpserver.Config{
+		EvidenceRoot: *root,
+		PortableRoot: *repository,
+		Agent:        ledger.Agent(*agent),
+		ThreadID:     *thread,
+		SessionID:    *session,
+		Repository:   *scopeRepository,
+		Project:      *scopeProject,
+		Task:         *scopeTask,
+	})
+}
+
+func runRecall(args []string) error {
+	switch args[0] {
+	case "search":
+		return runRecallQuery(args[1:], false)
+	case "get":
+		return runRecallQuery(args[1:], true)
+	case "context":
+		return runRecallContext(args[1:])
+	case "adoption":
+		return runRecallAdoption(args[1:])
+	case "verify":
+		return runRecallVerify(args[1:])
+	default:
+		return recallUsageError()
+	}
+}
+
+type recallFlags struct {
+	root            *string
+	repository      *string
+	agent           *string
+	thread          *string
+	session         *string
+	scopeRepository *string
+	scopeProject    *string
+	scopeTask       *string
+	channel         *string
+	limit           *int
+	tokenBudget     *int
+	byteBudget      *int
+}
+
+func addRecallFlags(flags *flag.FlagSet) recallFlags {
+	return recallFlags{
+		root:            flags.String("root", "", "local evidence root (required)"),
+		repository:      flags.String("repo", "", "portable memory repository root (required)"),
+		agent:           flags.String("agent", string(ledger.AgentUnknown), "codex, claude_code, opencode, or unknown"),
+		thread:          flags.String("thread", "", "optional source thread id"),
+		session:         flags.String("session", "", "optional source session id"),
+		scopeRepository: flags.String("scope-repository", "", "trusted logical repository scope"),
+		scopeProject:    flags.String("scope-project", "", "trusted logical project scope"),
+		scopeTask:       flags.String("scope-task", "", "trusted logical task scope"),
+		channel:         flags.String("channel", string(retrieval.ChannelCLI), "delivery channel"),
+		limit:           flags.Int("limit", retrieval.DefaultLimit, "maximum matching memories"),
+		tokenBudget:     flags.Int("token-budget", retrieval.DefaultTokenBudget, "estimated token budget"),
+		byteBudget:      flags.Int("byte-budget", retrieval.DefaultByteBudget, "UTF-8 byte budget"),
+	}
+}
+
+func (values recallFlags) request(query, memoryID string) (retrieval.Request, error) {
+	if *values.root == "" || *values.repository == "" {
+		return retrieval.Request{}, errors.New("recall requires --root and --repo")
+	}
+	agent := ledger.Agent(*values.agent)
+	context := retrieval.Context{
+		Agent:      agent,
+		ThreadID:   *values.thread,
+		SessionID:  *values.session,
+		Repository: *values.scopeRepository,
+		Project:    *values.scopeProject,
+		Task:       *values.scopeTask,
+		Channel:    retrieval.DeliveryChannel(*values.channel),
+	}
+	return retrieval.Request{
+		SchemaVersion: retrieval.RequestSchemaVersion,
+		Query:         query,
+		MemoryID:      memoryID,
+		Context:       context,
+		Limit:         *values.limit,
+		TokenBudget:   *values.tokenBudget,
+		ByteBudget:    *values.byteBudget,
+	}, nil
+}
+
+func runRecallQuery(args []string, exact bool) error {
+	name := "recall search"
+	if exact {
+		name = "recall get"
+	}
+	flags := flag.NewFlagSet(name, flag.ContinueOnError)
+	values := addRecallFlags(flags)
+	query := flags.String("query", "", "search query")
+	memoryID := flags.String("memory", "", "exact memory id")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if exact && *memoryID == "" {
+		return errors.New("recall get requires --memory")
+	}
+	if !exact && *query == "" {
+		return errors.New("recall search requires --query")
+	}
+	if exact {
+		*query = ""
+	} else {
+		*memoryID = ""
+	}
+	request, err := values.request(*query, *memoryID)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*values.root)
+	if err != nil {
+		return err
+	}
+	result, searchErr := retrieval.Search(store, *values.repository, request)
+	if err := encodeIndented(result); err != nil {
+		return err
+	}
+	return searchErr
+}
+
+func runRecallContext(args []string) error {
+	flags := flag.NewFlagSet("recall context", flag.ContinueOnError)
+	values := addRecallFlags(flags)
+	query := flags.String("query", "", "search query")
+	memoryID := flags.String("memory", "", "exact memory id")
+	output := flags.String("output", "json", "json or text")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	request, err := values.request(*query, *memoryID)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*values.root)
+	if err != nil {
+		return err
+	}
+	result, contextErr := retrieval.BuildContext(store, *values.repository, request)
+	switch *output {
+	case "json":
+		if err := encodeIndented(result); err != nil {
+			return err
+		}
+	case "text":
+		if result.Content != "" {
+			fmt.Print(result.Content)
+		}
+	default:
+		return errors.New("recall context --output must be json or text")
+	}
+	return contextErr
+}
+
+func runRecallAdoption(args []string) error {
+	flags := flag.NewFlagSet("recall adoption", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	requestPath := flags.String("file", "", "adoption request JSON file, or - for stdin (required)")
+	agent := flags.String("agent", string(ledger.AgentUnknown), "codex, claude_code, opencode, or unknown")
+	thread := flags.String("thread", "", "optional source thread id")
+	session := flags.String("session", "", "optional source session id")
+	channel := flags.String("channel", string(retrieval.ChannelCLI), "delivery channel")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *requestPath == "" {
+		return errors.New("recall adoption requires --root and --file")
+	}
+	reader := os.Stdin
+	var file *os.File
+	var err error
+	if *requestPath != "-" {
+		file, err = os.Open(*requestPath)
+		if err != nil {
+			return fmt.Errorf("open adoption request: %w", err)
+		}
+		defer file.Close()
+		reader = file
+	}
+	request, err := retrieval.DecodeAdoptionRequest(reader)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	receipt, err := retrieval.RecordAdoption(store, retrieval.Context{
+		Agent: ledger.Agent(*agent), ThreadID: *thread, SessionID: *session,
+		Channel: retrieval.DeliveryChannel(*channel),
+	}, request)
+	if err != nil {
+		return err
+	}
+	return encodeIndented(receipt)
+}
+
+func runRecallVerify(args []string) error {
+	flags := flag.NewFlagSet("recall verify", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" {
+		return errors.New("recall verify requires --root")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	report := retrieval.Verify(store)
+	if err := encodeIndented(report); err != nil {
+		return err
+	}
+	if len(report.Issues) != 0 {
+		return errors.New("memory receipt verification failed")
+	}
+	return nil
 }
 
 func runSync(args []string) error {
@@ -911,7 +1235,7 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor|import|capture|derive|review|promote|rule-approval|portable|sync> [options]")
+	return errors.New("usage: agentmem <init|doctor|import|inject|capture|derive|review|promote|rule-approval|portable|recall|serve|sync> [options]")
 }
 
 func reviewUsageError() error {
@@ -928,6 +1252,14 @@ func ruleApprovalUsageError() error {
 
 func portableUsageError() error {
 	return errors.New("usage: agentmem portable <init|export|verify> [options]")
+}
+
+func recallUsageError() error {
+	return errors.New("usage: agentmem recall <search|get|context|adoption|verify> [options]")
+}
+
+func serveUsageError() error {
+	return errors.New("usage: agentmem serve mcp --root <local-evidence-directory> --repo <portable-memory-directory> --agent <agent>")
 }
 
 func syncUsageError() error {
@@ -948,4 +1280,8 @@ func captureUsageError() error {
 
 func importUsageError() error {
 	return errors.New("usage: agentmem import <codex|claude|claude-home|opencode-export|opencode-events> --root <local-evidence-directory> --path <source-file-or-directory>")
+}
+
+func injectUsageError() error {
+	return errors.New("usage: agentmem inject <codex|claude-code|opencode> --root <local-evidence-directory> --repo <portable-memory-directory>")
 }

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-adoption-receipt.schema.json",
+  "title": "Local memory adoption and outcome receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "adoption_id", "recorded_at", "reporter", "retrieval_receipt_id",
+    "items", "request_sha256", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "memory-adoption-receipt/v1alpha1"},
+    "adoption_id": {"type": "string", "pattern": "^adoption-.+"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "reporter": {"$ref": "memory-adoption-request.schema.json#/$defs/reporter"},
+    "retrieval_receipt_id": {"type": "string", "pattern": "^retrieval-.+"},
+    "injection_id": {"type": "string", "pattern": "^injection-.+"},
+    "items": {
+      "type": "array",
+      "items": {"$ref": "memory-adoption-request.schema.json#/$defs/item"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "outcome_evidence_event_ids": {
+      "type": "array",
+      "description": "Complete, hash-verified tool_result or file_change events; Agent messages are not outcome evidence.",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "request_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["reporter", "items"],
+        "properties": {
+          "reporter": {
+            "required": ["kind"],
+            "properties": {"kind": {"enum": ["agent", "harness"]}}
+          },
+          "items": {
+            "contains": {
+              "required": ["outcome"],
+              "properties": {"outcome": {"enum": ["helpful", "neutral", "harmful"]}}
+            }
+          }
+        }
+      },
+      "then": {
+        "required": ["outcome_evidence_event_ids"],
+        "properties": {"outcome_evidence_event_ids": {"minItems": 1}}
+      }
+    }
+  ]
+}

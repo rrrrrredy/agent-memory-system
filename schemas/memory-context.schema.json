@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-context.schema.json",
+  "title": "Bounded promoted memory context result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "retrieval", "memories", "content_bytes", "estimated_tokens", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "memory-context/v1alpha1"},
+    "injection_id": {"type": "string", "pattern": "^injection-.+"},
+    "retrieval": {"$ref": "memory-retrieval-result.schema.json"},
+    "memories": {
+      "type": "array",
+      "items": {"$ref": "memory-retrieval-result.schema.json#/$defs/memory_reference"},
+      "uniqueItems": true
+    },
+    "content": {"type": "string", "minLength": 1},
+    "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "content_bytes": {"type": "integer", "minimum": 0, "maximum": 65536},
+    "estimated_tokens": {"type": "integer", "minimum": 0, "maximum": 4096},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"required": ["injection_id"]},
+      "then": {
+        "required": ["content", "content_sha256"],
+        "properties": {"memories": {"minItems": 1}, "content_bytes": {"minimum": 1}, "estimated_tokens": {"minimum": 1}}
+      }
+    },
+    {
+      "if": {"not": {"required": ["injection_id"]}},
+      "then": {
+        "properties": {"memories": {"maxItems": 0}, "content_bytes": {"const": 0}, "estimated_tokens": {"const": 0}},
+        "not": {"anyOf": [{"required": ["content"]}, {"required": ["content_sha256"]}]}
+      }
+    }
+  ]
+}

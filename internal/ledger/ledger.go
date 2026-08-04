@@ -17,9 +17,12 @@ import (
 )
 
 const (
-	storeSchema = "agent-memory-store/v1alpha1"
-	eventsPath  = "evidence/events.jsonl"
+	storeSchema    = "agent-memory-store/v1alpha1"
+	eventsPath     = "evidence/events.jsonl"
+	writerLockPath = "state/evidence-writer.lock"
 )
+
+var ErrWriterLocked = errors.New("evidence ledger is locked")
 
 type Store struct {
 	root     string
@@ -27,11 +30,23 @@ type Store struct {
 }
 
 type Appender struct {
-	store    *Store
-	file     *os.File
-	previous string
-	failed   bool
-	closed   bool
+	store      *Store
+	file       *os.File
+	writerLock *writerLock
+	previous   string
+	failed     bool
+	closed     bool
+}
+
+type writerLock struct {
+	path string
+}
+
+type writerLockMetadata struct {
+	SchemaVersion string    `json:"schema_version"`
+	DeviceID      string    `json:"device_id"`
+	ProcessID     int       `json:"process_id"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type storeManifest struct {
@@ -47,6 +62,9 @@ func Init(root string) (*Store, error) {
 	absolute, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("resolve root: %w", err)
+	}
+	if err := ensureEvidenceRootOutsideGit(absolute); err != nil {
+		return nil, err
 	}
 	for _, directory := range []string{
 		filepath.Join(absolute, "evidence", "blobs", "sha256"),
@@ -99,6 +117,9 @@ func Open(root string) (*Store, error) {
 	absolute, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("resolve root: %w", err)
+	}
+	if err := ensureEvidenceRootOutsideGit(absolute); err != nil {
+		return nil, err
 	}
 	store := &Store{root: absolute}
 	if err := store.validateManifest(); err != nil {
@@ -162,6 +183,9 @@ func InlinePayload(encoding, mediaType, content string) Payload {
 }
 
 func (s *Store) PutBlob(reader io.Reader) (BlobRef, error) {
+	if err := ensureEvidenceRootOutsideGit(s.root); err != nil {
+		return BlobRef{}, err
+	}
 	temp, err := os.CreateTemp(filepath.Join(s.root, "evidence", "tmp"), "blob-*")
 	if err != nil {
 		return BlobRef{}, fmt.Errorf("create blob temp file: %w", err)
@@ -238,6 +262,9 @@ func (s *Store) AppendBatch(events []Event) ([]Record, error) {
 	}
 	records, appendErr := appender.AppendBatch(events)
 	closeErr := appender.Close()
+	if appendErr != nil && closeErr != nil {
+		return nil, errors.Join(appendErr, closeErr)
+	}
 	if appendErr != nil {
 		return nil, appendErr
 	}
@@ -248,38 +275,55 @@ func (s *Store) AppendBatch(events []Event) ([]Record, error) {
 }
 
 func (s *Store) NewAppender() (*Appender, error) {
-	path := filepath.Join(s.root, filepath.FromSlash(eventsPath))
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, fmt.Errorf("create ledger directory: %w", err)
+	if err := ensureEvidenceRootOutsideGit(s.root); err != nil {
+		return nil, err
 	}
-	previous, err := lastRecordHash(path)
+	lock, err := s.acquireWriterLock(time.Now().UTC())
 	if err != nil {
 		return nil, err
 	}
-	return s.openAppenderAt(previous)
+	path := filepath.Join(s.root, filepath.FromSlash(eventsPath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, releaseWriterLockAfterError(lock,
+			fmt.Errorf("create ledger directory: %w", err))
+	}
+	previous, err := lastRecordHash(path)
+	if err != nil {
+		return nil, releaseWriterLockAfterError(lock, err)
+	}
+	return s.openAppenderAt(previous, lock)
 }
 
 // NewAppenderAfterVisit verifies and visits the existing chain once, then opens
 // an appender at the verified tail. The caller must still enforce the
 // single-writer contract between the scan and subsequent appends.
 func (s *Store) NewAppenderAfterVisit(visitor func(Record) error) (*Appender, error) {
-	previous, err := s.visitRecords(visitor)
+	if err := ensureEvidenceRootOutsideGit(s.root); err != nil {
+		return nil, err
+	}
+	lock, err := s.acquireWriterLock(time.Now().UTC())
 	if err != nil {
 		return nil, err
 	}
-	return s.openAppenderAt(previous)
+	previous, err := s.visitRecords(visitor)
+	if err != nil {
+		return nil, releaseWriterLockAfterError(lock, err)
+	}
+	return s.openAppenderAt(previous, lock)
 }
 
-func (s *Store) openAppenderAt(previous string) (*Appender, error) {
+func (s *Store) openAppenderAt(previous string, lock *writerLock) (*Appender, error) {
 	path := filepath.Join(s.root, filepath.FromSlash(eventsPath))
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, fmt.Errorf("create ledger directory: %w", err)
+		return nil, releaseWriterLockAfterError(lock,
+			fmt.Errorf("create ledger directory: %w", err))
 	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("open ledger: %w", err)
+		return nil, releaseWriterLockAfterError(lock,
+			fmt.Errorf("open ledger: %w", err))
 	}
-	return &Appender{store: s, file: file, previous: previous}, nil
+	return &Appender{store: s, file: file, writerLock: lock, previous: previous}, nil
 }
 
 func (a *Appender) AppendBatch(events []Event) ([]Record, error) {
@@ -342,10 +386,92 @@ func (a *Appender) Close() error {
 		return nil
 	}
 	a.closed = true
-	if err := a.file.Close(); err != nil {
-		return fmt.Errorf("close ledger appender: %w", err)
+	closeErr := a.file.Close()
+	lockErr := a.writerLock.release()
+	if closeErr != nil && lockErr != nil {
+		return errors.Join(fmt.Errorf("close ledger appender: %w", closeErr),
+			fmt.Errorf("release evidence writer lock: %w", lockErr))
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close ledger appender: %w", closeErr)
+	}
+	if lockErr != nil {
+		return fmt.Errorf("release evidence writer lock: %w", lockErr)
 	}
 	return nil
+}
+
+func (s *Store) acquireWriterLock(now time.Time) (*writerLock, error) {
+	path := filepath.Join(s.root, filepath.FromSlash(writerLockPath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, fmt.Errorf("create evidence writer lock directory: %w", err)
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		return nil, fmt.Errorf("%w; verify no writer is active before explicit stale-lock recovery", ErrWriterLocked)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("acquire evidence writer lock: %w", err)
+	}
+	metadata := writerLockMetadata{
+		SchemaVersion: "evidence-writer-lock/v1alpha1",
+		DeviceID:      s.DeviceID(),
+		ProcessID:     os.Getpid(),
+		CreatedAt:     now.UTC(),
+	}
+	encoder := json.NewEncoder(file)
+	writeErr := encoder.Encode(metadata)
+	if writeErr == nil {
+		writeErr = file.Sync()
+	}
+	closeErr := file.Close()
+	if writeErr != nil || closeErr != nil {
+		var failures []error
+		if writeErr != nil {
+			failures = append(failures, fmt.Errorf("write evidence writer lock: %w", writeErr))
+		}
+		if closeErr != nil {
+			failures = append(failures, fmt.Errorf("close evidence writer lock: %w", closeErr))
+		}
+		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			failures = append(failures,
+				fmt.Errorf("remove incomplete evidence writer lock: %w", removeErr))
+		}
+		return nil, errors.Join(failures...)
+	}
+	return &writerLock{path: path}, nil
+}
+
+func (lock *writerLock) release() error {
+	if lock == nil || lock.path == "" {
+		return nil
+	}
+	if err := os.Remove(lock.path); err != nil {
+		return err
+	}
+	lock.path = ""
+	return nil
+}
+
+func releaseWriterLockAfterError(lock *writerLock, operationErr error) error {
+	if lockErr := lock.release(); lockErr != nil {
+		return errors.Join(operationErr,
+			fmt.Errorf("release evidence writer lock: %w", lockErr))
+	}
+	return operationErr
+}
+
+// ClearStaleWriterLock removes the evidence writer lock only after the caller
+// has independently verified that no ledger writer is active.
+func (s *Store) ClearStaleWriterLock() (bool, error) {
+	path := filepath.Join(s.root, filepath.FromSlash(writerLockPath))
+	if err := os.Remove(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("remove evidence writer lock: %w", err)
+	}
+	return true, nil
 }
 
 func validateEvent(event Event) error {

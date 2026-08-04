@@ -28,6 +28,9 @@ const (
 	KindCompaction     EventKind = "compaction"
 	KindSystemEvent    EventKind = "system_event"
 	KindSourceSnapshot EventKind = "source_snapshot"
+	KindRetrieval      EventKind = "memory_retrieval"
+	KindInjection      EventKind = "memory_injection"
+	KindAdoption       EventKind = "memory_adoption"
 	KindGap            EventKind = "gap"
 	KindUnknown        EventKind = "unknown"
 )
