@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/candidate-derivation-manifest.schema.json",
+  "title": "Agent Memory System candidate derivation manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "derivation_version",
+    "privacy",
+    "source_episode_generation",
+    "source_episode_manifest_sha256",
+    "source_episodes_sha256",
+    "source_episodes",
+    "observations",
+    "candidates",
+    "review_ready",
+    "untrusted",
+    "quarantined",
+    "conflict_groups",
+    "candidates_file",
+    "candidates_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "candidate-derivation-manifest/v1alpha1"},
+    "derivation_version": {"const": "candidates/v1alpha1"},
+    "privacy": {"const": "local_only"},
+    "source_episode_generation": {"type": "string", "minLength": 1},
+    "source_episode_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source_episodes_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_episodes": {"type": "integer", "minimum": 0},
+    "observations": {"type": "integer", "minimum": 0},
+    "candidates": {"type": "integer", "minimum": 0},
+    "review_ready": {"type": "integer", "minimum": 0},
+    "untrusted": {"type": "integer", "minimum": 0},
+    "quarantined": {"type": "integer", "minimum": 0},
+    "conflict_groups": {"type": "integer", "minimum": 0},
+    "candidates_file": {"const": "candidates.jsonl"},
+    "candidates_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

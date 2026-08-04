@@ -69,6 +69,7 @@ go run ./cmd/agentmem import opencode-export --root <local-data-directory> --pat
 go run ./cmd/agentmem import opencode-events --root <local-data-directory> --path <event-spool-file-or-directory>
 go run ./cmd/agentmem capture opencode --root <local-data-directory> --staging <non-Git-local-directory>
 go run ./cmd/agentmem derive episodes --root <local-data-directory>
+go run ./cmd/agentmem derive candidates --root <local-data-directory> --episodes <episode-generation>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -102,6 +103,11 @@ remain under the local evidence root. Compaction checks distinguish confirmed
 repeated user correction evidence from lexical risk and unavailable
 representations; none of these results is promoted memory. See
 [episode derivation](docs/episodes.md).
+
+`derive candidates` converts evidence-linked episode statements into local
+review material. Ordinary task goals are excluded, opposing instructions are
+quarantined, and every result remains ineligible for automatic promotion. See
+[candidate derivation](docs/candidates.md).
 
 ## Safety
 

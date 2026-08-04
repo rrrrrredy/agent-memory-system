@@ -12,6 +12,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/adapters/claudecode"
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
 	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
+	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
@@ -87,13 +88,21 @@ func run(args []string) error {
 }
 
 func runDerive(args []string) error {
-	if args[0] != "episodes" {
+	switch args[0] {
+	case "episodes":
+		return runDeriveEpisodes(args[1:])
+	case "candidates":
+		return runDeriveCandidates(args[1:])
+	default:
 		return deriveUsageError()
 	}
+}
+
+func runDeriveEpisodes(args []string) error {
 	flags := flag.NewFlagSet("derive episodes", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
 	shards := flags.Int("shards", 64, "power-of-two work shard count (1-256)")
-	if err := flags.Parse(args[1:]); err != nil {
+	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *root == "" {
@@ -104,6 +113,32 @@ func runDerive(args []string) error {
 		return err
 	}
 	result, err := episodes.Build(store, episodes.BuildOptions{ShardCount: *shards})
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
+func runDeriveCandidates(args []string) error {
+	flags := flag.NewFlagSet("derive candidates", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	episodeGeneration := flags.String("episodes", "", "episode generation path or directory name (required)")
+	shards := flags.Int("shards", 64, "power-of-two work shard count (1-256)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *episodeGeneration == "" {
+		return errors.New("derive candidates requires --root and --episodes")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := candidates.Build(store, candidates.BuildOptions{
+		EpisodeGenerationPath: *episodeGeneration, ShardCount: *shards,
+	})
 	if err != nil {
 		return err
 	}
@@ -190,7 +225,7 @@ func usageError() error {
 }
 
 func deriveUsageError() error {
-	return errors.New("usage: agentmem derive episodes --root <local-evidence-directory> [--shards 64]")
+	return errors.New("usage: agentmem derive <episodes|candidates> --root <local-evidence-directory> [options]")
 }
 
 func captureUsageError() error {
