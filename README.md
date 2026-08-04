@@ -62,8 +62,15 @@ Go 1.24 or newer is required.
 ```text
 go test ./...
 go run ./cmd/agentmem init --root <local-data-directory>
+go run ./cmd/agentmem import codex --root <local-data-directory> --path <rollout-file-or-directory>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
+
+The Codex importer stores exact append segments as content-addressed local
+blobs, then writes normalized events that point back to byte ranges in those
+segments. Re-running it is idempotent. Use `--full-reconcile` to deliberately
+re-read an entire source and detect earlier in-place changes; the default mode
+starts at the last committed byte.
 
 On this Windows workstation, project code lives in
 `D:\Codex\agent-memory-system`; a runtime evidence directory should be
