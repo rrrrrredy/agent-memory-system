@@ -52,6 +52,7 @@ No raw evidence is migrated when the private repository is created.
 - Cross-agent local query and MCP retrieval.
 - Bounded injection with provenance and adoption receipts.
 - Continuous-learning regression suite using frozen legacy cards and rollouts.
+- Evidence-bound case attestations and non-vacuous quality gates.
 - Windows/macOS and three-Agent synchronization suite.
 - Optional encrypted evidence backup and verified restore.
 - Install, doctor, upgrade, and new-device recovery flows.

@@ -9,8 +9,9 @@ evidence stays local by default. Only reviewed, redacted, promoted memories may
 enter a separate private Git repository.
 
 > Status: v1alpha1 foundation. Evidence capture, review and promotion, portable
-> memory, verified Git synchronization, and bounded cross-Agent retrieval are
-> implemented; evaluation and encrypted evidence backup remain in development.
+> memory, verified Git synchronization, bounded cross-Agent retrieval, and the
+> evidence-bound evaluation core are implemented; encrypted evidence backup
+> remains in development.
 
 ## Product boundary
 
@@ -55,6 +56,7 @@ canonical data and is never merged through Git.
 - `internal/portable`: private-Git-safe projection and semantic conflict checks
 - `internal/gitsync`: append-only Git history validation and explicit synchronization
 - `internal/retrieval`: verified ranking, bounded context, and local use receipts
+- `internal/evaluation`: frozen corpora, attestations, metrics, gates, and run verification
 - `internal/mcpserver`: shared Codex, Claude Code, and OpenCode query surface
 - `internal/secretscan`: deterministic, non-echoing sensitive-content detection
 - `internal/ruleapproval`: separate revision-, surface-, and target-bound rule authorization
@@ -63,7 +65,7 @@ canonical data and is never merged through Git.
 - `docs/research`: adopt/modify/reject reviews of related projects
 - `adapters`: Codex, Claude Code, and OpenCode evidence adapters
 - `integrations`: optional Agent-native live capture and injection bridges
-- `evals`: continuous-learning and sync reliability evaluations (planned)
+- `evals`: synthetic continuous-learning and sync reliability fixtures
 
 ## Development
 
@@ -100,6 +102,12 @@ go run ./cmd/agentmem recall search --root <local-data-directory> --repo <privat
 go run ./cmd/agentmem recall context --root <local-data-directory> --repo <private-memory-directory> --agent codex --query <terms> --output text
 go run ./cmd/agentmem recall verify --root <local-data-directory>
 go run ./cmd/agentmem serve mcp --root <local-data-directory> --repo <private-memory-directory> --agent codex
+go run ./cmd/agentmem eval corpus freeze --root <local-data-directory> --legacy-root <legacy-context-journal-directory> --allow-incomplete
+go run ./cmd/agentmem eval corpus verify --root <local-data-directory> --corpus <corpus-id>
+go run ./cmd/agentmem eval corpus baseline --root <local-data-directory> --corpus <corpus-id> --run <run-id> --system-version <version>
+go run ./cmd/agentmem eval attest --root <local-data-directory> --file <evaluation-attestation.json>
+go run ./cmd/agentmem eval run --root <local-data-directory> --file <evaluation-input.json> --repo <private-memory-directory> --enforce
+go run ./cmd/agentmem eval verify --root <local-data-directory> --suite <suite-id> --run <run-id>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -184,6 +192,13 @@ three Agents; optional Codex, Claude Code, and OpenCode injection bridges fail
 open without returning stale or partially verified memory. Retrieval, actual
 delivery, and downstream adoption are recorded separately. See
 [cross-Agent retrieval](docs/retrieval.md).
+
+`eval corpus freeze` turns legacy cards and referenced rollout snapshots into
+a hash-bound local regression corpus without promoting them. Raw capture and
+parser projection gaps are measured separately. Interpretive quality labels
+must be recorded first as append-only case attestations, and a run cannot pass
+on empty samples or unresolved evidence. See
+[continuous-learning evaluation](docs/evaluation.md).
 
 ## Safety
 

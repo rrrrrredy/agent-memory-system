@@ -1,0 +1,18 @@
+{
+  "schema_version": "learning-evaluation-input/v1alpha1",
+  "suite_id": "synthetic-empty",
+  "run_id": "empty-denominator",
+  "created_at": "2026-01-01T00:00:00Z",
+  "system_version": "synthetic-v1",
+  "cases": [
+    {
+      "case_id": "capture-empty",
+      "category": "capture_coverage",
+      "agent": "unknown",
+      "evidence": [{"kind": "ledger_event", "id": "source-empty", "sha256": "9999999999999999999999999999999999999999999999999999999999999999"}],
+      "capture": {"unit": "evidence_events", "expected": 0, "complete": 0, "partial": 0, "missing": 0}
+    }
+  ],
+  "thresholds": {"minimum_capture_coverage": 0.5},
+  "privacy": "local_only"
+}

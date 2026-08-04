@@ -1,0 +1,86 @@
+{
+  "schema_version": "learning-evaluation-input/v1alpha1",
+  "suite_id": "synthetic-quality",
+  "run_id": "quality-pass",
+  "created_at": "2026-01-01T00:00:00Z",
+  "system_version": "synthetic-v1",
+  "cases": [
+    {
+      "case_id": "capture",
+      "category": "capture_coverage",
+      "agent": "codex",
+      "evidence": [{"kind": "ledger_event", "id": "source-capture", "sha256": "1111111111111111111111111111111111111111111111111111111111111111"}],
+      "capture": {"unit": "evidence_events", "expected": 2, "complete": 2, "partial": 0, "missing": 0}
+    },
+    {
+      "case_id": "memory",
+      "category": "false_memory",
+      "agent": "codex",
+      "evidence": [{"kind": "portable_revision", "id": "revision-supported", "sha256": "2222222222222222222222222222222222222222222222222222222222222222"}],
+      "memory": {"memory_id": "memory-supported", "label": "supported", "active": true, "retrieved": false}
+    },
+    {
+      "case_id": "correction",
+      "category": "repeated_correction",
+      "agent": "claude_code",
+      "evidence": [{"kind": "ledger_event", "id": "user-correction", "sha256": "3333333333333333333333333333333333333333333333333333333333333333"}],
+      "correction": {
+        "semantic_key_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "eligible_followup_opportunities": 4,
+        "repeated_corrections": 1,
+        "repeated_corrections_after_memory": 0
+      }
+    },
+    {
+      "case_id": "drift-positive",
+      "category": "compaction_drift",
+      "agent": "opencode",
+      "evidence": [{"kind": "ledger_event", "id": "compaction-positive", "sha256": "5555555555555555555555555555555555555555555555555555555555555555"}],
+      "compaction": {"checkpoint_id": "checkpoint-positive", "expected": "drift", "observed": "drift"}
+    },
+    {
+      "case_id": "drift-negative",
+      "category": "compaction_drift",
+      "agent": "opencode",
+      "evidence": [{"kind": "ledger_event", "id": "compaction-negative", "sha256": "6666666666666666666666666666666666666666666666666666666666666666"}],
+      "compaction": {"checkpoint_id": "checkpoint-negative", "expected": "preserved", "observed": "preserved"}
+    },
+    {
+      "case_id": "retrieval",
+      "category": "retrieval_cost",
+      "agent": "codex",
+      "evidence": [{"kind": "ledger_event", "id": "retrieval-synthetic", "sha256": "7777777777777777777777777777777777777777777777777777777777777777"}],
+      "retrieval": {
+        "retrieval_id": "retrieval-synthetic",
+        "estimated_tokens": 100,
+        "utf8_bytes": 200,
+        "selected_items": 1,
+        "adopted": true,
+        "outcome": "helpful"
+      }
+    },
+    {
+      "case_id": "paired",
+      "category": "paired_outcome",
+      "agent": "codex",
+      "evidence": [{"kind": "ledger_event", "id": "tool-result-paired", "sha256": "8888888888888888888888888888888888888888888888888888888888888888"}],
+      "paired_outcome": {
+        "pair_id": "pair-synthetic",
+        "baseline": {"success": true, "score": 0.5, "errors": 2, "user_corrections": 1, "total_tokens": 200},
+        "treatment": {"success": true, "score": 0.7, "errors": 1, "user_corrections": 0, "total_tokens": 180}
+      }
+    }
+  ],
+  "thresholds": {
+    "minimum_capture_coverage": 1,
+    "maximum_false_memory_rate": 0,
+    "maximum_unknown_memory_rate": 0,
+    "maximum_repeated_correction_rate": 0.25,
+    "minimum_drift_precision": 1,
+    "minimum_drift_recall": 1,
+    "maximum_mean_retrieval_tokens": 100,
+    "minimum_mean_outcome_score_delta": 0.1,
+    "maximum_harmful_outcomes": 0
+  },
+  "privacy": "local_only"
+}

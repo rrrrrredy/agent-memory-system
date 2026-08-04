@@ -16,6 +16,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/autosync"
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
+	"github.com/rrrrrredy/agent-memory-system/internal/evaluation"
 	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
 	"github.com/rrrrrredy/agent-memory-system/internal/hookinject"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
@@ -118,6 +119,11 @@ func run(args []string) error {
 			return deriveUsageError()
 		}
 		return runDerive(args[1:])
+	case "eval":
+		if len(args) < 2 {
+			return evalUsageError()
+		}
+		return runEvaluation(args[1:])
 	case "review":
 		if len(args) < 2 {
 			return reviewUsageError()
@@ -439,6 +445,214 @@ func runRecallVerify(args []string) error {
 	}
 	if len(report.Issues) != 0 {
 		return errors.New("memory receipt verification failed")
+	}
+	return nil
+}
+
+func runEvaluation(args []string) error {
+	switch args[0] {
+	case "corpus":
+		if len(args) < 2 {
+			return evalUsageError()
+		}
+		return runEvaluationCorpus(args[1:])
+	case "attest":
+		return runEvaluationAttest(args[1:])
+	case "run":
+		return runEvaluationRun(args[1:])
+	case "verify":
+		return runEvaluationVerify(args[1:])
+	default:
+		return evalUsageError()
+	}
+}
+
+func runEvaluationAttest(args []string) error {
+	flags := flag.NewFlagSet("eval attest", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	requestPath := flags.String("file", "", "evaluation attestation JSON file, or - for stdin (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *requestPath == "" {
+		return errors.New("eval attest requires --root and --file")
+	}
+	reader := os.Stdin
+	var file *os.File
+	var err error
+	if *requestPath != "-" {
+		file, err = os.Open(*requestPath)
+		if err != nil {
+			return fmt.Errorf("open evaluation attestation: %w", err)
+		}
+		defer file.Close()
+		reader = file
+	}
+	attestation, err := evaluation.DecodeAttestation(reader)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := evaluation.RecordAttestation(store, attestation, nil)
+	if err != nil {
+		return err
+	}
+	return encodeIndented(result)
+}
+
+func runEvaluationCorpus(args []string) error {
+	switch args[0] {
+	case "baseline":
+		flags := flag.NewFlagSet("eval corpus baseline", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		corpusID := flags.String("corpus", "", "frozen corpus id (required)")
+		suiteID := flags.String("suite", "legacy-capture", "evaluation suite id")
+		runID := flags.String("run", "", "evaluation run id (required)")
+		systemVersion := flags.String("system-version", "", "system version under evaluation (required)")
+		minimumCoverage := flags.Float64("minimum-coverage", 1, "minimum complete rollout coverage")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *corpusID == "" || *runID == "" || *systemVersion == "" {
+			return errors.New("eval corpus baseline requires --root, --corpus, --run, and --system-version")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		input, err := evaluation.BuildLegacyCaptureInput(store, *corpusID,
+			evaluation.LegacyCaptureInputOptions{
+				SuiteID: *suiteID, RunID: *runID, SystemVersion: *systemVersion,
+				MinimumCoverage: *minimumCoverage,
+			})
+		if err != nil {
+			return err
+		}
+		return encodeIndented(input)
+	case "freeze":
+		flags := flag.NewFlagSet("eval corpus freeze", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		legacyRoot := flags.String("legacy-root", "", "legacy context-journal root (required)")
+		name := flags.String("name", "legacy-context-journal", "safe corpus name")
+		allowIncomplete := flags.Bool("allow-incomplete", false,
+			"return success while preserving explicit legacy coverage issues")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *legacyRoot == "" {
+			return errors.New("eval corpus freeze requires --root and --legacy-root")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, freezeErr := evaluation.FreezeLegacyCorpus(store, *legacyRoot,
+			evaluation.FreezeOptions{Name: *name})
+		if err := encodeIndented(result); err != nil {
+			return err
+		}
+		if freezeErr != nil {
+			return freezeErr
+		}
+		if len(result.Issues) != 0 && !*allowIncomplete {
+			return errors.New("legacy corpus was frozen with explicit coverage issues")
+		}
+		return nil
+	case "verify":
+		flags := flag.NewFlagSet("eval corpus verify", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		corpusID := flags.String("corpus", "", "frozen corpus id (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *corpusID == "" {
+			return errors.New("eval corpus verify requires --root and --corpus")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		report := evaluation.VerifyCorpus(store, *corpusID)
+		if err := encodeIndented(report); err != nil {
+			return err
+		}
+		if len(report.Issues) != 0 {
+			return errors.New("legacy corpus verification failed")
+		}
+		return nil
+	default:
+		return evalUsageError()
+	}
+}
+
+func runEvaluationRun(args []string) error {
+	flags := flag.NewFlagSet("eval run", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	requestPath := flags.String("file", "", "evaluation input JSON file, or - for stdin (required)")
+	portableRoot := flags.String("repo", "", "portable memory repository when revision evidence is used")
+	enforce := flags.Bool("enforce", false, "return a failure when release gates do not pass")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *requestPath == "" {
+		return errors.New("eval run requires --root and --file")
+	}
+	reader := os.Stdin
+	var file *os.File
+	var err error
+	if *requestPath != "-" {
+		file, err = os.Open(*requestPath)
+		if err != nil {
+			return fmt.Errorf("open evaluation input: %w", err)
+		}
+		defer file.Close()
+		reader = file
+	}
+	input, err := evaluation.DecodeInput(reader)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := evaluation.Run(store, input, evaluation.RunOptions{PortableRoot: *portableRoot})
+	if err != nil {
+		return err
+	}
+	if err := encodeIndented(result); err != nil {
+		return err
+	}
+	if *enforce && !result.Report.ReleaseReady {
+		return errors.New("continuous-learning evaluation gates did not pass")
+	}
+	return nil
+}
+
+func runEvaluationVerify(args []string) error {
+	flags := flag.NewFlagSet("eval verify", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	suiteID := flags.String("suite", "", "evaluation suite id (required)")
+	runID := flags.String("run", "", "evaluation run id (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *suiteID == "" || *runID == "" {
+		return errors.New("eval verify requires --root, --suite, and --run")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	report := evaluation.VerifyRun(store, *suiteID, *runID)
+	if err := encodeIndented(report); err != nil {
+		return err
+	}
+	if len(report.Issues) != 0 {
+		return errors.New("continuous-learning evaluation verification failed")
 	}
 	return nil
 }
@@ -1235,7 +1449,7 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor|import|inject|capture|derive|review|promote|rule-approval|portable|recall|serve|sync> [options]")
+	return errors.New("usage: agentmem <init|doctor|import|inject|capture|derive|eval|review|promote|rule-approval|portable|recall|serve|sync> [options]")
 }
 
 func reviewUsageError() error {
@@ -1272,6 +1486,10 @@ func syncAutoUsageError() error {
 
 func deriveUsageError() error {
 	return errors.New("usage: agentmem derive <episodes|candidates> --root <local-evidence-directory> [options]")
+}
+
+func evalUsageError() error {
+	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|attest|run|verify> [options]")
 }
 
 func captureUsageError() error {

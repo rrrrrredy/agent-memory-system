@@ -91,6 +91,9 @@
         "memory_retrieval",
         "memory_injection",
         "memory_adoption",
+        "evaluation_corpus",
+        "evaluation_attestation",
+        "evaluation_run",
         "gap",
         "unknown"
       ]

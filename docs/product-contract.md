@@ -152,6 +152,22 @@ phrase alone is not proof that the task goal drifted.
 - downstream task-result change with and without retrieved memory;
 - provenance and adoption receipts for each retrieval.
 
+Raw-byte capture coverage and normalized-event projection quality MUST be
+reported separately. A parser gap does not prove loss of preserved source
+bytes, and a parsed record does not prove full source capture.
+
+False-memory, correction-grouping, compaction-drift, and paired-outcome
+measurements MUST bind the exact measured value to a prior local append-only
+attestation. False-memory and compaction ground-truth labels require a human
+attestor. A named deterministic harness may attest reproducible counting or
+paired-result measurements. The model under evaluation cannot certify its own
+interpretation merely by supplying a label or hash in the evaluation input.
+
+A metric with no denominator is `not_evaluable`, never a passing zero. Release readiness
+requires at least one configured threshold, all gates passing, and successful
+resolution of every required corpus artifact, ledger record, portable revision,
+retrieval receipt, and attestation.
+
 ### Cross-device and cross-agent reliability
 
 - Windows/macOS bidirectional synchronization;

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/learning-evaluation-attestation-result.schema.json",
+  "title": "Evaluation attestation append result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "attestation_id", "event_id", "record_hash", "reused", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "learning-evaluation-attestation-result/v1alpha1"},
+    "attestation_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "event_id": {"type": "string", "minLength": 1},
+    "record_hash": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "reused": {"type": "boolean"},
+    "privacy": {"const": "local_only"}
+  }
+}

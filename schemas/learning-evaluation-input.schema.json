@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/learning-evaluation-input.schema.json",
+  "title": "Evidence-bound continuous-learning evaluation input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "suite_id", "run_id", "created_at", "system_version",
+    "cases", "thresholds", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "learning-evaluation-input/v1alpha1"},
+    "suite_id": {"$ref": "#/$defs/identifier"},
+    "run_id": {"$ref": "#/$defs/identifier"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "system_version": {"type": "string", "minLength": 1},
+    "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+    "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}, "minItems": 1},
+    "thresholds": {"$ref": "#/$defs/thresholds"},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,160}$"},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "sha256"],
+      "properties": {
+        "kind": {"enum": ["ledger_event", "corpus_artifact", "portable_revision"]},
+        "id": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "expected", "complete", "partial", "missing"],
+      "properties": {
+        "unit": {"enum": ["evidence_events", "legacy_rollouts"]},
+        "expected": {"type": "integer", "minimum": 0},
+        "complete": {"type": "integer", "minimum": 0},
+        "partial": {"type": "integer", "minimum": 0},
+        "missing": {"type": "integer", "minimum": 0}
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memory_id", "label", "active", "retrieved"],
+      "properties": {
+        "memory_id": {"type": "string", "minLength": 1},
+        "label": {"enum": ["supported", "incorrect", "unsupported", "stale", "unknown"]},
+        "active": {"type": "boolean"},
+        "retrieved": {"type": "boolean"}
+      }
+    },
+    "correction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semantic_key_sha256", "eligible_followup_opportunities", "repeated_corrections",
+        "repeated_corrections_after_memory"
+      ],
+      "properties": {
+        "semantic_key_sha256": {"$ref": "#/$defs/sha256"},
+        "eligible_followup_opportunities": {"type": "integer", "minimum": 0},
+        "repeated_corrections": {"type": "integer", "minimum": 0},
+        "repeated_corrections_after_memory": {"type": "integer", "minimum": 0}
+      }
+    },
+    "compaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoint_id", "expected", "observed"],
+      "properties": {
+        "checkpoint_id": {"type": "string", "minLength": 1},
+        "expected": {"enum": ["preserved", "drift", "insufficient_evidence"]},
+        "observed": {"enum": ["preserved", "drift", "insufficient_evidence"]}
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retrieval_id", "estimated_tokens", "utf8_bytes", "selected_items", "adopted", "outcome"
+      ],
+      "properties": {
+        "retrieval_id": {"type": "string", "minLength": 1},
+        "estimated_tokens": {"type": "integer", "minimum": 0},
+        "utf8_bytes": {"type": "integer", "minimum": 0},
+        "selected_items": {"type": "integer", "minimum": 0},
+        "adopted": {"type": "boolean"},
+        "outcome": {"enum": ["helpful", "neutral", "harmful", "unknown"]}
+      }
+    },
+    "trial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["success", "score", "errors", "user_corrections", "total_tokens"],
+      "properties": {
+        "success": {"type": "boolean"},
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "errors": {"type": "integer", "minimum": 0},
+        "user_corrections": {"type": "integer", "minimum": 0},
+        "total_tokens": {"type": "integer", "minimum": 0}
+      }
+    },
+    "paired_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pair_id", "baseline", "treatment"],
+      "properties": {
+        "pair_id": {"$ref": "#/$defs/identifier"},
+        "baseline": {"$ref": "#/$defs/trial"},
+        "treatment": {"$ref": "#/$defs/trial"}
+      }
+    },
+    "case_base": {
+      "type": "object",
+      "required": ["case_id", "category", "agent", "evidence"],
+      "properties": {
+        "case_id": {"$ref": "#/$defs/identifier"},
+        "category": {
+          "enum": [
+            "capture_coverage", "false_memory", "repeated_correction",
+            "compaction_drift", "retrieval_cost", "paired_outcome"
+          ]
+        },
+        "agent": {"$ref": "#/$defs/agent"},
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidence"},
+          "minItems": 1
+        }
+      }
+    },
+    "case": {
+      "allOf": [
+        {"$ref": "#/$defs/case_base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "case_id": {"$ref": "#/$defs/identifier"},
+            "category": {},
+            "agent": {"$ref": "#/$defs/agent"},
+            "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}, "minItems": 1},
+            "capture": {"$ref": "#/$defs/capture"},
+            "memory": {"$ref": "#/$defs/memory"},
+            "correction": {"$ref": "#/$defs/correction"},
+            "compaction": {"$ref": "#/$defs/compaction"},
+            "retrieval": {"$ref": "#/$defs/retrieval"},
+            "paired_outcome": {"$ref": "#/$defs/paired_outcome"}
+          },
+          "oneOf": [
+            {"required": ["capture"], "properties": {"category": {"const": "capture_coverage"}}},
+            {"required": ["memory"], "properties": {"category": {"const": "false_memory"}}},
+            {"required": ["correction"], "properties": {"category": {"const": "repeated_correction"}}},
+            {"required": ["compaction"], "properties": {"category": {"const": "compaction_drift"}}},
+            {"required": ["retrieval"], "properties": {"category": {"const": "retrieval_cost"}}},
+            {"required": ["paired_outcome"], "properties": {"category": {"const": "paired_outcome"}}}
+          ]
+        }
+      ]
+    },
+    "unit_interval": {"type": "number", "minimum": 0, "maximum": 1},
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minimum_capture_coverage": {"$ref": "#/$defs/unit_interval"},
+        "maximum_false_memory_rate": {"$ref": "#/$defs/unit_interval"},
+        "maximum_unknown_memory_rate": {"$ref": "#/$defs/unit_interval"},
+        "maximum_repeated_correction_rate": {"$ref": "#/$defs/unit_interval"},
+        "minimum_drift_precision": {"$ref": "#/$defs/unit_interval"},
+        "minimum_drift_recall": {"$ref": "#/$defs/unit_interval"},
+        "maximum_mean_retrieval_tokens": {"type": "number", "minimum": 0},
+        "minimum_mean_outcome_score_delta": {"type": "number", "minimum": -1, "maximum": 1},
+        "maximum_harmful_outcomes": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}
