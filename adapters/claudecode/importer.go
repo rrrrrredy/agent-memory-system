@@ -76,8 +76,19 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result
 	})
 }
 
-func matchTranscript(_ string, entry fs.DirEntry) bool {
-	return strings.HasSuffix(strings.ToLower(entry.Name()), ".jsonl")
+func matchTranscript(path string, entry fs.DirEntry) bool {
+	name := strings.ToLower(entry.Name())
+	if !strings.HasSuffix(name, ".jsonl") {
+		return false
+	}
+	normalized := "/" + strings.ToLower(filepath.ToSlash(path)) + "/"
+	if strings.Contains(normalized, "/tool-results/") {
+		return false
+	}
+	if strings.Contains(normalized, "/subagents/") {
+		return true
+	}
+	return sessionIDPattern.MatchString(name)
 }
 
 func projectRecord(raw json.RawMessage) []adapterjsonl.Projection {
