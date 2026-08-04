@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/git-sync-result.schema.json",
+  "title": "Agent Memory System manual Git synchronization result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "outcome",
+    "branch",
+    "local_commit_created",
+    "fetched",
+    "fast_forwarded",
+    "merge_created",
+    "pushed",
+    "issues",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "git-sync-result/v1alpha1"},
+    "outcome": {
+      "enum": [
+        "failed",
+        "remote_initialized",
+        "up_to_date",
+        "fast_forwarded",
+        "pushed",
+        "merged_and_pushed",
+        "remote_rejected",
+        "conflict",
+        "retry_required"
+      ]
+    },
+    "branch": {"const": "main"},
+    "local_commit_before": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"},
+    "local_commit_after": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"},
+    "remote_commit": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"},
+    "local_commit_created": {"type": "boolean"},
+    "fetched": {"type": "boolean"},
+    "fast_forwarded": {"type": "boolean"},
+    "merge_created": {"type": "boolean"},
+    "pushed": {"type": "boolean"},
+    "issues": {
+      "type": "array",
+      "items": {"$ref": "git-sync-verification.schema.json#/$defs/issue"}
+    },
+    "privacy": {"const": "private_git"}
+  }
+}

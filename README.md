@@ -52,6 +52,7 @@ canonical data and is never merged through Git.
 - `internal/review`: append-only candidate review and optimistic state checks
 - `internal/promotion`: redacted promoted revisions, supersession, and revocation
 - `internal/portable`: private-Git-safe projection and semantic conflict checks
+- `internal/gitsync`: append-only Git history validation and explicit synchronization
 - `internal/secretscan`: deterministic, non-echoing sensitive-content detection
 - `internal/ruleapproval`: separate revision-, surface-, and target-bound rule authorization
 - `schemas`: versioned interchange contracts
@@ -88,6 +89,9 @@ go run ./cmd/agentmem rule-approval verify --root <local-data-directory>
 go run ./cmd/agentmem portable init --repo <private-memory-directory>
 go run ./cmd/agentmem portable export --root <local-data-directory> --repo <private-memory-directory>
 go run ./cmd/agentmem portable verify --repo <private-memory-directory>
+go run ./cmd/agentmem sync bootstrap --repo <private-memory-directory> --remote-url <private-git-url>
+go run ./cmd/agentmem sync run --repo <private-memory-directory>
+go run ./cmd/agentmem sync verify --repo <private-memory-directory>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -150,6 +154,13 @@ local proof hashes, byte ranges, device and approver metadata, reasons, paths,
 and raw evidence out of Git. Immutable parent-linked files expose forks and
 semantic conflicts instead of resolving them with last-write-wins. See
 [the portable memory repository](docs/portable-memory.md).
+
+`sync run` is the default manual synchronization path. It validates every
+reachable data commit, rejects deletions and non-allowlisted historical paths,
+fetches into an isolated reference, and tests divergent merges in a temporary
+worktree before advancing or pushing the local branch. Repository-local
+pre-commit and pre-push guards use the same verifier. See
+[private Git synchronization](docs/git-sync.md).
 
 ## Safety
 

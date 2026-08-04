@@ -36,6 +36,12 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "portable init flags", args: []string{"portable", "init"}, message: "requires --repo"},
 		{name: "portable export flags", args: []string{"portable", "export"}, message: "requires --root and --repo"},
 		{name: "portable verify flags", args: []string{"portable", "verify"}, message: "requires --repo"},
+		{name: "missing sync subcommand", args: []string{"sync"}, message: "sync <bootstrap|verify|run|install-hooks>"},
+		{name: "unknown sync subcommand", args: []string{"sync", "unknown"}, message: "sync <bootstrap|verify|run|install-hooks>"},
+		{name: "sync bootstrap flags", args: []string{"sync", "bootstrap"}, message: "requires --repo"},
+		{name: "sync verify flags", args: []string{"sync", "verify"}, message: "requires --repo"},
+		{name: "sync run flags", args: []string{"sync", "run"}, message: "requires --repo"},
+		{name: "sync install hooks flags", args: []string{"sync", "install-hooks"}, message: "requires --repo"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
