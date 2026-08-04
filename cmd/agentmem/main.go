@@ -9,6 +9,7 @@ import (
 
 	"github.com/rrrrrredy/agent-memory-system/adapters/claudecode"
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
+	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -74,7 +75,8 @@ func run(args []string) error {
 
 func runImport(args []string) error {
 	agent := args[0]
-	if agent != "codex" && agent != "claude" && agent != "claude-home" {
+	if agent != "codex" && agent != "claude" && agent != "claude-home" &&
+		agent != "opencode-export" && agent != "opencode-events" {
 		return importUsageError()
 	}
 	flags := flag.NewFlagSet("import "+agent, flag.ContinueOnError)
@@ -99,6 +101,11 @@ func runImport(args []string) error {
 		result, err = claudecode.ImportPath(store, *path, claudecode.Options{FullReconcile: *full})
 	case "claude-home":
 		result, err = claudecode.ImportHome(store, *path, claudecode.Options{FullReconcile: *full})
+	case "opencode-export":
+		result, err = opencode.ImportPath(store, *path, opencode.Options{})
+	case "opencode-events":
+		result, err = opencode.ImportEventPath(store, *path,
+			opencode.EventOptions{FullReconcile: *full})
 	}
 	if err != nil {
 		return err
@@ -113,5 +120,5 @@ func usageError() error {
 }
 
 func importUsageError() error {
-	return errors.New("usage: agentmem import <codex|claude|claude-home> --root <local-evidence-directory> --path <source-file-or-directory>")
+	return errors.New("usage: agentmem import <codex|claude|claude-home|opencode-export|opencode-events> --root <local-evidence-directory> --path <source-file-or-directory>")
 }

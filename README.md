@@ -52,7 +52,7 @@ canonical data and is never merged through Git.
 - `schemas`: versioned interchange contracts
 - `docs/adr`: architecture decisions
 - `docs/research`: adopt/modify/reject reviews of related projects
-- `adapters`: Codex and Claude Code adapters; OpenCode is in progress
+- `adapters`: Codex, Claude Code, and OpenCode evidence adapters
 - `evals`: continuous-learning and sync reliability evaluations (planned)
 
 ## Development
@@ -65,6 +65,8 @@ go run ./cmd/agentmem init --root <local-data-directory>
 go run ./cmd/agentmem import codex --root <local-data-directory> --path <rollout-file-or-directory>
 go run ./cmd/agentmem import claude --root <local-data-directory> --path <transcript-file-or-directory>
 go run ./cmd/agentmem import claude-home --root <local-data-directory> --path <claude-home-directory>
+go run ./cmd/agentmem import opencode-export --root <local-data-directory> --path <export-file-or-directory>
+go run ./cmd/agentmem import opencode-events --root <local-data-directory> --path <event-spool-file-or-directory>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -81,6 +83,11 @@ session companion artifacts such as spilled tool results, file-history
 snapshots, plans, tasks, debug logs, paste/image attachments, and session
 metadata. It intentionally excludes settings, OAuth state, plugins, config
 backups, and generic caches.
+
+For OpenCode, historical reconciliation starts from native unsanitized session
+exports. Optional live capture writes bus events to a local append-only spool;
+the export remains necessary to recover pre-installation history and missed
+events. The OpenCode SQLite database is never treated as cross-device data.
 
 On this Windows workstation, project code lives in
 `D:\Codex\agent-memory-system`; a runtime evidence directory should be

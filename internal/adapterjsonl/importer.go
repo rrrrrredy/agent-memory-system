@@ -47,6 +47,7 @@ type Projection struct {
 	Kind               ledger.EventKind
 	ObservedAt         time.Time
 	Reasoning          *ledger.ReasoningCapture
+	ThreadID           string
 	SourceEventID      string
 	SessionID          string
 	CallID             string
@@ -390,7 +391,11 @@ func queueProjection(
 	rawLine []byte, observedAt, recordedAt time.Time, projection Projection, result *Result,
 ) {
 	rawDigest := sha256.Sum256(rawLine)
-	parts := []string{sourcePathHash, threadID, strconv.FormatInt(byteStart, 10),
+	effectiveThreadID := threadID
+	if strings.TrimSpace(projection.ThreadID) != "" {
+		effectiveThreadID = projection.ThreadID
+	}
+	parts := []string{sourcePathHash, effectiveThreadID, strconv.FormatInt(byteStart, 10),
 		strconv.FormatInt(byteEnd, 10), hex.EncodeToString(rawDigest[:])}
 	if projection.Key != "" {
 		parts = append(parts, projection.Key)
@@ -412,7 +417,7 @@ func queueProjection(
 		ObservedAt: observedAt.UTC(), RecordedAt: recordedAt.UTC(),
 		Source: ledger.Source{
 			Agent: spec.Agent, Adapter: spec.AdapterName, AdapterVersion: spec.AdapterVersion,
-			DeviceID: store.DeviceID(), OS: runtime.GOOS, ThreadID: threadID,
+			DeviceID: store.DeviceID(), OS: runtime.GOOS, ThreadID: effectiveThreadID,
 			SessionID: projection.SessionID, SourceEventID: projection.SourceEventID,
 			SourcePathHash: sourcePathHash, SourceCursor: fmt.Sprintf("bytes:%d-%d", byteStart, byteEnd),
 			ByteStart: &startValue, ByteEnd: &endValue,
