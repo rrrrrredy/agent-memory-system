@@ -74,7 +74,7 @@ func run(args []string) error {
 
 func runImport(args []string) error {
 	agent := args[0]
-	if agent != "codex" && agent != "claude" {
+	if agent != "codex" && agent != "claude" && agent != "claude-home" {
 		return importUsageError()
 	}
 	flags := flag.NewFlagSet("import "+agent, flag.ContinueOnError)
@@ -97,6 +97,8 @@ func runImport(args []string) error {
 		result, err = codex.ImportPath(store, *path, codex.Options{FullReconcile: *full})
 	case "claude":
 		result, err = claudecode.ImportPath(store, *path, claudecode.Options{FullReconcile: *full})
+	case "claude-home":
+		result, err = claudecode.ImportHome(store, *path, claudecode.Options{FullReconcile: *full})
 	}
 	if err != nil {
 		return err
@@ -111,5 +113,5 @@ func usageError() error {
 }
 
 func importUsageError() error {
-	return errors.New("usage: agentmem import <codex|claude> --root <local-evidence-directory> --path <source-file-or-directory>")
+	return errors.New("usage: agentmem import <codex|claude|claude-home> --root <local-evidence-directory> --path <source-file-or-directory>")
 }

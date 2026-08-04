@@ -64,6 +64,7 @@ go test ./...
 go run ./cmd/agentmem init --root <local-data-directory>
 go run ./cmd/agentmem import codex --root <local-data-directory> --path <rollout-file-or-directory>
 go run ./cmd/agentmem import claude --root <local-data-directory> --path <transcript-file-or-directory>
+go run ./cmd/agentmem import claude-home --root <local-data-directory> --path <claude-home-directory>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -73,6 +74,13 @@ segments. Re-running them is idempotent. Use `--full-reconcile` to deliberately
 re-read an entire source and detect earlier in-place changes; the default mode
 starts at the last committed byte. See each adapter's `CAPABILITIES.md` before
 relying on it for complete capture.
+
+`claude-home` is the preferred Claude Code reconciliation command. In addition
+to project and subagent transcripts, it captures prompt history and documented
+session companion artifacts such as spilled tool results, file-history
+snapshots, plans, tasks, debug logs, paste/image attachments, and session
+metadata. It intentionally excludes settings, OAuth state, plugins, config
+backups, and generic caches.
 
 On this Windows workstation, project code lives in
 `D:\Codex\agent-memory-system`; a runtime evidence directory should be
