@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/automatic-git-sync-result.schema.json",
+  "title": "Agent Memory System automatic Git synchronization run result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "outcome", "state", "privacy"],
+  "properties": {
+    "schema_version": {"const": "automatic-git-sync-result/v1alpha1"},
+    "outcome": {"enum": ["failed", "disabled", "retry_deferred", "suspended", "retry_scheduled", "succeeded"]},
+    "state": {"enum": ["disabled", "ready", "retrying", "suspended"]},
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memories_selected", "revisions_projected", "revisions_written"],
+      "properties": {
+        "memories_selected": {"type": "integer", "minimum": 0},
+        "revisions_projected": {"type": "integer", "minimum": 0},
+        "revisions_written": {"type": "integer", "minimum": 0}
+      }
+    },
+    "sync": {"$ref": "git-sync-result.schema.json"},
+    "next_attempt_at": {"type": "string", "format": "date-time"},
+    "error_code": {"enum": ["export_failed", "sync_failed", "remote_changed", "remote_rejected", "conflict", "retry_limit_reached"]},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"outcome": {"const": "retry_scheduled"}}},
+      "then": {"required": ["next_attempt_at", "error_code"]}
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "suspended"}}},
+      "then": {"required": ["error_code"]}
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "succeeded"}}},
+      "then": {"required": ["export", "sync"]}
+    }
+  ]
+}

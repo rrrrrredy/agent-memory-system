@@ -30,10 +30,10 @@ history pass. Pushes are ordinary fast-forward pushes; force push and
 last-write-wins are not used.
 
 Export and synchronization share one repository operation lock. The bootstrap
-command configures long-path support locally for Windows and installs
-repository-local pre-commit and pre-push guards unless disabled. The sync
-implementation performs the same checks itself and bypasses hooks during its
-own already-verified commits and pushes.
+command configures long-path support locally for Windows. Repository-local
+pre-commit and pre-push guards require an explicit install command or bootstrap
+flag. The sync implementation performs the same checks itself and bypasses
+hooks during its own already-verified commits and pushes.
 
 ## Consequences
 

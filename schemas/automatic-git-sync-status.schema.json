@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/automatic-git-sync-status.schema.json",
+  "title": "Agent Memory System automatic Git synchronization status",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "enabled",
+    "state",
+    "scheduler",
+    "scheduler_registered",
+    "consecutive_errors",
+    "events_checked",
+    "issues",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "automatic-git-sync-status/v1alpha1"},
+    "enabled": {"type": "boolean"},
+    "state": {"enum": ["disabled", "ready", "retrying", "suspended"]},
+    "scheduler": {"enum": ["windows_task_scheduler", "launchd", "unsupported"]},
+    "scheduler_registered": {"type": "boolean"},
+    "interval_seconds": {"type": "integer", "minimum": 60, "maximum": 86340, "multipleOf": 60},
+    "consecutive_errors": {"type": "integer", "minimum": 0},
+    "next_attempt_at": {"type": "string", "format": "date-time"},
+    "last_attempt_at": {"type": "string", "format": "date-time"},
+    "last_success_at": {"type": "string", "format": "date-time"},
+    "last_sync_outcome": {"type": "string", "minLength": 1},
+    "last_error_code": {"type": "string", "minLength": 1},
+    "events_checked": {"type": "integer", "minimum": 0},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "recover_by": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
