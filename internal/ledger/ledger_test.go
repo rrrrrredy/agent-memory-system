@@ -285,4 +285,32 @@ func TestAppendBatchBuildsOneVerifiedChain(t *testing.T) {
 	if len(report.Issues) != 0 || report.RecordsChecked != len(events) {
 		t.Fatalf("unexpected verification report: %+v", report)
 	}
+
+	visited := 0
+	appender, err := store.NewAppenderAfterVisit(func(record Record) error {
+		visited++
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if visited != len(events) {
+		t.Fatalf("visited %d records, want %d", visited, len(events))
+	}
+	extra := events[0]
+	extra.EventID, err = NewEventID(now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := appender.AppendBatch([]Event{extra}); err != nil {
+		_ = appender.Close()
+		t.Fatal(err)
+	}
+	if err := appender.Close(); err != nil {
+		t.Fatal(err)
+	}
+	report = store.Verify()
+	if len(report.Issues) != 0 || report.RecordsChecked != len(events)+1 {
+		t.Fatalf("unexpected post-append report: %+v", report)
+	}
 }

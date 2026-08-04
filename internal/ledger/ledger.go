@@ -256,6 +256,25 @@ func (s *Store) NewAppender() (*Appender, error) {
 	if err != nil {
 		return nil, err
 	}
+	return s.openAppenderAt(previous)
+}
+
+// NewAppenderAfterVisit verifies and visits the existing chain once, then opens
+// an appender at the verified tail. The caller must still enforce the
+// single-writer contract between the scan and subsequent appends.
+func (s *Store) NewAppenderAfterVisit(visitor func(Record) error) (*Appender, error) {
+	previous, err := s.visitRecords(visitor)
+	if err != nil {
+		return nil, err
+	}
+	return s.openAppenderAt(previous)
+}
+
+func (s *Store) openAppenderAt(previous string) (*Appender, error) {
+	path := filepath.Join(s.root, filepath.FromSlash(eventsPath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, fmt.Errorf("create ledger directory: %w", err)
+	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open ledger: %w", err)
@@ -533,13 +552,18 @@ func (s *Store) Verify() VerificationReport {
 // Blob contents are not read; callers that need blob verification should run
 // Verify first.
 func (s *Store) VisitRecords(visitor func(Record) error) error {
+	_, err := s.visitRecords(visitor)
+	return err
+}
+
+func (s *Store) visitRecords(visitor func(Record) error) (string, error) {
 	path := filepath.Join(s.root, filepath.FromSlash(eventsPath))
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return "", nil
 	}
 	if err != nil {
-		return fmt.Errorf("open ledger: %w", err)
+		return "", fmt.Errorf("open ledger: %w", err)
 	}
 	defer file.Close()
 
@@ -551,32 +575,34 @@ func (s *Store) VisitRecords(visitor func(Record) error) error {
 		if len(line) > 0 {
 			lineNumber++
 			if line[len(line)-1] != '\n' {
-				return fmt.Errorf("ledger ends with partial record at line %d", lineNumber)
+				return "", fmt.Errorf("ledger ends with partial record at line %d", lineNumber)
 			}
 			var record Record
 			if err := json.Unmarshal(bytes.TrimSpace(line), &record); err != nil {
-				return fmt.Errorf("decode ledger line %d: %w", lineNumber, err)
+				return "", fmt.Errorf("decode ledger line %d: %w", lineNumber, err)
 			}
 			if err := validateEvent(record.Event); err != nil {
-				return fmt.Errorf("validate ledger line %d: %w", lineNumber, err)
+				return "", fmt.Errorf("validate ledger line %d: %w", lineNumber, err)
 			}
 			expected, err := makeRecord(record.Event, previous)
 			if err != nil {
-				return fmt.Errorf("hash ledger line %d: %w", lineNumber, err)
+				return "", fmt.Errorf("hash ledger line %d: %w", lineNumber, err)
 			}
 			if record.PreviousRecordHash != previous || record.RecordHash != expected.RecordHash {
-				return fmt.Errorf("ledger integrity failure at line %d", lineNumber)
+				return "", fmt.Errorf("ledger integrity failure at line %d", lineNumber)
 			}
-			if err := visitor(record); err != nil {
-				return fmt.Errorf("visit ledger line %d: %w", lineNumber, err)
+			if visitor != nil {
+				if err := visitor(record); err != nil {
+					return "", fmt.Errorf("visit ledger line %d: %w", lineNumber, err)
+				}
 			}
 			previous = record.RecordHash
 		}
 		if errors.Is(readErr, io.EOF) {
-			return nil
+			return previous, nil
 		}
 		if readErr != nil {
-			return fmt.Errorf("read ledger: %w", readErr)
+			return "", fmt.Errorf("read ledger: %w", readErr)
 		}
 	}
 }
