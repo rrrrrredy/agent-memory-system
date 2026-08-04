@@ -13,9 +13,9 @@ README.md
 .gitignore
 memories/
   ab/
-    memory-ab.../
-      portable-revision-01....md
-      portable-revision-02....md
+    ab.../
+      01....md
+      02....md
 ```
 
 There is no committed `HEAD`, index, database, or current-state cache. A current

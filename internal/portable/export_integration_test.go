@@ -103,19 +103,19 @@ func TestExportLockRejectsConcurrentWriterAndRecovers(t *testing.T) {
 	if err := InitRepository(repository); err != nil {
 		t.Fatal(err)
 	}
-	lock, err := acquireExportLock(repository)
+	lock, err := AcquireRepositoryLock(repository)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Export(store, repository, ExportOptions{}); err == nil ||
-		!strings.Contains(err.Error(), "export is locked") {
+		!strings.Contains(err.Error(), "repository is locked") {
 		t.Fatalf("concurrent exporter was not rejected: %v", err)
 	}
 	if report := VerifyRepository(repository); len(report.Issues) != 0 ||
 		report.RevisionsChecked != 0 {
 		t.Fatalf("lock contention changed the repository: %+v", report)
 	}
-	if err := lock.release(); err != nil {
+	if err := lock.Release(); err != nil {
 		t.Fatal(err)
 	}
 	result, err := Export(store, repository, ExportOptions{})

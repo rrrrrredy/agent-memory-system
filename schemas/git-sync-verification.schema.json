@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/git-sync-verification.schema.json",
+  "title": "Agent Memory System Git synchronization verification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "git_repository",
+    "tracked_files",
+    "commits_checked",
+    "working_tree_clean",
+    "portable",
+    "issues",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "git-sync-verification/v1alpha1"},
+    "git_repository": {"type": "boolean"},
+    "branch": {"const": "main"},
+    "head": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"},
+    "tracked_files": {"type": "integer", "minimum": 0},
+    "commits_checked": {"type": "integer", "minimum": 0},
+    "working_tree_clean": {"type": "boolean"},
+    "portable": {"type": "object"},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "privacy": {"const": "private_git"}
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "commit": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"},
+        "path": {"type": "string"},
+        "path_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "paths": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "memory_id": {"type": "string"},
+        "revision_id": {"type": "string"},
+        "related_memory_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "related_revision_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "message": {"type": "string", "minLength": 1},
+        "recover_by": {"type": "string"}
+      }
+    }
+  }
+}

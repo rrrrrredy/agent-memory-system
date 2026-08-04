@@ -14,6 +14,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
+	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 	"github.com/rrrrrredy/agent-memory-system/internal/portable"
 	"github.com/rrrrrredy/agent-memory-system/internal/promotion"
@@ -106,9 +107,116 @@ func run(args []string) error {
 			return portableUsageError()
 		}
 		return runPortable(args[1:])
+	case "sync":
+		if len(args) < 2 {
+			return syncUsageError()
+		}
+		return runSync(args[1:])
 	default:
 		return usageError()
 	}
+}
+
+func runSync(args []string) error {
+	switch args[0] {
+	case "bootstrap":
+		return runSyncBootstrap(args[1:])
+	case "verify":
+		return runSyncVerify(args[1:])
+	case "run":
+		return runSyncRun(args[1:])
+	case "install-hooks":
+		return runSyncInstallHooks(args[1:])
+	default:
+		return syncUsageError()
+	}
+}
+
+func runSyncBootstrap(args []string) error {
+	flags := flag.NewFlagSet("sync bootstrap", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	remote := flags.String("remote", gitsync.DefaultRemote, "Git remote name")
+	remoteURL := flags.String("remote-url", "", "optional private Git remote URL")
+	hooks := flags.Bool("hooks", true, "install repository-local pre-commit and pre-push guards")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" {
+		return errors.New("sync bootstrap requires --repo")
+	}
+	result, err := gitsync.Bootstrap(context.Background(), gitsync.BootstrapOptions{
+		RepositoryRoot: *repository, RemoteName: *remote, RemoteURL: *remoteURL,
+		InstallHooks: *hooks,
+	})
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
+func runSyncVerify(args []string) error {
+	flags := flag.NewFlagSet("sync verify", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" {
+		return errors.New("sync verify requires --repo")
+	}
+	report := gitsync.Verify(context.Background(), *repository)
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(report); err != nil {
+		return err
+	}
+	if len(report.Issues) != 0 {
+		return errors.New("Git synchronization verification failed")
+	}
+	return nil
+}
+
+func runSyncRun(args []string) error {
+	flags := flag.NewFlagSet("sync run", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	remote := flags.String("remote", gitsync.DefaultRemote, "Git remote name")
+	nonInteractive := flags.Bool("non-interactive", false, "disable Git credential prompts")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" {
+		return errors.New("sync run requires --repo")
+	}
+	result, syncErr := gitsync.Run(context.Background(), gitsync.SyncOptions{
+		RepositoryRoot: *repository, RemoteName: *remote,
+		NonInteractive: *nonInteractive,
+	})
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		return err
+	}
+	return syncErr
+}
+
+func runSyncInstallHooks(args []string) error {
+	flags := flag.NewFlagSet("sync install-hooks", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" {
+		return errors.New("sync install-hooks requires --repo")
+	}
+	if err := gitsync.InstallHooks(context.Background(), *repository); err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"schema_version": "git-sync-hook-install-result/v1alpha1",
+		"installed":      true,
+		"privacy":        portable.PortablePrivacy,
+	})
 }
 
 func runPortable(args []string) error {
@@ -656,7 +764,7 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor|import|capture|derive|review|promote|rule-approval|portable> [options]")
+	return errors.New("usage: agentmem <init|doctor|import|capture|derive|review|promote|rule-approval|portable|sync> [options]")
 }
 
 func reviewUsageError() error {
@@ -673,6 +781,10 @@ func ruleApprovalUsageError() error {
 
 func portableUsageError() error {
 	return errors.New("usage: agentmem portable <init|export|verify> [options]")
+}
+
+func syncUsageError() error {
+	return errors.New("usage: agentmem sync <bootstrap|verify|run|install-hooks> [options]")
 }
 
 func deriveUsageError() error {

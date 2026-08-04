@@ -13,7 +13,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/promotion"
 )
 
-type exportLock struct {
+type RepositoryLock struct {
 	path string
 }
 
@@ -31,11 +31,11 @@ func Export(store *ledger.Store, repositoryRoot string, options ExportOptions) (
 	if len(preflight.Issues) != 0 {
 		return result, fmt.Errorf("portable repository verification failed: %s", preflight.Issues[0].Message)
 	}
-	lock, err := acquireExportLock(repositoryRoot)
+	lock, err := AcquireRepositoryLock(repositoryRoot)
 	if err != nil {
 		return result, err
 	}
-	defer func() { _ = lock.release() }()
+	defer func() { _ = lock.Release() }()
 	report, existing := loadRepository(repositoryRoot)
 	if len(report.Issues) != 0 {
 		return result, fmt.Errorf("portable repository verification failed: %s", report.Issues[0].Message)
@@ -114,7 +114,7 @@ func Export(store *ledger.Store, repositoryRoot string, options ExportOptions) (
 	if len(final.Issues) != 0 {
 		return result, fmt.Errorf("portable repository failed verification after export: %s", final.Issues[0].Message)
 	}
-	if err := lock.release(); err != nil {
+	if err := lock.Release(); err != nil {
 		return result, fmt.Errorf("portable export completed but lock cleanup failed: %w", err)
 	}
 	return result, nil
@@ -226,37 +226,37 @@ func pathsOverlap(left, right string) bool {
 	return contains(left, right) || contains(right, left)
 }
 
-func acquireExportLock(repositoryRoot string) (*exportLock, error) {
+func AcquireRepositoryLock(repositoryRoot string) (*RepositoryLock, error) {
 	directory := filepath.Join(repositoryRoot, ".agentmem")
 	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return nil, fmt.Errorf("create portable export state directory: %w", err)
+		return nil, fmt.Errorf("create portable repository state directory: %w", err)
 	}
-	path := filepath.Join(directory, "export.lock")
+	path := filepath.Join(directory, "repository.lock")
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if errors.Is(err, os.ErrExist) {
-		return nil, errors.New("portable repository export is locked; inspect the lock before explicit recovery")
+		return nil, errors.New("portable repository is locked; inspect the lock before explicit recovery")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("acquire portable export lock: %w", err)
+		return nil, fmt.Errorf("acquire portable repository lock: %w", err)
 	}
 	if _, err := fmt.Fprintf(file, "pid=%d\n", os.Getpid()); err != nil {
 		_ = file.Close()
 		_ = os.Remove(path)
-		return nil, fmt.Errorf("write portable export lock: %w", err)
+		return nil, fmt.Errorf("write portable repository lock: %w", err)
 	}
 	if err := file.Sync(); err != nil {
 		_ = file.Close()
 		_ = os.Remove(path)
-		return nil, fmt.Errorf("sync portable export lock: %w", err)
+		return nil, fmt.Errorf("sync portable repository lock: %w", err)
 	}
 	if err := file.Close(); err != nil {
 		_ = os.Remove(path)
-		return nil, fmt.Errorf("close portable export lock: %w", err)
+		return nil, fmt.Errorf("close portable repository lock: %w", err)
 	}
-	return &exportLock{path: path}, nil
+	return &RepositoryLock{path: path}, nil
 }
 
-func (lock *exportLock) release() error {
+func (lock *RepositoryLock) Release() error {
 	if lock == nil || lock.path == "" {
 		return nil
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,7 +16,7 @@ const (
 	repositoryManifestName   = "portable-memory-repository.yaml"
 	repositoryManifestData   = "schema_version: \"portable-memory-repository/v1alpha1\"\nlayout: \"immutable-markdown-revisions\"\n"
 	repositoryReadmeData     = "# Personal agent memory\n\nThis private repository contains reviewed, redacted memory revisions only. Raw task evidence, transcripts, tool output, local proof records, indexes, and credentials do not belong here.\n\nEach file under `memories/` is an immutable revision. Current state is derived from parent links; divergent children are reported as conflicts rather than resolved by last-write-wins.\n"
-	repositoryAttributesData = "*.md text eol=lf\n*.yaml text eol=lf\n"
+	repositoryAttributesData = "*.md text eol=lf\n*.yaml text eol=lf\n.gitattributes text eol=lf\n.gitignore text eol=lf\n"
 	repositoryIgnoreData     = ".agentmem/\n.DS_Store\nThumbs.db\n"
 )
 
@@ -69,6 +70,20 @@ func InitRepository(root string) error {
 func VerifyRepository(root string) VerificationReport {
 	report, _ := loadRepository(root)
 	return report
+}
+
+func IsDataPath(relative string) bool {
+	if relative == "" || relative != path.Clean(relative) ||
+		strings.Contains(relative, "\\") || strings.HasPrefix(relative, "../") ||
+		strings.HasPrefix(relative, "/") {
+		return false
+	}
+	switch relative {
+	case repositoryManifestName, "README.md", ".gitattributes", ".gitignore":
+		return true
+	}
+	_, _, valid := identityFromRevisionPath(strings.Split(relative, "/"))
+	return valid
 }
 
 func loadRepository(root string) (VerificationReport, *repositoryState) {
@@ -269,20 +284,20 @@ func hasCycle(revisions []Revision, all map[string]Revision) bool {
 
 func identityFromRevisionPath(parts []string) (string, string, bool) {
 	if len(parts) != 4 || parts[0] != "memories" || len(parts[1]) != 2 ||
-		!validPrefixedHash(parts[2], "memory-") || filepath.Ext(parts[3]) != ".md" {
+		!validHash(parts[2]) || filepath.Ext(parts[3]) != ".md" {
 		return "", "", false
 	}
-	revisionID := strings.TrimSuffix(parts[3], ".md")
-	if !validPrefixedHash(revisionID, "portable-revision-") ||
-		parts[1] != strings.TrimPrefix(parts[2], "memory-")[:2] {
+	revisionHash := strings.TrimSuffix(parts[3], ".md")
+	if !validHash(revisionHash) || parts[1] != parts[2][:2] {
 		return "", "", false
 	}
-	return parts[2], revisionID, true
+	return "memory-" + parts[2], "portable-revision-" + revisionHash, true
 }
 
 func revisionRelativePath(revision Revision) string {
-	hash := strings.TrimPrefix(revision.MemoryID, "memory-")
-	return filepath.Join("memories", hash[:2], revision.MemoryID, revision.RevisionID+".md")
+	memoryHash := strings.TrimPrefix(revision.MemoryID, "memory-")
+	revisionHash := strings.TrimPrefix(revision.RevisionID, "portable-revision-")
+	return filepath.Join("memories", memoryHash[:2], memoryHash, revisionHash+".md")
 }
 
 func splitPath(path string) []string {
