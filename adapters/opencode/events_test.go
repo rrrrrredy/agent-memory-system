@@ -3,6 +3,7 @@ package opencode
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,6 +79,77 @@ func TestImportEventSpoolPreservesLinesAndSessionOverrides(t *testing.T) {
 	}
 	if visibility[ledger.ReasoningRawExposed] != 1 {
 		t.Fatalf("unexpected reasoning visibility: %+v", visibility)
+	}
+	if report := store.Verify(); len(report.Issues) != 0 {
+		t.Fatalf("verification issues: %v", report.Issues)
+	}
+}
+
+func TestImportEventSpoolHandlesSegmentsAndRecoveredPartialTail(t *testing.T) {
+	root := t.TempDir()
+	store, err := ledger.Init(filepath.Join(root, "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spool := filepath.Join(root, "spool")
+	if err := os.Mkdir(spool, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	first := `{"captured_at":"2026-08-04T04:00:00Z","event":{"type":"message.updated","properties":{"info":{"id":"msg_one","sessionID":"ses_one"}}}}` + "\n"
+	second := `{"captured_at":"2026-08-04T04:00:01Z","event":{"type":"session.updated","properties":{"info":{"id":"ses_two"}}}}` + "\n"
+	partial := `{"captured_at":"2026-08-04T04:00:02Z","event":{"type":"session.updated","properties":{"id":"ses_partial"}}}`
+	for name, content := range map[string]string{
+		"events.jsonl":                             first,
+		"events.segment-one.jsonl":                 second,
+		"events.recovered-synthetic.partial.jsonl": partial,
+	} {
+		if err := os.WriteFile(filepath.Join(spool, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	now := time.Date(2026, 8, 4, 5, 0, 0, 0, time.UTC)
+	result, err := ImportEventPath(store, spool, EventOptions{Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.SourceSegments != 3 || result.EventsAppended != 3 || result.GapsAppended != 1 ||
+		result.Kinds[string(ledger.KindSystemEvent)] != 2 {
+		t.Fatalf("unexpected segmented import: %+v", result)
+	}
+
+	third := `{"captured_at":"2026-08-04T04:00:03Z","event":{"type":"session.idle","properties":{"sessionID":"ses_one"}}}` + "\n"
+	active, err := os.OpenFile(filepath.Join(spool, "events.jsonl"), os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := active.WriteString(third); err != nil {
+		_ = active.Close()
+		t.Fatal(err)
+	}
+	if err := active.Close(); err != nil {
+		t.Fatal(err)
+	}
+	result, err = ImportEventPath(store, spool, EventOptions{Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.SourceSegments != 1 || result.EventsAppended != 1 || result.GapsAppended != 0 {
+		t.Fatalf("incremental segmented import failed: %+v", result)
+	}
+
+	foundPartial := false
+	if err := store.VisitRecords(func(record ledger.Record) error {
+		if record.Event.Kind == ledger.KindGap &&
+			strings.Contains(record.Event.Completeness.Reason, "trailing_partial_json") {
+			foundPartial = true
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !foundPartial {
+		t.Fatal("recovered partial tail did not produce an explicit gap")
 	}
 	if report := store.Verify(); len(report.Issues) != 0 {
 		t.Fatalf("verification issues: %v", report.Issues)

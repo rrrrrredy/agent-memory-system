@@ -21,19 +21,29 @@ produces an explicit gap. It is not accepted as complete process evidence.
 ## Live capture
 
 `integrations/opencode/agent-memory-evidence.ts` is an optional plugin source
-that serializes OpenCode bus events to an append-only local JSONL spool. The
-plugin is disabled unless `AGENT_MEMORY_OPENCODE_EVENT_LOG` is set. Capture
-failures are reported but do not block the agent.
+that serializes OpenCode bus events to append-only local JSONL segments. The
+plugin and `crash-safe-jsonl.mjs` must be deployed together. It is disabled
+unless `AGENT_MEMORY_OPENCODE_EVENT_LOG` names an outside-Git `.jsonl` base path.
+Writer-specific segments are created beside that path. Each record is synced
+before the hook returns. Rollover starts a new immutable path instead of
+renaming an existing segment, so prior imports are not replayed under a new
+identity. `AGENT_MEMORY_OPENCODE_EVENT_MAX_BYTES` optionally overrides the
+32 MiB segment limit.
+
+On startup, an unterminated tail is copied to a content-addressed
+`.partial.jsonl` recovery artifact before the source segment is truncated to its
+last complete record. Both the complete segments and recovery artifact are
+accepted by `import opencode-events`; the latter becomes an explicit gap.
+Capture and serialization failures are reported but do not block the agent.
+Recovery failures leave the original segment untouched, are reported, and do
+not prevent capture from continuing in a new segment. The writer refuses any
+destination inside a Git worktree, including a path that enters one through a
+directory link.
 
 The plugin is not installed automatically. Installing it or modifying global
 OpenCode configuration requires explicit user approval. Historical export
 reconciliation remains required because a live hook can be absent, interrupted,
 or unable to reconstruct state that predates its installation.
-
-## Remaining M1 work
-
-- crash-safe spool rotation and recovery;
-- fixture updates when OpenCode changes its event or export schemas.
 
 `agentmem capture opencode` enumerates native sessions and invokes unsanitized
 exports into a non-Git staging directory. It preserves session-list output,
