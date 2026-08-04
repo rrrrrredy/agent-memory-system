@@ -1,8 +1,11 @@
 package codex
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -174,4 +177,53 @@ func TestTruncationAppendsGapInsteadOfSilentlyRewinding(t *testing.T) {
 	if result.GapsAppended != 1 || result.SourceSegments != 1 || result.EventsAppended != 2 {
 		t.Fatalf("truncation was not made explicit: %+v", result)
 	}
+}
+
+func TestSharedImporterPreservesLegacyCodexEventIDs(t *testing.T) {
+	root := t.TempDir()
+	store, err := ledger.Init(filepath.Join(root, "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(root, "rollout-compatibility.jsonl")
+	line := []byte(`{"timestamp":"2026-08-04T00:00:00Z","type":"session_meta","payload":{"id":"11111111-2222-3333-4444-555555555555"}}` + "\n")
+	if err := os.WriteFile(source, line, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ImportPath(store, source, Options{Now: func() time.Time {
+		return time.Date(2026, 8, 4, 1, 0, 0, 0, time.UTC)
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	sourcePathHash, err := hashSourcePath(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawDigest := sha256.Sum256(line)
+	want := legacyDeterministicID("codex-event", sourcePathHash,
+		"11111111-2222-3333-4444-555555555555", "0", strconv.Itoa(len(line)),
+		hex.EncodeToString(rawDigest[:]))
+	var got string
+	if err := store.VisitRecords(func(record ledger.Record) error {
+		if record.Event.Kind != ledger.KindSourceSnapshot {
+			got = record.Event.EventID
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("Codex event ID changed during shared-importer refactor: got %q want %q", got, want)
+	}
+}
+
+func legacyDeterministicID(namespace string, parts ...string) string {
+	hasher := sha256.New()
+	_, _ = hasher.Write([]byte(namespace))
+	for _, part := range parts {
+		_, _ = hasher.Write([]byte{0})
+		_, _ = hasher.Write([]byte(part))
+	}
+	return namespace + "-" + hex.EncodeToString(hasher.Sum(nil))
 }
