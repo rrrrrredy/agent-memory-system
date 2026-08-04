@@ -67,6 +67,7 @@ go run ./cmd/agentmem import claude --root <local-data-directory> --path <transc
 go run ./cmd/agentmem import claude-home --root <local-data-directory> --path <claude-home-directory>
 go run ./cmd/agentmem import opencode-export --root <local-data-directory> --path <export-file-or-directory>
 go run ./cmd/agentmem import opencode-events --root <local-data-directory> --path <event-spool-file-or-directory>
+go run ./cmd/agentmem capture opencode --root <local-data-directory> --staging <non-Git-local-directory>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -88,10 +89,11 @@ For OpenCode, historical reconciliation starts from native unsanitized session
 exports. Optional live capture writes bus events to a local append-only spool;
 the export remains necessary to recover pre-installation history and missed
 events. The OpenCode SQLite database is never treated as cross-device data.
+`capture opencode` enumerates every native session, writes immutable exports and
+command diagnostics to staging, imports them, and returns a non-zero status if
+any session is incomplete. It refuses staging inside a Git worktree.
 
-On this Windows workstation, project code lives in
-`D:\Codex\agent-memory-system`; a runtime evidence directory should be
-outside the Git worktree.
+Keep runtime evidence and raw staging directories outside every Git worktree.
 
 ## Safety
 

@@ -32,9 +32,12 @@ or unable to reconstruct state that predates its installation.
 
 ## Remaining M1 work
 
-- a CLI harness that enumerates sessions and invokes unsanitized exports into a
-  protected local staging area;
 - crash-safe spool rotation and recovery;
 - fixture updates when OpenCode changes its event or export schemas.
+
+`agentmem capture opencode` enumerates native sessions and invokes unsanitized
+exports into a non-Git staging directory. It preserves session-list output,
+per-session stderr, manifests, failed or malformed stdout, and explicit failure
+gaps before returning a non-zero status for partial capture.
 
 Provider reasoning that never appears in a reasoning part cannot be recovered.

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 
 	"github.com/rrrrrredy/agent-memory-system/adapters/claudecode"
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
@@ -68,9 +70,45 @@ func run(args []string) error {
 			return importUsageError()
 		}
 		return runImport(args[1:])
+	case "capture":
+		if len(args) < 2 {
+			return captureUsageError()
+		}
+		return runCapture(args[1:])
 	default:
 		return usageError()
 	}
+}
+
+func runCapture(args []string) error {
+	if args[0] != "opencode" {
+		return captureUsageError()
+	}
+	flags := flag.NewFlagSet("capture opencode", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	staging := flags.String("staging", "", "raw staging directory outside Git (required)")
+	binary := flags.String("binary", "opencode", "OpenCode executable")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" || *staging == "" {
+		return errors.New("capture opencode requires --root and --staging")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	result, captureErr := opencode.CaptureAll(ctx, store, opencode.CaptureOptions{
+		Binary: *binary, StagingRoot: *staging,
+	})
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		return err
+	}
+	return captureErr
 }
 
 func runImport(args []string) error {
@@ -116,7 +154,11 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor|import> [options]")
+	return errors.New("usage: agentmem <init|doctor|import|capture> [options]")
+}
+
+func captureUsageError() error {
+	return errors.New("usage: agentmem capture opencode --root <local-evidence-directory> --staging <non-Git-local-directory> [--binary opencode]")
 }
 
 func importUsageError() error {
