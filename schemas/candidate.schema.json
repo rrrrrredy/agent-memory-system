@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/candidate.schema.json",
+  "title": "Agent Memory System candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "content_sha256",
+    "semantic_key_sha256",
+    "kind",
+    "text",
+    "polarity",
+    "scope",
+    "support_types",
+    "observations",
+    "episode_count",
+    "evidence_event_count",
+    "first_seen_at",
+    "last_seen_at",
+    "validation",
+    "requires_explicit_rule_change_approval",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "candidate/v1alpha1"},
+    "candidate_id": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+    "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "semantic_key_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "kind": {"enum": ["constraint", "correction", "directive"]},
+    "text": {"type": "string", "minLength": 1},
+    "polarity": {"enum": ["affirmative", "prohibitive", "unknown"]},
+    "scope": {"$ref": "#/$defs/scope"},
+    "support_types": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/support_type"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "observations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/observation"},
+      "minItems": 1
+    },
+    "episode_count": {"type": "integer", "minimum": 1},
+    "evidence_event_count": {"type": "integer", "minimum": 1},
+    "first_seen_at": {"type": "string", "format": "date-time"},
+    "last_seen_at": {"type": "string", "format": "date-time"},
+    "validation": {"$ref": "#/$defs/validation"},
+    "conflict_group_id": {
+      "type": "string",
+      "pattern": "^candidate-conflict-[a-f0-9]{64}$"
+    },
+    "conflicting_candidate_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "related_candidate_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "requires_explicit_rule_change_approval": {"type": "boolean"},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "support_type": {
+      "enum": [
+        "user_instruction",
+        "user_correction",
+        "explicit_remember",
+        "compaction_drift",
+        "stable_repetition"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "status"],
+      "properties": {
+        "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
+        "status": {"const": "unconfirmed"}
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "episode_id",
+        "statement_id",
+        "statement_kind",
+        "evidence_event_ids",
+        "support_types",
+        "first_seen_at",
+        "last_seen_at"
+      ],
+      "properties": {
+        "episode_id": {"type": "string", "pattern": "^episode-[a-f0-9]{64}$"},
+        "statement_id": {"type": "string", "pattern": "^statement-[a-f0-9]{64}$"},
+        "statement_kind": {"enum": ["goal", "constraint", "correction"]},
+        "evidence_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "correction_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "support_types": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/support_type"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "first_seen_at": {"type": "string", "format": "date-time"},
+        "last_seen_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reasons",
+        "scope_confirmation_required",
+        "automatic_promotion_eligible"
+      ],
+      "properties": {
+        "status": {"enum": ["untrusted", "review_ready", "quarantined"]},
+        "reasons": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "scope_confirmation_required": {"const": true},
+        "automatic_promotion_eligible": {"const": false}
+      }
+    }
+  }
+}

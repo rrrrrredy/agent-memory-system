@@ -64,6 +64,10 @@ Raw evidence may be searched deliberately for investigation. Candidate
 experience may be queried in review workflows. Neither is automatically
 injected into agent context.
 
+A `review_ready` candidate is still untrusted review material. It is not a
+validated candidate or promoted memory, and it is never automatically eligible
+for promotion.
+
 Compaction continuity analysis MUST distinguish confirmed correction evidence
 from lexical omission risk and unavailable compacted representations. A missing
 phrase alone is not proof that the task goal drifted.
