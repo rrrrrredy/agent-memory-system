@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/episode-derivation-manifest.schema.json",
+  "title": "Agent Memory System episode derivation manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "derivation_version",
+    "privacy",
+    "source_records",
+    "episodes",
+    "timeline_entries",
+    "compactions",
+    "drift_evidence",
+    "at_risk",
+    "insufficient_evidence",
+    "timeline_file",
+    "timeline_sha256",
+    "episodes_file",
+    "episodes_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "episode-derivation-manifest/v1alpha1"},
+    "derivation_version": {"const": "episodes/v1alpha1"},
+    "privacy": {"const": "local_only"},
+    "source_records": {"type": "integer", "minimum": 0},
+    "source_last_record_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "episodes": {"type": "integer", "minimum": 0},
+    "timeline_entries": {"type": "integer", "minimum": 0},
+    "compactions": {"type": "integer", "minimum": 0},
+    "drift_evidence": {"type": "integer", "minimum": 0},
+    "at_risk": {"type": "integer", "minimum": 0},
+    "insufficient_evidence": {"type": "integer", "minimum": 0},
+    "timeline_file": {"const": "timeline.jsonl"},
+    "timeline_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "episodes_file": {"const": "episodes.jsonl"},
+    "episodes_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

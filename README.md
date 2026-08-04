@@ -68,6 +68,7 @@ go run ./cmd/agentmem import claude-home --root <local-data-directory> --path <c
 go run ./cmd/agentmem import opencode-export --root <local-data-directory> --path <export-file-or-directory>
 go run ./cmd/agentmem import opencode-events --root <local-data-directory> --path <event-spool-file-or-directory>
 go run ./cmd/agentmem capture opencode --root <local-data-directory> --staging <non-Git-local-directory>
+go run ./cmd/agentmem derive episodes --root <local-data-directory>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -94,6 +95,13 @@ command diagnostics to staging, imports them, and returns a non-zero status if
 any session is incomplete. It refuses staging inside a Git worktree.
 
 Keep runtime evidence and raw staging directories outside every Git worktree.
+
+`derive episodes` reconstructs a deterministic per-thread process timeline and
+episode generation from the hash-chain-verified ledger prefix. Derived files
+remain under the local evidence root. Compaction checks distinguish confirmed
+repeated user correction evidence from lexical risk and unavailable
+representations; none of these results is promoted memory. See
+[episode derivation](docs/episodes.md).
 
 ## Safety
 

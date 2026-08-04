@@ -64,6 +64,10 @@ Raw evidence may be searched deliberately for investigation. Candidate
 experience may be queried in review workflows. Neither is automatically
 injected into agent context.
 
+Compaction continuity analysis MUST distinguish confirmed correction evidence
+from lexical omission risk and unavailable compacted representations. A missing
+phrase alone is not proof that the task goal drifted.
+
 ## Promotion policy
 
 - An explicit user `remember` instruction may be promoted after deterministic

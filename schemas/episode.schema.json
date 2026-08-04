@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/episode.schema.json",
+  "title": "Agent Memory System episode",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "episode_id",
+    "agent",
+    "thread_id",
+    "started_at",
+    "ended_at",
+    "first_event_id",
+    "last_event_id",
+    "event_counts",
+    "completeness",
+    "statements",
+    "compactions",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "episode/v1alpha1"},
+    "episode_id": {"type": "string", "pattern": "^episode-[a-f0-9]{64}$"},
+    "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
+    "thread_id": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "format": "date-time"},
+    "ended_at": {"type": "string", "format": "date-time"},
+    "first_event_id": {"type": "string", "minLength": 1},
+    "last_event_id": {"type": "string", "minLength": 1},
+    "event_counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "completeness": {"$ref": "#/$defs/episode_completeness"},
+    "statements": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/statement"}
+    },
+    "compactions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/compaction"}
+    },
+    "issues": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/issue"}
+    },
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "episode_completeness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["complete", "partial", "missing", "unknown"]},
+        "reasons": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "gap_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "statement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "statement_id",
+        "kind",
+        "text",
+        "evidence_event_ids",
+        "first_seen_at",
+        "last_seen_at"
+      ],
+      "properties": {
+        "statement_id": {"type": "string", "pattern": "^statement-[a-f0-9]{64}$"},
+        "kind": {"enum": ["goal", "constraint", "correction"]},
+        "text": {"type": "string", "minLength": 1},
+        "evidence_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "first_seen_at": {"type": "string", "format": "date-time"},
+        "last_seen_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "compaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkpoint_id",
+        "event_ids",
+        "observed_at",
+        "representation_available",
+        "status"
+      ],
+      "properties": {
+        "checkpoint_id": {"type": "string", "pattern": "^compaction-checkpoint-[a-f0-9]{64}$"},
+        "event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "observed_at": {"type": "string", "format": "date-time"},
+        "representation_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "representation_available": {"type": "boolean"},
+        "status": {
+          "enum": [
+            "preserved",
+            "drift_evidence",
+            "at_risk",
+            "insufficient_evidence",
+            "no_active_statements"
+          ]
+        },
+        "checks": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/continuity_check"}
+        },
+        "issues": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/issue"}
+        }
+      }
+    },
+    "continuity_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement_id", "coverage", "status"],
+      "properties": {
+        "statement_id": {"type": "string", "pattern": "^statement-[a-f0-9]{64}$"},
+        "coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "status": {
+          "enum": ["preserved", "correction_after_compaction", "missing_from_representation"]
+        },
+        "representation_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "correction_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}
