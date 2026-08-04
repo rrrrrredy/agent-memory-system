@@ -1,6 +1,7 @@
 package candidates
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -74,6 +75,18 @@ func TestBuildAppliesEvidenceGatesDeduplicationAndConflictQuarantine(t *testing.
 		len(positive.ConflictingCandidateIDs) != 1 || len(negative.ConflictingCandidateIDs) != 1 {
 		t.Fatalf("opposing candidates were not quarantined: positive=%+v negative=%+v",
 			positive, negative)
+	}
+	verifiedGeneration, err := OpenGeneration(firstStore, first.GenerationPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := verifiedGeneration.Select([]string{remember.CandidateID, positive.CandidateID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selection.Candidates) != 2 ||
+		len(selection.ConflictGroups[positive.ConflictGroupID]) != 2 {
+		t.Fatalf("verified selection is incomplete: %+v", selection)
 	}
 
 	reused, err := Build(firstStore, BuildOptions{
@@ -149,6 +162,114 @@ func TestBuildHandlesEmptySourceAndRejectsInvalidShardCounts(t *testing.T) {
 		}); err == nil || !strings.Contains(err.Error(), "power of two") {
 			t.Fatalf("invalid shard count %d was accepted: %v", shardCount, err)
 		}
+	}
+}
+
+func TestGenerationVerificationRejectsCoordinatedContentTamper(t *testing.T) {
+	store, episodeGeneration := createEpisodeGeneration(t, policyEpisodes()[:1])
+	built, err := Build(store, BuildOptions{EpisodeGenerationPath: episodeGeneration, ShardCount: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidatePath := filepath.Join(built.GenerationPath, "candidates.jsonl")
+	data, err := os.ReadFile(candidatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := bytes.Replace(data, []byte("keep audit logs"), []byte("keep audit logz"), 1)
+	if bytes.Equal(tampered, data) {
+		t.Fatal("fixture candidate text was not found")
+	}
+	if err := os.WriteFile(candidatePath, tampered, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(built.GenerationPath, "manifest.json")
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest Manifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest.CandidatesSHA256 = fileSHA256(t, candidatePath)
+	manifestData, err = json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestData = append(manifestData, '\n')
+	if err := os.WriteFile(manifestPath, manifestData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	verified, err := OpenGeneration(store, built.GenerationPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := verified.Select(nil); err == nil || !strings.Contains(err.Error(), "identity") {
+		t.Fatalf("coordinated candidate and manifest tamper was accepted: %v", err)
+	}
+}
+
+func TestGenerationVerificationRejectsForgedObservationProvenance(t *testing.T) {
+	store, episodeGeneration := createEpisodeGeneration(t, policyEpisodes()[:1])
+	built, err := Build(store, BuildOptions{EpisodeGenerationPath: episodeGeneration, ShardCount: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidatePath := filepath.Join(built.GenerationPath, "candidates.jsonl")
+	items := readCandidateFile(t, candidatePath)
+	selectedIndex := -1
+	for index := range items {
+		if items[index].Text == "Please remember that reports stay local" {
+			selectedIndex = index
+			break
+		}
+	}
+	if selectedIndex < 0 {
+		t.Fatal("fixture remember candidate was not found")
+	}
+	selectedID := items[selectedIndex].CandidateID
+	items[selectedIndex].Observations[0].EvidenceEventIDs[0] = "forged-event"
+	file, err := os.OpenFile(candidatePath, os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoder := json.NewEncoder(file)
+	encoder.SetEscapeHTML(false)
+	for _, candidate := range items {
+		if err := encoder.Encode(candidate); err != nil {
+			_ = file.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(built.GenerationPath, "manifest.json")
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest Manifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest.CandidatesSHA256 = fileSHA256(t, candidatePath)
+	manifestData, err = json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestData = append(manifestData, '\n')
+	if err := os.WriteFile(manifestPath, manifestData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	verified, err := OpenGeneration(store, built.GenerationPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := verified.Select([]string{selectedID}); err == nil ||
+		!strings.Contains(err.Error(), "provenance") {
+		t.Fatalf("forged candidate observation provenance was accepted: %v", err)
 	}
 }
 

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/candidate-review-event.schema.json",
+  "title": "Agent Memory System candidate review event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "recorded_at",
+    "device_id",
+    "reviewer",
+    "request_sha256",
+    "source_candidate_generation",
+    "source_candidates_sha256",
+    "transitions",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "candidate-review-event/v1alpha1"},
+    "event_id": {"type": "string", "pattern": "^review-", "minLength": 8},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "device_id": {"type": "string", "minLength": 1},
+    "reviewer": {"$ref": "candidate-review-request.schema.json#/$defs/reviewer"},
+    "request_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_candidate_generation": {"type": "string", "minLength": 1},
+    "source_candidates_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "conflict_group_id": {
+      "type": "string",
+      "pattern": "^candidate-conflict-[a-f0-9]{64}$"
+    },
+    "transitions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/transition"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "candidate_content_sha256",
+        "expected_status",
+        "action",
+        "resulting_status",
+        "reason"
+      ],
+      "properties": {
+        "candidate_id": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+        "candidate_content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "expected_status": {"$ref": "candidate-review-request.schema.json#/$defs/status"},
+        "action": {"$ref": "candidate-review-request.schema.json#/$defs/action"},
+        "resulting_status": {"$ref": "candidate-review-request.schema.json#/$defs/status"},
+        "scope": {"$ref": "candidate-review-request.schema.json#/$defs/scope"},
+        "basis": {
+          "type": "array",
+          "items": {"$ref": "candidate-review-request.schema.json#/$defs/basis"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "evidence_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "reason": {"type": "string", "minLength": 1, "maxLength": 16384}
+      }
+    }
+  }
+}

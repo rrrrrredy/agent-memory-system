@@ -49,6 +49,7 @@ canonical data and is never merged through Git.
 
 - `cmd/agentmem`: cross-platform CLI
 - `internal/ledger`: append-only evidence storage and integrity verification
+- `internal/review`: append-only candidate review and optimistic state checks
 - `schemas`: versioned interchange contracts
 - `docs/adr`: architecture decisions
 - `docs/research`: adopt/modify/reject reviews of related projects
@@ -70,6 +71,9 @@ go run ./cmd/agentmem import opencode-events --root <local-data-directory> --pat
 go run ./cmd/agentmem capture opencode --root <local-data-directory> --staging <non-Git-local-directory>
 go run ./cmd/agentmem derive episodes --root <local-data-directory>
 go run ./cmd/agentmem derive candidates --root <local-data-directory> --episodes <episode-generation>
+go run ./cmd/agentmem review apply --root <local-data-directory> --candidates <candidate-generation> --file <review-request.json>
+go run ./cmd/agentmem review status --root <local-data-directory> --candidates <candidate-generation> --candidate <candidate-id>
+go run ./cmd/agentmem review verify --root <local-data-directory>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -108,6 +112,12 @@ representations; none of these results is promoted memory. See
 review material. Ordinary task goals are excluded, opposing instructions are
 quarantined, and every result remains ineligible for automatic promotion. See
 [candidate derivation](docs/candidates.md).
+
+`review apply` records a human-attested, content-hash-bound transition in a
+local append-only review ledger. It verifies referenced evidence, rejects stale
+expected states, and requires atomic resolution of derived conflict groups.
+`validated` is still not promoted or retrievable. See
+[candidate review](docs/review.md).
 
 ## Safety
 
