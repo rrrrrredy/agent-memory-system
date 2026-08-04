@@ -317,17 +317,17 @@ func importFile(
 			terminated := line[len(line)-1] == '\n'
 			offset = lineEnd
 			trimmed := bytes.TrimSpace(line)
-			if !json.Valid(trimmed) {
-				reason := "invalid_json_line_terminated: source record is not valid JSON"
-				if !terminated && errors.Is(readErr, io.EOF) {
-					reason = "trailing_partial_json: source may still be writing; retry from this byte"
-				}
+			if !terminated && errors.Is(readErr, io.EOF) {
+				reason := "trailing_partial_json: source may still be writing; retry from this byte"
 				queueProjection(store, state, &pending, spec, segmentID, sourcePathHash, threadID,
 					lineStart, lineEnd, line, info.ModTime(), options.Now(),
 					Projection{Kind: ledger.KindGap, CompletenessReason: reason}, result)
-				if terminated {
-					state.committedOffset[sourcePathHash] = lineEnd
-				}
+			} else if !json.Valid(trimmed) {
+				reason := "invalid_json_line_terminated: source record is not valid JSON"
+				queueProjection(store, state, &pending, spec, segmentID, sourcePathHash, threadID,
+					lineStart, lineEnd, line, info.ModTime(), options.Now(),
+					Projection{Kind: ledger.KindGap, CompletenessReason: reason}, result)
+				state.committedOffset[sourcePathHash] = lineEnd
 			} else {
 				projections := spec.Project(json.RawMessage(trimmed))
 				if len(projections) == 0 {
