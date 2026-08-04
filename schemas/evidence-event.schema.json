@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/evidence-event.schema.json",
+  "title": "Agent Memory System evidence event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "kind",
+    "observed_at",
+    "recorded_at",
+    "source",
+    "completeness",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "evidence-event/v1alpha1"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "user_message",
+        "agent_message",
+        "reasoning",
+        "tool_call",
+        "tool_result",
+        "approval",
+        "file_change",
+        "attachment",
+        "subagent_event",
+        "compaction",
+        "system_event",
+        "source_snapshot",
+        "gap",
+        "unknown"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "payload": {
+      "$ref": "#/$defs/payload"
+    },
+    "reasoning": {
+      "$ref": "#/$defs/reasoning"
+    },
+    "completeness": {
+      "$ref": "#/$defs/completeness"
+    },
+    "causality": {
+      "$ref": "#/$defs/causality"
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification"],
+      "properties": {
+        "classification": {
+          "const": "local_only"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "reasoning"
+          }
+        }
+      },
+      "then": {
+        "required": ["reasoning"]
+      }
+    }
+  ],
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent",
+        "adapter",
+        "adapter_version",
+        "device_id",
+        "thread_id"
+      ],
+      "properties": {
+        "agent": {
+          "enum": ["codex", "claude_code", "opencode", "unknown"]
+        },
+        "adapter": {
+          "type": "string",
+          "minLength": 1
+        },
+        "adapter_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os": {
+          "type": "string"
+        },
+        "thread_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "source_event_id": {
+          "type": "string"
+        },
+        "source_path_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_cursor": {
+          "type": "string"
+        },
+        "byte_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "byte_end": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "blob_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "bytes", "relative_path"],
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "relative_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["encoding", "sha256", "bytes"],
+      "properties": {
+        "encoding": {
+          "enum": ["utf-8", "json", "binary", "encrypted"]
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "blob": {
+          "$ref": "#/$defs/blob_ref"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["content"]
+        },
+        {
+          "required": ["blob"]
+        }
+      ]
+    },
+    "reasoning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visibility"],
+      "properties": {
+        "visibility": {
+          "enum": [
+            "raw_exposed",
+            "summary_only",
+            "encrypted_opaque",
+            "not_exposed",
+            "not_applicable"
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "completeness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "enum": ["complete", "partial", "missing", "unknown"]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "expected_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "captured_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "causality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parent_event_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "call_id": {
+          "type": "string"
+        },
+        "compaction_id": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+# Build outputs
+/bin/
+/dist/
+/coverage/
+
+# Local-only runtime data. Never commit evidence or indexes.
+/.agent-memory/
+/data/evidence/
+/data/indexes/
+/data/backups/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
