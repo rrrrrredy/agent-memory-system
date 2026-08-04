@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/rule-change-approval-event.schema.json",
+  "title": "Agent Memory System rule-change approval event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "recorded_at",
+    "device_id",
+    "approver",
+    "request_sha256",
+    "memory_id",
+    "revision_id",
+    "surface",
+    "target",
+    "expected_status",
+    "action",
+    "resulting_status",
+    "reason",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "rule-change-approval-event/v1alpha1"},
+    "event_id": {"type": "string", "pattern": "^rule-approval-", "minLength": 8},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "device_id": {"type": "string", "minLength": 1},
+    "approver": {"$ref": "rule-change-approval-request.schema.json#/$defs/approver"},
+    "request_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "memory_id": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"},
+    "revision_id": {"type": "string", "pattern": "^memory-revision-[a-f0-9]{64}$"},
+    "surface": {"$ref": "rule-change-approval-request.schema.json#/$defs/surface"},
+    "target": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "expected_status": {"$ref": "rule-change-approval-request.schema.json#/$defs/status"},
+    "action": {"enum": ["authorize", "revoke"]},
+    "resulting_status": {"$ref": "rule-change-approval-request.schema.json#/$defs/status"},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 16384},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "authorize"}}, "required": ["action"]},
+      "then": {
+        "properties": {
+          "expected_status": {"const": "not_authorized"},
+          "resulting_status": {"const": "authorized"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "revoke"}}, "required": ["action"]},
+      "then": {
+        "properties": {
+          "expected_status": {"const": "authorized"},
+          "resulting_status": {"const": "not_authorized"}
+        }
+      }
+    }
+  ]
+}

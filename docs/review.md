@@ -7,7 +7,8 @@ scope, evidence basis, and reason.
 
 `validated` is not `promoted`. A validated candidate is still ineligible for
 retrieval, injection, synchronization, or rule changes until a later promotion
-revision passes redaction and secret checks.
+revision passes redaction and secret checks. See
+[promoted memory revisions](promotion.md).
 
 ## States and transitions
 

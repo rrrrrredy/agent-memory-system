@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/rule-change-approval-request.schema.json",
+  "title": "Agent Memory System rule-change approval request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "approver",
+    "memory_id",
+    "revision_id",
+    "surface",
+    "target",
+    "expected_status",
+    "action",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": {"const": "rule-change-approval-request/v1alpha1"},
+    "approver": {"$ref": "#/$defs/approver"},
+    "memory_id": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"},
+    "revision_id": {"type": "string", "pattern": "^memory-revision-[a-f0-9]{64}$"},
+    "surface": {"$ref": "#/$defs/surface"},
+    "target": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "expected_status": {"$ref": "#/$defs/status"},
+    "action": {"enum": ["authorize", "revoke"]},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 16384}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "authorize"}}, "required": ["action"]},
+      "then": {"properties": {"expected_status": {"const": "not_authorized"}}}
+    },
+    {
+      "if": {"properties": {"action": {"const": "revoke"}}, "required": ["action"]},
+      "then": {"properties": {"expected_status": {"const": "authorized"}}}
+    }
+  ],
+  "$defs": {
+    "approver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"const": "human"},
+        "id": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
+    "surface": {
+      "enum": ["agents_md", "skill", "hook", "plugin", "global_rule"]
+    },
+    "status": {
+      "enum": ["not_authorized", "authorized"]
+    }
+  }
+}

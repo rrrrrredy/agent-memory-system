@@ -160,6 +160,99 @@ func GetStatus(
 	}, nil
 }
 
+func ResolveCurrentValidation(
+	store *ledger.Store, generationPath, candidateID, candidateContentSHA256,
+	expectedReviewRecordSHA256 string,
+) (ValidatedCandidate, error) {
+	return resolveValidation(
+		store, generationPath, candidateID, candidateContentSHA256,
+		expectedReviewRecordSHA256, true,
+	)
+}
+
+func VerifyValidationRecord(
+	store *ledger.Store, generationPath, candidateID, candidateContentSHA256,
+	reviewRecordSHA256 string,
+) (ValidatedCandidate, error) {
+	return resolveValidation(
+		store, generationPath, candidateID, candidateContentSHA256,
+		reviewRecordSHA256, false,
+	)
+}
+
+func resolveValidation(
+	store *ledger.Store, generationPath, candidateID, candidateContentSHA256,
+	reviewRecordSHA256 string, requireCurrent bool,
+) (ValidatedCandidate, error) {
+	if store == nil {
+		return ValidatedCandidate{}, errors.New("store is required")
+	}
+	if !validPrefixedHash(candidateID, "candidate-") || !validHash(candidateContentSHA256) ||
+		!validHash(reviewRecordSHA256) {
+		return ValidatedCandidate{}, errors.New("validation proof identity is invalid")
+	}
+	generation, err := candidates.OpenGeneration(store, generationPath)
+	if err != nil {
+		return ValidatedCandidate{}, err
+	}
+	selection, err := generation.Select([]string{candidateID})
+	if err != nil {
+		return ValidatedCandidate{}, err
+	}
+	if err := verifyCandidateEvidence(store, selection.Candidates); err != nil {
+		return ValidatedCandidate{}, err
+	}
+	candidate := selection.Candidates[candidateID]
+	if candidate.ContentSHA256 != candidateContentSHA256 {
+		return ValidatedCandidate{}, errors.New("candidate content hash does not match validation proof request")
+	}
+	state, err := replayVerified(store)
+	if err != nil {
+		return ValidatedCandidate{}, err
+	}
+	key := candidateKey(
+		generation.Manifest.CandidatesSHA256, candidate.CandidateID, candidate.ContentSHA256,
+	)
+	if requireCurrent {
+		if state.statuses[key] != StatusValidated || state.lastByKey[key] != reviewRecordSHA256 {
+			return ValidatedCandidate{}, errors.New("candidate validation is not the current review state")
+		}
+	}
+	for _, record := range state.history {
+		if record.RecordSHA256 != reviewRecordSHA256 ||
+			record.Event.SourceCandidateGeneration != generation.Name ||
+			record.Event.SourceCandidatesSHA256 != generation.Manifest.CandidatesSHA256 {
+			continue
+		}
+		for _, transition := range record.Event.Transitions {
+			if transition.CandidateID != candidate.CandidateID ||
+				transition.CandidateContentSHA256 != candidate.ContentSHA256 {
+				continue
+			}
+			if transition.Action != ActionValidate || transition.ResultingStatus != StatusValidated ||
+				transition.Scope == nil {
+				return ValidatedCandidate{}, errors.New("review record does not contain a validated candidate transition")
+			}
+			return ValidatedCandidate{
+				Candidate: candidate,
+				Proof: ValidationProof{
+					SchemaVersion:             ProofSchemaVersion,
+					SourceCandidateGeneration: generation.Name,
+					SourceCandidatesSHA256:    generation.Manifest.CandidatesSHA256,
+					CandidateID:               candidate.CandidateID, CandidateContentSHA256: candidate.ContentSHA256,
+					ReviewEventID: record.Event.EventID, ReviewRecordSHA256: record.RecordSHA256,
+					ReviewSequence: record.Sequence, ReviewedAt: record.Event.RecordedAt,
+					Reviewer: record.Event.Reviewer, Scope: *transition.Scope,
+					Basis:            append([]Basis(nil), transition.Basis...),
+					EvidenceEventIDs: append([]string(nil), transition.EvidenceEventIDs...),
+					Privacy:          "local_only",
+				},
+			}, nil
+		}
+	}
+	return ValidatedCandidate{}, errors.New("validated review record was not found")
+}
+
 func validateRequestEnvelope(request Request) error {
 	if request.SchemaVersion != RequestSchemaVersion || request.Reviewer.Kind != "human" ||
 		strings.TrimSpace(request.Reviewer.ID) == "" || request.Reviewer.ID != strings.TrimSpace(request.Reviewer.ID) ||

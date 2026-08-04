@@ -50,6 +50,9 @@ canonical data and is never merged through Git.
 - `cmd/agentmem`: cross-platform CLI
 - `internal/ledger`: append-only evidence storage and integrity verification
 - `internal/review`: append-only candidate review and optimistic state checks
+- `internal/promotion`: redacted promoted revisions, supersession, and revocation
+- `internal/secretscan`: deterministic, non-echoing sensitive-content detection
+- `internal/ruleapproval`: separate revision-, surface-, and target-bound rule authorization
 - `schemas`: versioned interchange contracts
 - `docs/adr`: architecture decisions
 - `docs/research`: adopt/modify/reject reviews of related projects
@@ -74,6 +77,13 @@ go run ./cmd/agentmem derive candidates --root <local-data-directory> --episodes
 go run ./cmd/agentmem review apply --root <local-data-directory> --candidates <candidate-generation> --file <review-request.json>
 go run ./cmd/agentmem review status --root <local-data-directory> --candidates <candidate-generation> --candidate <candidate-id>
 go run ./cmd/agentmem review verify --root <local-data-directory>
+go run ./cmd/agentmem promote scan --root <local-data-directory> --candidates <candidate-generation> --candidate <candidate-id>
+go run ./cmd/agentmem promote apply --root <local-data-directory> --file <promotion-request.json>
+go run ./cmd/agentmem promote status --root <local-data-directory> --memory <memory-id>
+go run ./cmd/agentmem promote verify --root <local-data-directory>
+go run ./cmd/agentmem rule-approval apply --root <local-data-directory> --file <rule-approval-request.json>
+go run ./cmd/agentmem rule-approval status --root <local-data-directory> --memory <memory-id> --revision <revision-id> --surface <surface> --target <target>
+go run ./cmd/agentmem rule-approval verify --root <local-data-directory>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -118,6 +128,18 @@ local append-only review ledger. It verifies referenced evidence, rejects stale
 expected states, and requires atomic resolution of derived conflict groups.
 `validated` is still not promoted or retrievable. See
 [candidate review](docs/review.md).
+
+`promote apply` creates an immutable, parent-linked revision only from the exact
+currently validated candidate. Sensitive findings must be covered by
+hash-bound redactions, and the reviewed final text hash must match. Supersession
+and revocation use optimistic parent checks. These local revisions are not
+written to Git until the separate memory-repository workflow is configured. See
+[promoted memory revisions](docs/promotion.md).
+
+Promotion never authorizes changes to `AGENTS.md`, Skills, hooks, plugins, or
+global rules. `rule-approval apply` records that decision separately for one
+exact memory revision, surface, and logical target, without editing the target
+itself.
 
 ## Safety
 

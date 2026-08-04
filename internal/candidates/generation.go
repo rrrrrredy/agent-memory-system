@@ -28,6 +28,11 @@ type Selection struct {
 	ConflictGroups map[string][]string
 }
 
+type EvidencePrefix struct {
+	Records        int
+	LastRecordHash string
+}
+
 type candidateMetadata struct {
 	semanticKey string
 	polarity    CandidatePolarity
@@ -84,6 +89,50 @@ func OpenGeneration(store *ledger.Store, supplied string) (Generation, error) {
 		Name: filepath.Base(resolvedTarget), Path: resolvedTarget, Manifest: manifest,
 		storeRoot: store.Root(),
 	}, nil
+}
+
+func (generation Generation) SourceEvidencePrefix() (EvidencePrefix, error) {
+	source, err := openEpisodeSource(generation.storeRoot, generation.Manifest.SourceEpisodeGeneration)
+	if err != nil {
+		return EvidencePrefix{}, fmt.Errorf("open candidate episode provenance: %w", err)
+	}
+	if source.manifestSHA256 != generation.Manifest.SourceEpisodeManifestSHA256 ||
+		source.manifest.EpisodesSHA256 != generation.Manifest.SourceEpisodesSHA256 ||
+		source.manifest.Episodes != generation.Manifest.SourceEpisodes {
+		return EvidencePrefix{}, errors.New("candidate episode provenance does not match the candidate manifest")
+	}
+	return EvidencePrefix{
+		Records: source.manifest.SourceRecords, LastRecordHash: source.manifest.SourceLastRecordHash,
+	}, nil
+}
+
+func (generation Generation) RequireCurrentEvidence(store *ledger.Store) error {
+	if store == nil {
+		return errors.New("store is required")
+	}
+	storeRoot, err := filepath.EvalSymlinks(store.Root())
+	if err != nil {
+		return fmt.Errorf("resolve evidence store root: %w", err)
+	}
+	generationRoot, err := filepath.EvalSymlinks(generation.storeRoot)
+	if err != nil {
+		return fmt.Errorf("resolve candidate store root: %w", err)
+	}
+	if storeRoot != generationRoot {
+		return errors.New("candidate generation belongs to a different evidence store")
+	}
+	prefix, err := generation.SourceEvidencePrefix()
+	if err != nil {
+		return err
+	}
+	report := store.Verify()
+	if len(report.Issues) != 0 {
+		return fmt.Errorf("evidence ledger verification failed: %s", strings.Join(report.Issues, "; "))
+	}
+	if prefix.Records != report.RecordsChecked || prefix.LastRecordHash != report.LastRecordHash {
+		return errors.New("candidate generation does not cover the current evidence ledger prefix")
+	}
+	return nil
 }
 
 func (generation Generation) Select(candidateIDs []string) (Selection, error) {
