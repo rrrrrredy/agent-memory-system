@@ -162,6 +162,12 @@ worktree before advancing or pushing the local branch. Repository-local
 pre-commit and pre-push guards use the same verifier. See
 [private Git synchronization](docs/git-sync.md).
 
+Optional `sync auto` commands install a per-device user schedule on Windows or
+macOS. Scheduled attempts export only eligible promoted memory and call the
+same non-interactive synchronization core. Bounded retries, suspension,
+explicit recovery, and a local hash-chained audit make failures observable;
+automation config remains ignored by Git.
+
 ## Safety
 
 - Never paste or attach raw evidence to GitHub issues or pull requests.

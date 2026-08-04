@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/automatic-git-sync-config.schema.json",
+  "title": "Agent Memory System local automatic Git synchronization config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "enabled",
+    "repository_root",
+    "remote",
+    "interval_seconds",
+    "maximum_retry_seconds",
+    "maximum_consecutive_errors",
+    "scheduler",
+    "task_id",
+    "updated_at",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "automatic-git-sync-config/v1alpha1"},
+    "enabled": {"type": "boolean"},
+    "evidence_root": {"type": "string", "minLength": 1},
+    "repository_root": {"type": "string", "minLength": 1},
+    "executable_path": {"type": "string", "minLength": 1},
+    "remote": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,255}$"},
+    "interval_seconds": {"type": "integer", "minimum": 60, "maximum": 86340, "multipleOf": 60},
+    "maximum_retry_seconds": {"type": "integer", "minimum": 60, "maximum": 604800, "multipleOf": 60},
+    "maximum_consecutive_errors": {"type": "integer", "minimum": 1, "maximum": 20},
+    "scheduler": {"enum": ["windows_task_scheduler", "launchd"]},
+    "task_id": {"type": "string", "pattern": "^agent-memory-sync-[a-f0-9]{16}$"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"enabled": {"const": true}}},
+      "then": {"required": ["evidence_root", "executable_path"]}
+    }
+  ]
+}

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -36,12 +39,19 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "portable init flags", args: []string{"portable", "init"}, message: "requires --repo"},
 		{name: "portable export flags", args: []string{"portable", "export"}, message: "requires --root and --repo"},
 		{name: "portable verify flags", args: []string{"portable", "verify"}, message: "requires --repo"},
-		{name: "missing sync subcommand", args: []string{"sync"}, message: "sync <bootstrap|verify|run|install-hooks>"},
-		{name: "unknown sync subcommand", args: []string{"sync", "unknown"}, message: "sync <bootstrap|verify|run|install-hooks>"},
+		{name: "missing sync subcommand", args: []string{"sync"}, message: "sync <bootstrap|verify|run|install-hooks|auto>"},
+		{name: "unknown sync subcommand", args: []string{"sync", "unknown"}, message: "sync <bootstrap|verify|run|install-hooks|auto>"},
 		{name: "sync bootstrap flags", args: []string{"sync", "bootstrap"}, message: "requires --repo"},
 		{name: "sync verify flags", args: []string{"sync", "verify"}, message: "requires --repo"},
 		{name: "sync run flags", args: []string{"sync", "run"}, message: "requires --repo"},
 		{name: "sync install hooks flags", args: []string{"sync", "install-hooks"}, message: "requires --repo"},
+		{name: "missing sync auto subcommand", args: []string{"sync", "auto"}, message: "sync auto <enable|disable|status|run|recover>"},
+		{name: "unknown sync auto subcommand", args: []string{"sync", "auto", "unknown"}, message: "sync auto <enable|disable|status|run|recover>"},
+		{name: "sync auto enable flags", args: []string{"sync", "auto", "enable"}, message: "requires --repo and --root"},
+		{name: "sync auto disable flags", args: []string{"sync", "auto", "disable"}, message: "requires --repo"},
+		{name: "sync auto status flags", args: []string{"sync", "auto", "status"}, message: "requires --repo"},
+		{name: "sync auto run flags", args: []string{"sync", "auto", "run"}, message: "requires --repo"},
+		{name: "sync auto recover flags", args: []string{"sync", "auto", "recover"}, message: "requires --repo"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -50,5 +60,33 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 				t.Fatalf("run(%v) error = %v, want message containing %q", test.args, err, test.message)
 			}
 		})
+	}
+}
+
+func TestSyncBootstrapLeavesRepositoryHooksDisabledByDefault(t *testing.T) {
+	repository := filepath.Join(t.TempDir(), "portable")
+	if err := os.MkdirAll(repository, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runTestGit(t, repository, "init", "--initial-branch", "main")
+	runTestGit(t, repository, "config", "user.name", "Test User")
+	runTestGit(t, repository, "config", "user.email", "test@example.invalid")
+	if err := run([]string{"sync", "bootstrap", "--repo", repository}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"pre-commit", "pre-push"} {
+		path := filepath.Join(repository, ".git", "hooks", name)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("bootstrap installed %s without explicit opt-in: %v", name, err)
+		}
+	}
+}
+
+func runTestGit(t *testing.T, repository string, args ...string) {
+	t.Helper()
+	commandArgs := append([]string{"-C", repository}, args...)
+	output, err := exec.Command("git", commandArgs...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v: %s", args, err, output)
 	}
 }

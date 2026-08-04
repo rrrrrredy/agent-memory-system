@@ -53,8 +53,10 @@ Controls:
 - verification on open, backup, restore, and evaluation;
 - append-only recovery events instead of rewriting verified history.
 
-The current foundation has hashing and verification but not yet cross-process
-locking or signed checkpoints; daemon mode remains disabled until those exist.
+The current foundation has hashing, verification, and scoped operation locks.
+Automatic Git synchronization is a finite scheduled process protected by those
+locks, not a resident daemon. A daemon remains out of scope without a stronger
+cross-process lifecycle and signed-checkpoint design.
 
 ### Secret exfiltration
 

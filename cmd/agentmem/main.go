@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/rrrrrredy/agent-memory-system/adapters/claudecode"
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
 	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
+	"github.com/rrrrrredy/agent-memory-system/internal/autosync"
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
@@ -127,9 +129,154 @@ func runSync(args []string) error {
 		return runSyncRun(args[1:])
 	case "install-hooks":
 		return runSyncInstallHooks(args[1:])
+	case "auto":
+		if len(args) < 2 {
+			return syncAutoUsageError()
+		}
+		return runSyncAuto(args[1:])
 	default:
 		return syncUsageError()
 	}
+}
+
+func runSyncAuto(args []string) error {
+	switch args[0] {
+	case "enable":
+		return runSyncAutoEnable(args[1:])
+	case "disable":
+		return runSyncAutoDisable(args[1:])
+	case "status":
+		return runSyncAutoStatus(args[1:])
+	case "run":
+		return runSyncAutoRun(args[1:])
+	case "recover":
+		return runSyncAutoRecover(args[1:])
+	default:
+		return syncAutoUsageError()
+	}
+}
+
+func runSyncAutoEnable(args []string) error {
+	flags := flag.NewFlagSet("sync auto enable", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	root := flags.String("root", "", "local evidence root (required)")
+	remote := flags.String("remote", gitsync.DefaultRemote, "Git remote name")
+	intervalValue := flags.String("interval", autosync.DefaultInterval.String(), "schedule interval")
+	maximumRetryValue := flags.String("maximum-retry", autosync.DefaultMaximumRetry.String(), "maximum retry delay")
+	maximumErrors := flags.Int("maximum-errors", autosync.DefaultMaximumConsecutiveErrors, "errors before suspension")
+	executableDefault, err := os.Executable()
+	if err != nil {
+		return errors.New("agentmem executable path is unavailable")
+	}
+	executable := flags.String("executable", executableDefault, "installed agentmem executable path")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" || *root == "" {
+		return errors.New("sync auto enable requires --repo and --root")
+	}
+	interval, err := time.ParseDuration(*intervalValue)
+	if err != nil {
+		return errors.New("sync auto enable has an invalid --interval")
+	}
+	maximumRetry, err := time.ParseDuration(*maximumRetryValue)
+	if err != nil {
+		return errors.New("sync auto enable has an invalid --maximum-retry")
+	}
+	status, err := autosync.Enable(context.Background(), autosync.EnableOptions{
+		RepositoryRoot: *repository, EvidenceRoot: *root, ExecutablePath: *executable,
+		Remote: *remote, Interval: interval, MaximumRetry: maximumRetry,
+		MaximumConsecutiveErrors: *maximumErrors,
+	})
+	if err != nil {
+		return err
+	}
+	return encodeIndented(status)
+}
+
+func runSyncAutoDisable(args []string) error {
+	flags := flag.NewFlagSet("sync auto disable", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" {
+		return errors.New("sync auto disable requires --repo")
+	}
+	status, err := autosync.Disable(context.Background(), *repository)
+	if err != nil {
+		return err
+	}
+	return encodeIndented(status)
+}
+
+func runSyncAutoStatus(args []string) error {
+	flags := flag.NewFlagSet("sync auto status", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" {
+		return errors.New("sync auto status requires --repo")
+	}
+	status, err := autosync.GetStatus(context.Background(), *repository)
+	if err != nil {
+		return err
+	}
+	if err := encodeIndented(status); err != nil {
+		return err
+	}
+	if len(status.Issues) != 0 {
+		return errors.New("automatic synchronization status has unresolved issues")
+	}
+	return nil
+}
+
+func runSyncAutoRun(args []string) error {
+	flags := flag.NewFlagSet("sync auto run", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	scheduled := flags.Bool("scheduled", false, "suppress routine scheduler output")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" {
+		return errors.New("sync auto run requires --repo")
+	}
+	result, runErr := autosync.Run(context.Background(), *repository)
+	if !*scheduled {
+		if err := encodeIndented(result); err != nil {
+			return err
+		}
+	}
+	return runErr
+}
+
+func runSyncAutoRecover(args []string) error {
+	flags := flag.NewFlagSet("sync auto recover", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	clearLock := flags.Bool("clear-stale-lock", false, "remove a lock after verifying no automatic sync process is active")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" {
+		return errors.New("sync auto recover requires --repo")
+	}
+	if *clearLock {
+		if _, err := autosync.ClearStaleLock(*repository); err != nil {
+			return err
+		}
+	}
+	status, err := autosync.Recover(context.Background(), *repository)
+	if err != nil {
+		return err
+	}
+	return encodeIndented(status)
+}
+
+func encodeIndented(value any) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(value)
 }
 
 func runSyncBootstrap(args []string) error {
@@ -137,7 +284,7 @@ func runSyncBootstrap(args []string) error {
 	repository := flags.String("repo", "", "portable memory repository root (required)")
 	remote := flags.String("remote", gitsync.DefaultRemote, "Git remote name")
 	remoteURL := flags.String("remote-url", "", "optional private Git remote URL")
-	hooks := flags.Bool("hooks", true, "install repository-local pre-commit and pre-push guards")
+	hooks := flags.Bool("hooks", false, "install repository-local pre-commit and pre-push guards")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -784,7 +931,11 @@ func portableUsageError() error {
 }
 
 func syncUsageError() error {
-	return errors.New("usage: agentmem sync <bootstrap|verify|run|install-hooks> [options]")
+	return errors.New("usage: agentmem sync <bootstrap|verify|run|install-hooks|auto> [options]")
+}
+
+func syncAutoUsageError() error {
+	return errors.New("usage: agentmem sync auto <enable|disable|status|run|recover> [options]")
 }
 
 func deriveUsageError() error {

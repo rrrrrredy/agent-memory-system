@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/automatic-git-sync-event.schema.json",
+  "title": "Agent Memory System automatic Git synchronization audit event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sequence",
+    "observed_at",
+    "action",
+    "outcome",
+    "resulting_state",
+    "consecutive_errors",
+    "event_sha256",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "automatic-git-sync-event/v1alpha1"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "action": {"enum": ["enable", "disable", "recover", "attempt"]},
+    "outcome": {"type": "string", "minLength": 1},
+    "resulting_state": {"enum": ["disabled", "ready", "retrying", "suspended"]},
+    "consecutive_errors": {"type": "integer", "minimum": 0},
+    "next_attempt_at": {"type": "string", "format": "date-time"},
+    "last_attempt_at": {"type": "string", "format": "date-time"},
+    "last_success_at": {"type": "string", "format": "date-time"},
+    "last_sync_outcome": {"type": "string", "minLength": 1},
+    "error_code": {"enum": ["export_failed", "sync_failed", "remote_changed", "remote_rejected", "conflict", "retry_limit_reached"]},
+    "error_detail": {"type": "string", "minLength": 1},
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memories_selected", "revisions_projected", "revisions_written"],
+      "properties": {
+        "memories_selected": {"type": "integer", "minimum": 0},
+        "revisions_projected": {"type": "integer", "minimum": 0},
+        "revisions_written": {"type": "integer", "minimum": 0}
+      }
+    },
+    "sync": {"$ref": "git-sync-result.schema.json"},
+    "config_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "previous_event_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "event_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "attempt"}}, "required": ["action"]},
+      "then": {"required": ["last_attempt_at", "last_sync_outcome", "config_sha256", "export"]}
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {"const": "attempt"},
+          "last_sync_outcome": {"not": {"const": "export_failed"}}
+        },
+        "required": ["action", "last_sync_outcome"]
+      },
+      "then": {"required": ["sync"]}
+    },
+    {
+      "if": {"properties": {"resulting_state": {"enum": ["retrying", "suspended"]}}},
+      "then": {"required": ["error_code", "error_detail"]}
+    },
+    {
+      "if": {"properties": {"resulting_state": {"const": "retrying"}}},
+      "then": {"required": ["next_attempt_at"]}
+    },
+    {
+      "if": {"properties": {"action": {"enum": ["enable", "disable", "recover"]}}},
+      "then": {"required": ["config_sha256"]}
+    }
+  ]
+}
