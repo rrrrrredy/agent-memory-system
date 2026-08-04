@@ -74,6 +74,19 @@ func TestAppendAndVerifyInlineAndBlobEvents(t *testing.T) {
 	if report.RecordsChecked != 2 || report.BlobsChecked != 1 {
 		t.Fatalf("unexpected report: %+v", report)
 	}
+	if store.DeviceID() == "" {
+		t.Fatal("store has no stable device id")
+	}
+	visited := 0
+	if err := store.VisitRecords(func(record Record) error {
+		visited++
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if visited != 2 {
+		t.Fatalf("visited %d records, want 2", visited)
+	}
 }
 
 func TestMissingReasoningIsExplicit(t *testing.T) {
@@ -230,5 +243,46 @@ func TestMissingBlobIsRejectedBeforeAppend(t *testing.T) {
 	}
 	if report := store.Verify(); report.RecordsChecked != 0 {
 		t.Fatalf("failed append changed the ledger: %+v", report)
+	}
+}
+
+func TestAppendBatchBuildsOneVerifiedChain(t *testing.T) {
+	store, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	events := make([]Event, 0, 100)
+	for index := 0; index < 100; index++ {
+		eventID, err := NewEventID(now.Add(time.Duration(index) * time.Millisecond))
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload := InlinePayload("utf-8", "text/plain", "synthetic batch record")
+		events = append(events, Event{
+			SchemaVersion: SchemaVersion,
+			EventID:       eventID,
+			Kind:          KindSystemEvent,
+			ObservedAt:    now,
+			RecordedAt:    now,
+			Source: Source{
+				Agent: AgentCodex, Adapter: "test", AdapterVersion: "test",
+				DeviceID: "device-a", ThreadID: "thread-a",
+			},
+			Payload:      &payload,
+			Completeness: Completeness{Status: CompletenessComplete},
+			Privacy:      Privacy{Classification: "local_only"},
+		})
+	}
+	records, err := store.AppendBatch(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != len(events) {
+		t.Fatalf("appended %d records, want %d", len(records), len(events))
+	}
+	report := store.Verify()
+	if len(report.Issues) != 0 || report.RecordsChecked != len(events) {
+		t.Fatalf("unexpected verification report: %+v", report)
 	}
 }

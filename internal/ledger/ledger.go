@@ -22,11 +22,21 @@ const (
 )
 
 type Store struct {
-	root string
+	root     string
+	deviceID string
+}
+
+type Appender struct {
+	store    *Store
+	file     *os.File
+	previous string
+	failed   bool
+	closed   bool
 }
 
 type storeManifest struct {
 	SchemaVersion string    `json:"schema_version"`
+	DeviceID      string    `json:"device_id"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -50,12 +60,17 @@ func Init(root string) (*Store, error) {
 	}
 
 	manifestPath := filepath.Join(absolute, "store.json")
+	deviceID, err := newDeviceID()
+	if err != nil {
+		return nil, err
+	}
 	file, err := os.OpenFile(manifestPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err == nil {
 		encoder := json.NewEncoder(file)
 		encoder.SetIndent("", "  ")
 		writeErr := encoder.Encode(storeManifest{
 			SchemaVersion: storeSchema,
+			DeviceID:      deviceID,
 			CreatedAt:     time.Now().UTC(),
 		})
 		syncErr := file.Sync()
@@ -96,6 +111,10 @@ func (s *Store) Root() string {
 	return s.root
 }
 
+func (s *Store) DeviceID() string {
+	return s.deviceID
+}
+
 func (s *Store) validateManifest() error {
 	data, err := os.ReadFile(filepath.Join(s.root, "store.json"))
 	if err != nil {
@@ -108,7 +127,19 @@ func (s *Store) validateManifest() error {
 	if manifest.SchemaVersion != storeSchema {
 		return fmt.Errorf("unsupported store schema %q", manifest.SchemaVersion)
 	}
+	if strings.TrimSpace(manifest.DeviceID) == "" {
+		return errors.New("store manifest has no device_id")
+	}
+	s.deviceID = manifest.DeviceID
 	return nil
+}
+
+func newDeviceID() (string, error) {
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", fmt.Errorf("generate device id: %w", err)
+	}
+	return "device-" + hex.EncodeToString(random[:]), nil
 }
 
 func NewEventID(now time.Time) (string, error) {
@@ -180,49 +211,122 @@ func (s *Store) PutBlob(reader io.Reader) (BlobRef, error) {
 	return reference, nil
 }
 
+func (s *Store) OpenBlob(reference BlobRef) (*os.File, error) {
+	expected := expectedBlobRelativePath(reference.SHA256)
+	if reference.RelativePath != expected {
+		return nil, fmt.Errorf("unsafe blob path %q; expected %q", reference.RelativePath, expected)
+	}
+	file, err := os.Open(filepath.Join(s.root, filepath.FromSlash(reference.RelativePath)))
+	if err != nil {
+		return nil, fmt.Errorf("open blob: %w", err)
+	}
+	return file, nil
+}
+
 func (s *Store) Append(event Event) (Record, error) {
-	if err := validateEvent(event); err != nil {
+	records, err := s.AppendBatch([]Event{event})
+	if err != nil {
 		return Record{}, err
 	}
-	if event.Payload != nil && event.Payload.Blob != nil {
-		if issue := s.verifyBlob(*event.Payload.Blob); issue != "" {
-			return Record{}, errors.New(issue)
-		}
+	return records[0], nil
+}
+
+func (s *Store) AppendBatch(events []Event) ([]Record, error) {
+	appender, err := s.NewAppender()
+	if err != nil {
+		return nil, err
 	}
+	records, appendErr := appender.AppendBatch(events)
+	closeErr := appender.Close()
+	if appendErr != nil {
+		return nil, appendErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	return records, nil
+}
+
+func (s *Store) NewAppender() (*Appender, error) {
 	path := filepath.Join(s.root, filepath.FromSlash(eventsPath))
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return Record{}, fmt.Errorf("create ledger directory: %w", err)
+		return nil, fmt.Errorf("create ledger directory: %w", err)
 	}
 	previous, err := lastRecordHash(path)
 	if err != nil {
-		return Record{}, err
+		return nil, err
 	}
-	record, err := makeRecord(event, previous)
-	if err != nil {
-		return Record{}, err
-	}
-	line, err := json.Marshal(record)
-	if err != nil {
-		return Record{}, fmt.Errorf("encode record: %w", err)
-	}
-	line = append(line, '\n')
-
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
-		return Record{}, fmt.Errorf("open ledger: %w", err)
+		return nil, fmt.Errorf("open ledger: %w", err)
 	}
-	if _, err := file.Write(line); err != nil {
-		_ = file.Close()
-		return Record{}, fmt.Errorf("append ledger: %w", err)
+	return &Appender{store: s, file: file, previous: previous}, nil
+}
+
+func (a *Appender) AppendBatch(events []Event) ([]Record, error) {
+	if a == nil || a.file == nil || a.closed {
+		return nil, errors.New("ledger appender is closed")
 	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return Record{}, fmt.Errorf("sync ledger: %w", err)
+	if a.failed {
+		return nil, errors.New("ledger appender is unusable after a failed write")
 	}
-	if err := file.Close(); err != nil {
-		return Record{}, fmt.Errorf("close ledger: %w", err)
+	if len(events) == 0 {
+		return []Record{}, nil
 	}
-	return record, nil
+	for _, event := range events {
+		if err := validateEvent(event); err != nil {
+			return nil, err
+		}
+		if event.Payload != nil && event.Payload.Blob != nil {
+			if issue := a.store.verifyBlob(*event.Payload.Blob); issue != "" {
+				return nil, errors.New(issue)
+			}
+		}
+	}
+
+	previous := a.previous
+	records := make([]Record, 0, len(events))
+	var buffer bytes.Buffer
+	for _, event := range events {
+		record, err := makeRecord(event, previous)
+		if err != nil {
+			return nil, err
+		}
+		line, err := json.Marshal(record)
+		if err != nil {
+			return nil, fmt.Errorf("encode record: %w", err)
+		}
+		buffer.Write(line)
+		buffer.WriteByte('\n')
+		records = append(records, record)
+		previous = record.RecordHash
+	}
+	written, err := a.file.Write(buffer.Bytes())
+	if err != nil {
+		a.failed = true
+		return nil, fmt.Errorf("append ledger batch: %w", err)
+	}
+	if written != buffer.Len() {
+		a.failed = true
+		return nil, fmt.Errorf("append ledger batch: %w", io.ErrShortWrite)
+	}
+	if err := a.file.Sync(); err != nil {
+		a.failed = true
+		return nil, fmt.Errorf("sync ledger batch: %w", err)
+	}
+	a.previous = previous
+	return records, nil
+}
+
+func (a *Appender) Close() error {
+	if a == nil || a.closed {
+		return nil
+	}
+	a.closed = true
+	if err := a.file.Close(); err != nil {
+		return fmt.Errorf("close ledger appender: %w", err)
+	}
+	return nil
 }
 
 func validateEvent(event Event) error {
@@ -423,6 +527,58 @@ func (s *Store) Verify() VerificationReport {
 		}
 	}
 	return report
+}
+
+// VisitRecords verifies the event and hash chain before delivering each record.
+// Blob contents are not read; callers that need blob verification should run
+// Verify first.
+func (s *Store) VisitRecords(visitor func(Record) error) error {
+	path := filepath.Join(s.root, filepath.FromSlash(eventsPath))
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("open ledger: %w", err)
+	}
+	defer file.Close()
+
+	reader := bufio.NewReader(file)
+	previous := ""
+	lineNumber := 0
+	for {
+		line, readErr := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			lineNumber++
+			if line[len(line)-1] != '\n' {
+				return fmt.Errorf("ledger ends with partial record at line %d", lineNumber)
+			}
+			var record Record
+			if err := json.Unmarshal(bytes.TrimSpace(line), &record); err != nil {
+				return fmt.Errorf("decode ledger line %d: %w", lineNumber, err)
+			}
+			if err := validateEvent(record.Event); err != nil {
+				return fmt.Errorf("validate ledger line %d: %w", lineNumber, err)
+			}
+			expected, err := makeRecord(record.Event, previous)
+			if err != nil {
+				return fmt.Errorf("hash ledger line %d: %w", lineNumber, err)
+			}
+			if record.PreviousRecordHash != previous || record.RecordHash != expected.RecordHash {
+				return fmt.Errorf("ledger integrity failure at line %d", lineNumber)
+			}
+			if err := visitor(record); err != nil {
+				return fmt.Errorf("visit ledger line %d: %w", lineNumber, err)
+			}
+			previous = record.RecordHash
+		}
+		if errors.Is(readErr, io.EOF) {
+			return nil
+		}
+		if readErr != nil {
+			return fmt.Errorf("read ledger: %w", readErr)
+		}
+	}
 }
 
 func (s *Store) verifyBlob(reference BlobRef) string {

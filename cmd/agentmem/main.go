@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -60,11 +61,36 @@ func run(args []string) error {
 			return errors.New("evidence verification failed")
 		}
 		return nil
+	case "import":
+		if len(args) < 2 || args[1] != "codex" {
+			return errors.New("usage: agentmem import codex --root <local-evidence-directory> --path <rollout-file-or-directory>")
+		}
+		flags := flag.NewFlagSet("import codex", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		path := flags.String("path", "", "Codex rollout file or directory (required)")
+		full := flags.Bool("full-reconcile", false, "re-read all source bytes and append only changed events")
+		if err := flags.Parse(args[2:]); err != nil {
+			return err
+		}
+		if *root == "" || *path == "" {
+			return errors.New("import codex requires --root and --path")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, err := codex.ImportPath(store, *path, codex.Options{FullReconcile: *full})
+		if err != nil {
+			return err
+		}
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(result)
 	default:
 		return usageError()
 	}
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor> --root <local-evidence-directory>")
+	return errors.New("usage: agentmem <init|doctor|import codex> [options]")
 }
