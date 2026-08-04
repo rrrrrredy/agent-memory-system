@@ -51,6 +51,7 @@ canonical data and is never merged through Git.
 - `internal/ledger`: append-only evidence storage and integrity verification
 - `internal/review`: append-only candidate review and optimistic state checks
 - `internal/promotion`: redacted promoted revisions, supersession, and revocation
+- `internal/portable`: private-Git-safe projection and semantic conflict checks
 - `internal/secretscan`: deterministic, non-echoing sensitive-content detection
 - `internal/ruleapproval`: separate revision-, surface-, and target-bound rule authorization
 - `schemas`: versioned interchange contracts
@@ -84,6 +85,9 @@ go run ./cmd/agentmem promote verify --root <local-data-directory>
 go run ./cmd/agentmem rule-approval apply --root <local-data-directory> --file <rule-approval-request.json>
 go run ./cmd/agentmem rule-approval status --root <local-data-directory> --memory <memory-id> --revision <revision-id> --surface <surface> --target <target>
 go run ./cmd/agentmem rule-approval verify --root <local-data-directory>
+go run ./cmd/agentmem portable init --repo <private-memory-directory>
+go run ./cmd/agentmem portable export --root <local-data-directory> --repo <private-memory-directory>
+go run ./cmd/agentmem portable verify --repo <private-memory-directory>
 go run ./cmd/agentmem doctor --root <local-data-directory>
 ```
 
@@ -140,6 +144,12 @@ Promotion never authorizes changes to `AGENTS.md`, Skills, hooks, plugins, or
 global rules. `rule-approval apply` records that decision separately for one
 exact memory revision, surface, and logical target, without editing the target
 itself.
+
+`portable export` builds a separate allowlisted Markdown projection. It keeps
+local proof hashes, byte ranges, device and approver metadata, reasons, paths,
+and raw evidence out of Git. Immutable parent-linked files expose forks and
+semantic conflicts instead of resolving them with last-write-wins. See
+[the portable memory repository](docs/portable-memory.md).
 
 ## Safety
 

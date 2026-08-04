@@ -1,0 +1,268 @@
+package portable
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"sort"
+	"strings"
+
+	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
+	"github.com/rrrrrredy/agent-memory-system/internal/promotion"
+)
+
+type exportLock struct {
+	path string
+}
+
+func Export(store *ledger.Store, repositoryRoot string, options ExportOptions) (ExportResult, error) {
+	result := ExportResult{
+		SchemaVersion: ExportResultSchemaVersion, FilesWritten: []string{}, Privacy: PortablePrivacy,
+	}
+	if store == nil {
+		return result, errors.New("store is required")
+	}
+	if err := ensureSeparateRoots(store.Root(), repositoryRoot); err != nil {
+		return result, err
+	}
+	preflight, _ := loadRepository(repositoryRoot)
+	if len(preflight.Issues) != 0 {
+		return result, fmt.Errorf("portable repository verification failed: %s", preflight.Issues[0].Message)
+	}
+	lock, err := acquireExportLock(repositoryRoot)
+	if err != nil {
+		return result, err
+	}
+	defer func() { _ = lock.release() }()
+	report, existing := loadRepository(repositoryRoot)
+	if len(report.Issues) != 0 {
+		return result, fmt.Errorf("portable repository verification failed: %s", report.Issues[0].Message)
+	}
+	histories, err := promotion.ListHistories(store)
+	if err != nil {
+		return result, err
+	}
+	selected, err := selectHistories(histories, options.MemoryIDs)
+	if err != nil {
+		return result, err
+	}
+	result.MemoriesSelected = len(selected)
+	projected := []Revision{}
+	for _, history := range selected {
+		if len(history.Revisions) == 0 {
+			return result, fmt.Errorf("promotion history %s is empty", history.MemoryID)
+		}
+		current := history.Revisions[len(history.Revisions)-1]
+		if current.Status == promotion.StatusActive {
+			status, err := promotion.GetStatus(store, history.MemoryID)
+			if err != nil {
+				return result, err
+			}
+			if status.CurrentRevisionID != current.RevisionID || !status.ExportEligible {
+				return result, fmt.Errorf("active memory %s is not eligible for portable export", history.MemoryID)
+			}
+		}
+		revisions, err := projectHistory(history)
+		if err != nil {
+			return result, err
+		}
+		projected = append(projected, revisions...)
+	}
+	result.RevisionsProjected = len(projected)
+	combined := make(map[string]Revision, len(existing.revisions)+len(projected))
+	for revisionID, revision := range existing.revisions {
+		combined[revisionID] = revision
+	}
+	planned := []Revision{}
+	for _, revision := range projected {
+		if current, exists := combined[revision.RevisionID]; exists {
+			if !reflect.DeepEqual(current, revision) {
+				return result, fmt.Errorf("portable revision %s already exists with different content", revision.RevisionID)
+			}
+			result.RevisionsUnchanged++
+			continue
+		}
+		combined[revision.RevisionID] = revision
+		planned = append(planned, revision)
+	}
+	combinedReport := VerificationReport{
+		SchemaVersion: VerificationSchemaVersion, Issues: []VerificationIssue{}, Privacy: PortablePrivacy,
+		RevisionsChecked: len(combined),
+	}
+	combinedState := &repositoryState{revisions: combined, heads: map[string]Revision{}}
+	validateRepositoryState(&combinedReport, combinedState)
+	combinedReport = finalizeReport(combinedReport)
+	if len(combinedReport.Issues) != 0 {
+		return result, fmt.Errorf("portable export would create a conflict: %s", combinedReport.Issues[0].Message)
+	}
+	for _, revision := range planned {
+		data, err := RenderRevision(revision)
+		if err != nil {
+			return result, err
+		}
+		relative := revisionRelativePath(revision)
+		path := filepath.Join(repositoryRoot, relative)
+		if err := writeFileAtomic(path, data); err != nil {
+			return result, err
+		}
+		result.FilesWritten = append(result.FilesWritten, filepath.ToSlash(relative))
+		result.RevisionsWritten++
+	}
+	final := VerifyRepository(repositoryRoot)
+	if len(final.Issues) != 0 {
+		return result, fmt.Errorf("portable repository failed verification after export: %s", final.Issues[0].Message)
+	}
+	if err := lock.release(); err != nil {
+		return result, fmt.Errorf("portable export completed but lock cleanup failed: %w", err)
+	}
+	return result, nil
+}
+
+func projectHistory(history promotion.History) ([]Revision, error) {
+	localToPortable := map[string]string{}
+	result := make([]Revision, 0, len(history.Revisions))
+	for _, local := range history.Revisions {
+		parent := ""
+		if local.ParentRevisionID != "" {
+			var exists bool
+			parent, exists = localToPortable[local.ParentRevisionID]
+			if !exists {
+				return nil, fmt.Errorf("promotion history %s has an unavailable parent", history.MemoryID)
+			}
+		}
+		revision := Revision{
+			MemoryID: history.MemoryID, ParentRevisionID: parent,
+			Kind: local.Kind, ScopeKind: local.Scope.Kind, ScopeValue: local.Scope.Value,
+			RequiresExplicitRuleChangeApproval: local.RequiresExplicitRuleChangeApproval,
+		}
+		switch local.Action {
+		case promotion.ActionPromote:
+			revision.Action, revision.Status = ActionPromote, StatusActive
+		case promotion.ActionSupersede:
+			revision.Action, revision.Status = ActionSupersede, StatusActive
+		case promotion.ActionRevoke:
+			revision.Action, revision.Status = ActionRevoke, StatusRevoked
+		default:
+			return nil, fmt.Errorf("promotion history %s contains an unsupported action", history.MemoryID)
+		}
+		if revision.Status == StatusActive {
+			if local.Source == nil {
+				return nil, fmt.Errorf("promotion history %s has an active revision without source proof", history.MemoryID)
+			}
+			revision.Text = local.Text
+			revision.EvidenceBasis = append(revision.EvidenceBasis, local.Source.ReviewBasis...)
+		}
+		projected, err := finalizeRevision(revision)
+		if err != nil {
+			return nil, fmt.Errorf("project promotion revision %s: %w", local.RevisionID, err)
+		}
+		if projected.MemoryID != local.MemoryID {
+			return nil, fmt.Errorf("promotion history %s changed memory identity during projection", history.MemoryID)
+		}
+		localToPortable[local.RevisionID] = projected.RevisionID
+		result = append(result, projected)
+	}
+	return result, nil
+}
+
+func selectHistories(histories []promotion.History, requested []string) ([]promotion.History, error) {
+	if len(requested) == 0 {
+		return histories, nil
+	}
+	wanted := map[string]struct{}{}
+	for _, memoryID := range requested {
+		if !validPrefixedHash(memoryID, "memory-") {
+			return nil, fmt.Errorf("invalid memory id %q", memoryID)
+		}
+		if _, duplicate := wanted[memoryID]; duplicate {
+			return nil, fmt.Errorf("memory id %q was requested more than once", memoryID)
+		}
+		wanted[memoryID] = struct{}{}
+	}
+	result := make([]promotion.History, 0, len(wanted))
+	for _, history := range histories {
+		if _, exists := wanted[history.MemoryID]; exists {
+			result = append(result, history)
+			delete(wanted, history.MemoryID)
+		}
+	}
+	if len(wanted) != 0 {
+		missing := make([]string, 0, len(wanted))
+		for memoryID := range wanted {
+			missing = append(missing, memoryID)
+		}
+		sort.Strings(missing)
+		return nil, fmt.Errorf("promoted memories were not found: %s", strings.Join(missing, ", "))
+	}
+	return result, nil
+}
+
+func ensureSeparateRoots(evidenceRoot, repositoryRoot string) error {
+	if strings.TrimSpace(repositoryRoot) == "" {
+		return errors.New("portable repository root is required")
+	}
+	evidence, err := filepath.EvalSymlinks(evidenceRoot)
+	if err != nil {
+		return fmt.Errorf("resolve evidence root: %w", err)
+	}
+	repository, err := filepath.EvalSymlinks(repositoryRoot)
+	if err != nil {
+		return fmt.Errorf("resolve portable repository root: %w", err)
+	}
+	if pathsOverlap(evidence, repository) {
+		return errors.New("portable repository and local evidence root must be physically separate")
+	}
+	return nil
+}
+
+func pathsOverlap(left, right string) bool {
+	contains := func(parent, child string) bool {
+		relative, err := filepath.Rel(parent, child)
+		return err == nil && (relative == "." || relative != ".." &&
+			!strings.HasPrefix(relative, ".."+string(filepath.Separator)))
+	}
+	return contains(left, right) || contains(right, left)
+}
+
+func acquireExportLock(repositoryRoot string) (*exportLock, error) {
+	directory := filepath.Join(repositoryRoot, ".agentmem")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return nil, fmt.Errorf("create portable export state directory: %w", err)
+	}
+	path := filepath.Join(directory, "export.lock")
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		return nil, errors.New("portable repository export is locked; inspect the lock before explicit recovery")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("acquire portable export lock: %w", err)
+	}
+	if _, err := fmt.Fprintf(file, "pid=%d\n", os.Getpid()); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return nil, fmt.Errorf("write portable export lock: %w", err)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return nil, fmt.Errorf("sync portable export lock: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return nil, fmt.Errorf("close portable export lock: %w", err)
+	}
+	return &exportLock{path: path}, nil
+}
+
+func (lock *exportLock) release() error {
+	if lock == nil || lock.path == "" {
+		return nil
+	}
+	if err := os.Remove(lock.path); err != nil {
+		return err
+	}
+	lock.path = ""
+	return nil
+}

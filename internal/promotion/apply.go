@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -175,6 +176,46 @@ func GetRevision(store *ledger.Store, memoryID, revisionIDValue string) (Revisio
 		}
 	}
 	return Revision{}, errors.New("promoted memory revision was not found")
+}
+
+func ListHistories(store *ledger.Store) ([]History, error) {
+	if store == nil {
+		return nil, errors.New("store is required")
+	}
+	state, err := replayVerified(store)
+	if err != nil {
+		return nil, err
+	}
+	byMemory := make(map[string][]Revision, len(state.current))
+	for _, record := range state.history {
+		revision := cloneRevision(record.Event.Revision)
+		byMemory[revision.MemoryID] = append(byMemory[revision.MemoryID], revision)
+	}
+	memoryIDs := make([]string, 0, len(byMemory))
+	for memoryID := range byMemory {
+		memoryIDs = append(memoryIDs, memoryID)
+	}
+	sort.Strings(memoryIDs)
+	result := make([]History, 0, len(memoryIDs))
+	for _, memoryID := range memoryIDs {
+		result = append(result, History{MemoryID: memoryID, Revisions: byMemory[memoryID]})
+	}
+	return result, nil
+}
+
+func cloneRevision(revision Revision) Revision {
+	if revision.Source != nil {
+		source := *revision.Source
+		source.ReviewBasis = append([]review.Basis(nil), source.ReviewBasis...)
+		revision.Source = &source
+	}
+	if revision.Scan != nil {
+		scan := *revision.Scan
+		scan.FindingIDs = append([]string(nil), scan.FindingIDs...)
+		scan.Redactions = append([]secretscan.Redaction(nil), scan.Redactions...)
+		revision.Scan = &scan
+	}
+	return revision
 }
 
 func RevisionWasCurrentAt(

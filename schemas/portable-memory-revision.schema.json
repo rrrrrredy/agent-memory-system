@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/portable-memory-revision.schema.json",
+  "title": "Agent Memory System portable memory revision front matter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "memory_id",
+    "revision_id",
+    "action",
+    "status",
+    "kind",
+    "scope_kind",
+    "scope_value",
+    "requires_explicit_rule_change_approval",
+    "rule_change_authorization",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "portable-memory-revision/v1alpha1"},
+    "memory_id": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"},
+    "revision_id": {"type": "string", "pattern": "^portable-revision-[a-f0-9]{64}$"},
+    "parent_revision_id": {
+      "type": "string",
+      "pattern": "^portable-revision-[a-f0-9]{64}$"
+    },
+    "action": {"enum": ["promote", "supersede", "revoke"]},
+    "status": {"enum": ["active", "revoked"]},
+    "kind": {"enum": ["constraint", "correction", "directive"]},
+    "scope_kind": {"enum": ["global", "agent", "repository", "project", "task"]},
+    "scope_value": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "evidence_basis": {
+      "type": "array",
+      "items": {"$ref": "candidate-review-request.schema.json#/$defs/basis"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "text": {"type": "string", "minLength": 1},
+    "text_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "requires_explicit_rule_change_approval": {"type": "boolean"},
+    "rule_change_authorization": {"const": "not_granted"},
+    "privacy": {"const": "private_git"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"scope_kind": {"const": "global"}}, "required": ["scope_kind"]},
+      "then": {"properties": {"scope_value": {"const": "*"}}}
+    },
+    {
+      "if": {
+        "properties": {"action": {"enum": ["promote", "supersede"]}},
+        "required": ["action"]
+      },
+      "then": {
+        "required": ["evidence_basis", "text", "text_sha256"],
+        "properties": {"status": {"const": "active"}}
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "promote"}}, "required": ["action"]},
+      "then": {"not": {"required": ["parent_revision_id"]}}
+    },
+    {
+      "if": {"properties": {"action": {"const": "supersede"}}, "required": ["action"]},
+      "then": {"required": ["parent_revision_id"]}
+    },
+    {
+      "if": {"properties": {"action": {"const": "revoke"}}, "required": ["action"]},
+      "then": {
+        "required": ["parent_revision_id"],
+        "properties": {"status": {"const": "revoked"}},
+        "not": {
+          "anyOf": [
+            {"required": ["evidence_basis"]},
+            {"required": ["text"]},
+            {"required": ["text_sha256"]}
+          ]
+        }
+      }
+    }
+  ]
+}

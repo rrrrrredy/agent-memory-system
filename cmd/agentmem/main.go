@@ -15,6 +15,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
+	"github.com/rrrrrredy/agent-memory-system/internal/portable"
 	"github.com/rrrrrredy/agent-memory-system/internal/promotion"
 	"github.com/rrrrrredy/agent-memory-system/internal/review"
 	"github.com/rrrrrredy/agent-memory-system/internal/ruleapproval"
@@ -100,9 +101,95 @@ func run(args []string) error {
 			return ruleApprovalUsageError()
 		}
 		return runRuleApproval(args[1:])
+	case "portable":
+		if len(args) < 2 {
+			return portableUsageError()
+		}
+		return runPortable(args[1:])
 	default:
 		return usageError()
 	}
+}
+
+func runPortable(args []string) error {
+	switch args[0] {
+	case "init":
+		return runPortableInit(args[1:])
+	case "export":
+		return runPortableExport(args[1:])
+	case "verify":
+		return runPortableVerify(args[1:])
+	default:
+		return portableUsageError()
+	}
+}
+
+func runPortableInit(args []string) error {
+	flags := flag.NewFlagSet("portable init", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" {
+		return errors.New("portable init requires --repo")
+	}
+	if err := portable.InitRepository(*repository); err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"schema_version": "portable-memory-init-result/v1alpha1",
+		"initialized":    true,
+		"privacy":        portable.PortablePrivacy,
+	})
+}
+
+func runPortableExport(args []string) error {
+	flags := flag.NewFlagSet("portable export", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	memoryID := flags.String("memory", "", "optional promoted memory id")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *repository == "" {
+		return errors.New("portable export requires --root and --repo")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	options := portable.ExportOptions{}
+	if *memoryID != "" {
+		options.MemoryIDs = []string{*memoryID}
+	}
+	result, err := portable.Export(store, *repository, options)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
+func runPortableVerify(args []string) error {
+	flags := flag.NewFlagSet("portable verify", flag.ContinueOnError)
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *repository == "" {
+		return errors.New("portable verify requires --repo")
+	}
+	report := portable.VerifyRepository(*repository)
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(report); err != nil {
+		return err
+	}
+	if len(report.Issues) != 0 {
+		return errors.New("portable memory repository verification failed")
+	}
+	return nil
 }
 
 func runPromote(args []string) error {
@@ -569,7 +656,7 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor|import|capture|derive|review|promote|rule-approval> [options]")
+	return errors.New("usage: agentmem <init|doctor|import|capture|derive|review|promote|rule-approval|portable> [options]")
 }
 
 func reviewUsageError() error {
@@ -582,6 +669,10 @@ func promoteUsageError() error {
 
 func ruleApprovalUsageError() error {
 	return errors.New("usage: agentmem rule-approval <apply|status|verify> [options]")
+}
+
+func portableUsageError() error {
+	return errors.New("usage: agentmem portable <init|export|verify> [options]")
 }
 
 func deriveUsageError() error {
