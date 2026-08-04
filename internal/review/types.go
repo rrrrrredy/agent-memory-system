@@ -1,6 +1,10 @@
 package review
 
-import "time"
+import (
+	"time"
+
+	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
+)
 
 const (
 	RequestSchemaVersion = "candidate-review-request/v1alpha1"
@@ -8,6 +12,7 @@ const (
 	RecordSchemaVersion  = "candidate-review-record/v1alpha1"
 	ApplySchemaVersion   = "candidate-review-apply-result/v1alpha1"
 	StatusSchemaVersion  = "candidate-review-status/v1alpha1"
+	ProofSchemaVersion   = "candidate-validation-proof/v1alpha1"
 )
 
 type Status string
@@ -134,4 +139,26 @@ type VerificationReport struct {
 	RecordsChecked   int      `json:"records_checked"`
 	LastRecordSHA256 string   `json:"last_record_sha256,omitempty"`
 	Issues           []string `json:"issues"`
+}
+
+type ValidationProof struct {
+	SchemaVersion             string    `json:"schema_version"`
+	SourceCandidateGeneration string    `json:"source_candidate_generation"`
+	SourceCandidatesSHA256    string    `json:"source_candidates_sha256"`
+	CandidateID               string    `json:"candidate_id"`
+	CandidateContentSHA256    string    `json:"candidate_content_sha256"`
+	ReviewEventID             string    `json:"review_event_id"`
+	ReviewRecordSHA256        string    `json:"review_record_sha256"`
+	ReviewSequence            int64     `json:"review_sequence"`
+	ReviewedAt                time.Time `json:"reviewed_at"`
+	Reviewer                  Reviewer  `json:"reviewer"`
+	Scope                     Scope     `json:"scope"`
+	Basis                     []Basis   `json:"basis"`
+	EvidenceEventIDs          []string  `json:"evidence_event_ids,omitempty"`
+	Privacy                   string    `json:"privacy"`
+}
+
+type ValidatedCandidate struct {
+	Candidate candidates.Candidate
+	Proof     ValidationProof
 }

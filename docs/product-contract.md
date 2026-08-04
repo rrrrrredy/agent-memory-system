@@ -72,6 +72,15 @@ A review transition MUST bind the candidate content hash, expected prior state,
 human reviewer attestation, confirmed scope, and evidence basis in an
 append-only record. Validation alone does not create promoted memory.
 
+A promotion transition MUST bind the exact current validation record,
+candidate content and semantic identity, confirmed scope, deterministic scan,
+reviewed redacted-text hash, and expected parent revision. Redaction may remove
+detected sensitive ranges but may not serve as an unreviewed semantic rewrite.
+The candidate generation MUST cover the current verified evidence-ledger
+prefix at promotion time. If new evidence arrives or the source validation
+later ceases to be current, the active memory MUST fail closed for export and
+retrieval until it is re-derived, re-reviewed, and superseded or revoked.
+
 Compaction continuity analysis MUST distinguish confirmed correction evidence
 from lexical omission risk and unavailable compacted representations. A missing
 phrase alone is not proof that the task goal drifted.
@@ -90,6 +99,9 @@ phrase alone is not proof that the task goal drifted.
   quarantined for review.
 - Updating `AGENTS.md`, Skills, hooks, plugins, or global rules always requires
   explicit user approval, even when the underlying memory is promoted.
+- Rule-change approval MUST be a separate append-only event bound to one exact
+  promoted revision, one exact rule surface, and one exact logical target.
+  Promotion itself never grants that authorization.
 
 ## Storage and synchronization
 

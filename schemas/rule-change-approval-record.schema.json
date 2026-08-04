@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/rule-change-approval-record.schema.json",
+  "title": "Agent Memory System rule-change approval record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sequence",
+    "event",
+    "previous_record_sha256",
+    "record_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "rule-change-approval-record/v1alpha1"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "event": {"$ref": "rule-change-approval-event.schema.json"},
+    "previous_record_sha256": {
+      "type": "string",
+      "pattern": "^$|^[a-f0-9]{64}$"
+    },
+    "record_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

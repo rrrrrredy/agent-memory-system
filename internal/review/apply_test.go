@@ -76,6 +76,53 @@ func TestApplyReviewTransitionsAndOptimisticState(t *testing.T) {
 	}
 }
 
+func TestValidationProofBindsCurrentAndHistoricalReviewRecords(t *testing.T) {
+	fixture := newReviewFixture(t)
+	remember := fixture.byText["Please remember that reports stay local"]
+	validated, err := Apply(
+		fixture.store, fixture.generation,
+		validationRequest(remember, BasisExplicitRemember, nil),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := ResolveCurrentValidation(
+		fixture.store, fixture.generation, remember.CandidateID, remember.ContentSHA256,
+		validated.RecordSHA256,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Candidate.CandidateID != remember.CandidateID ||
+		resolved.Proof.ReviewRecordSHA256 != validated.RecordSHA256 ||
+		resolved.Proof.Scope.Kind != ScopeGlobal || resolved.Proof.Privacy != "local_only" {
+		t.Fatalf("unexpected validation proof: %+v", resolved)
+	}
+
+	if _, err := Apply(fixture.store, fixture.generation, Request{
+		SchemaVersion: RequestSchemaVersion, Reviewer: humanReviewer(),
+		Transitions: []TransitionRequest{{
+			CandidateID: remember.CandidateID, CandidateContentSHA256: remember.ContentSHA256,
+			ExpectedStatus: StatusValidated, Action: ActionReject, Reason: "The memory is obsolete.",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveCurrentValidation(
+		fixture.store, fixture.generation, remember.CandidateID, remember.ContentSHA256,
+		validated.RecordSHA256,
+	); err == nil || !strings.Contains(err.Error(), "not the current") {
+		t.Fatalf("obsolete validation was accepted as current: %v", err)
+	}
+	historical, err := VerifyValidationRecord(
+		fixture.store, fixture.generation, remember.CandidateID, remember.ContentSHA256,
+		validated.RecordSHA256,
+	)
+	if err != nil || historical.Proof.ReviewEventID != validated.EventID {
+		t.Fatalf("historical validation proof was not reproducible: %+v, %v", historical, err)
+	}
+}
+
 func TestReviewStateDoesNotSilentlyCarryAcrossCandidateGenerations(t *testing.T) {
 	fixture := newReviewFixture(t)
 	remember := fixture.byText["Please remember that reports stay local"]

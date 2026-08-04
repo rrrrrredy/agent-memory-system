@@ -20,6 +20,17 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "review apply flags", args: []string{"review", "apply"}, message: "requires --root, --candidates, and --file"},
 		{name: "review status flags", args: []string{"review", "status"}, message: "requires --root, --candidates, and --candidate"},
 		{name: "review verify flags", args: []string{"review", "verify"}, message: "requires --root"},
+		{name: "missing promote subcommand", args: []string{"promote"}, message: "promote <scan|apply|status|verify>"},
+		{name: "unknown promote subcommand", args: []string{"promote", "unknown"}, message: "promote <scan|apply|status|verify>"},
+		{name: "promote scan flags", args: []string{"promote", "scan"}, message: "requires --root, --candidates, and --candidate"},
+		{name: "promote apply flags", args: []string{"promote", "apply"}, message: "requires --root and --file"},
+		{name: "promote status flags", args: []string{"promote", "status"}, message: "requires --root and --memory"},
+		{name: "promote verify flags", args: []string{"promote", "verify"}, message: "requires --root"},
+		{name: "missing rule approval subcommand", args: []string{"rule-approval"}, message: "rule-approval <apply|status|verify>"},
+		{name: "unknown rule approval subcommand", args: []string{"rule-approval", "unknown"}, message: "rule-approval <apply|status|verify>"},
+		{name: "rule approval apply flags", args: []string{"rule-approval", "apply"}, message: "requires --root and --file"},
+		{name: "rule approval status flags", args: []string{"rule-approval", "status"}, message: "requires --root, --memory, --revision, --surface, and --target"},
+		{name: "rule approval verify flags", args: []string{"rule-approval", "verify"}, message: "requires --root"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

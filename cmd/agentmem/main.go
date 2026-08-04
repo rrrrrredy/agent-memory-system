@@ -15,7 +15,9 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
+	"github.com/rrrrrredy/agent-memory-system/internal/promotion"
 	"github.com/rrrrrredy/agent-memory-system/internal/review"
+	"github.com/rrrrrredy/agent-memory-system/internal/ruleapproval"
 )
 
 func main() {
@@ -88,9 +90,248 @@ func run(args []string) error {
 			return reviewUsageError()
 		}
 		return runReview(args[1:])
+	case "promote":
+		if len(args) < 2 {
+			return promoteUsageError()
+		}
+		return runPromote(args[1:])
+	case "rule-approval":
+		if len(args) < 2 {
+			return ruleApprovalUsageError()
+		}
+		return runRuleApproval(args[1:])
 	default:
 		return usageError()
 	}
+}
+
+func runPromote(args []string) error {
+	switch args[0] {
+	case "scan":
+		return runPromoteScan(args[1:])
+	case "apply":
+		return runPromoteApply(args[1:])
+	case "status":
+		return runPromoteStatus(args[1:])
+	case "verify":
+		return runPromoteVerify(args[1:])
+	default:
+		return promoteUsageError()
+	}
+}
+
+func runPromoteScan(args []string) error {
+	flags := flag.NewFlagSet("promote scan", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	candidateGeneration := flags.String("candidates", "", "candidate generation path or directory name (required)")
+	candidateID := flags.String("candidate", "", "candidate id (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *candidateGeneration == "" || *candidateID == "" {
+		return errors.New("promote scan requires --root, --candidates, and --candidate")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := promotion.ScanCandidate(store, *candidateGeneration, *candidateID)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
+func runPromoteApply(args []string) error {
+	flags := flag.NewFlagSet("promote apply", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	requestPath := flags.String("file", "", "promotion request JSON file, or - for stdin (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *requestPath == "" {
+		return errors.New("promote apply requires --root and --file")
+	}
+	reader := os.Stdin
+	var file *os.File
+	var err error
+	if *requestPath != "-" {
+		file, err = os.Open(*requestPath)
+		if err != nil {
+			return fmt.Errorf("open promotion request: %w", err)
+		}
+		defer file.Close()
+		reader = file
+	}
+	request, err := promotion.DecodeRequest(reader)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := promotion.Apply(store, request)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
+func runPromoteStatus(args []string) error {
+	flags := flag.NewFlagSet("promote status", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	memoryID := flags.String("memory", "", "promoted memory id (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *memoryID == "" {
+		return errors.New("promote status requires --root and --memory")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := promotion.GetStatus(store, *memoryID)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
+func runPromoteVerify(args []string) error {
+	flags := flag.NewFlagSet("promote verify", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" {
+		return errors.New("promote verify requires --root")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	report := promotion.Verify(store)
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(report); err != nil {
+		return err
+	}
+	if len(report.Issues) > 0 {
+		return errors.New("promoted memory verification failed")
+	}
+	return nil
+}
+
+func runRuleApproval(args []string) error {
+	switch args[0] {
+	case "apply":
+		return runRuleApprovalApply(args[1:])
+	case "status":
+		return runRuleApprovalStatus(args[1:])
+	case "verify":
+		return runRuleApprovalVerify(args[1:])
+	default:
+		return ruleApprovalUsageError()
+	}
+}
+
+func runRuleApprovalApply(args []string) error {
+	flags := flag.NewFlagSet("rule-approval apply", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	requestPath := flags.String("file", "", "rule approval request JSON file, or - for stdin (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *requestPath == "" {
+		return errors.New("rule-approval apply requires --root and --file")
+	}
+	reader := os.Stdin
+	var file *os.File
+	var err error
+	if *requestPath != "-" {
+		file, err = os.Open(*requestPath)
+		if err != nil {
+			return fmt.Errorf("open rule approval request: %w", err)
+		}
+		defer file.Close()
+		reader = file
+	}
+	request, err := ruleapproval.DecodeRequest(reader)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := ruleapproval.Apply(store, request)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
+func runRuleApprovalStatus(args []string) error {
+	flags := flag.NewFlagSet("rule-approval status", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	memoryID := flags.String("memory", "", "promoted memory id (required)")
+	revisionID := flags.String("revision", "", "promoted memory revision id (required)")
+	surface := flags.String("surface", "", "rule surface (required)")
+	target := flags.String("target", "", "exact rule target identifier (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *memoryID == "" || *revisionID == "" || *surface == "" || *target == "" {
+		return errors.New("rule-approval status requires --root, --memory, --revision, --surface, and --target")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := ruleapproval.GetStatus(
+		store, *memoryID, *revisionID, ruleapproval.Surface(*surface), *target,
+	)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
+}
+
+func runRuleApprovalVerify(args []string) error {
+	flags := flag.NewFlagSet("rule-approval verify", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" {
+		return errors.New("rule-approval verify requires --root")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	report := ruleapproval.Verify(store)
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(report); err != nil {
+		return err
+	}
+	if len(report.Issues) > 0 {
+		return errors.New("rule approval verification failed")
+	}
+	return nil
 }
 
 func runReview(args []string) error {
@@ -328,11 +569,19 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor|import|capture|derive|review> [options]")
+	return errors.New("usage: agentmem <init|doctor|import|capture|derive|review|promote|rule-approval> [options]")
 }
 
 func reviewUsageError() error {
 	return errors.New("usage: agentmem review <apply|status|verify> [options]")
+}
+
+func promoteUsageError() error {
+	return errors.New("usage: agentmem promote <scan|apply|status|verify> [options]")
+}
+
+func ruleApprovalUsageError() error {
+	return errors.New("usage: agentmem rule-approval <apply|status|verify> [options]")
 }
 
 func deriveUsageError() error {
