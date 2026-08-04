@@ -12,6 +12,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/adapters/claudecode"
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
 	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
+	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -75,9 +76,40 @@ func run(args []string) error {
 			return captureUsageError()
 		}
 		return runCapture(args[1:])
+	case "derive":
+		if len(args) < 2 {
+			return deriveUsageError()
+		}
+		return runDerive(args[1:])
 	default:
 		return usageError()
 	}
+}
+
+func runDerive(args []string) error {
+	if args[0] != "episodes" {
+		return deriveUsageError()
+	}
+	flags := flag.NewFlagSet("derive episodes", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	shards := flags.Int("shards", 64, "power-of-two work shard count (1-256)")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" {
+		return errors.New("derive episodes requires --root")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := episodes.Build(store, episodes.BuildOptions{ShardCount: *shards})
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
 }
 
 func runCapture(args []string) error {
@@ -154,7 +186,11 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <init|doctor|import|capture> [options]")
+	return errors.New("usage: agentmem <init|doctor|import|capture|derive> [options]")
+}
+
+func deriveUsageError() error {
+	return errors.New("usage: agentmem derive episodes --root <local-evidence-directory> [--shards 64]")
 }
 
 func captureUsageError() error {

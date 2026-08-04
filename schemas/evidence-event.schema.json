@@ -23,22 +23,7 @@
       "minLength": 1
     },
     "kind": {
-      "enum": [
-        "user_message",
-        "agent_message",
-        "reasoning",
-        "tool_call",
-        "tool_result",
-        "approval",
-        "file_change",
-        "attachment",
-        "subagent_event",
-        "compaction",
-        "system_event",
-        "source_snapshot",
-        "gap",
-        "unknown"
-      ]
+      "$ref": "#/$defs/event_kind"
     },
     "observed_at": {
       "type": "string",
@@ -89,6 +74,24 @@
     }
   ],
   "$defs": {
+    "event_kind": {
+      "enum": [
+        "user_message",
+        "agent_message",
+        "reasoning",
+        "tool_call",
+        "tool_result",
+        "approval",
+        "file_change",
+        "attachment",
+        "subagent_event",
+        "compaction",
+        "system_event",
+        "source_snapshot",
+        "gap",
+        "unknown"
+      ]
+    },
     "source": {
       "type": "object",
       "additionalProperties": false,
