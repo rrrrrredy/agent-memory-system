@@ -55,6 +55,12 @@ agentmem eval corpus baseline \
   --run <run-id> \
   --system-version <version> \
   --minimum-coverage 1
+
+agentmem eval corpus review-pack \
+  --root <local-evidence-directory> \
+  --corpus <corpus-id> \
+  --candidates <candidate-generation> \
+  --sample-per-stratum 20
 ```
 
 `--allow-incomplete` changes only the command exit policy. It does not hide,
@@ -64,6 +70,39 @@ repair, or downgrade corpus issues.
 legacy-index reference are derived from the verified manifest. The resulting
 case cannot replace those counts with user-supplied values and still pass
 evidence validation.
+
+### Local review packs
+
+`eval corpus review-pack` converts the frozen material into a bounded human
+review queue without treating old cards as memory. It requires a candidate
+generation that covers the current verified evidence-ledger prefix, then keeps
+only candidates and compaction checkpoints whose episodes belong to a rollout
+listed by the corpus. Unrelated tasks in the same evidence store are excluded.
+
+Candidate samples are stratified by explicit remember instructions, user
+corrections, stable repetition within the corpus, correction after compaction,
+semantic conflict, and untrusted single-task instructions. Compaction samples
+are stratified as drift evidence, at risk, preserved, or insufficient evidence.
+Selection uses a deterministic hash rank, so the same corpus, derivation, and
+sample limit produce the same pack.
+
+The pack binds the corpus content hash, candidate manifest and content hashes,
+episode content hash, and exact evidence-ledger prefix. It contains candidate
+text, corpus-overlapping observations, and referenced statements, so it is
+written only under `derived/evaluations/review-packs` in the local evidence
+root. The command
+prints metadata and the local path, not sample text. A pack is review material:
+it supplies no correctness label, attestation, validation, promotion, or Git
+export. Human judgments must still be recorded through the normal evidence and
+review protocols.
+
+Candidate projections omit observations from unrelated episodes while retaining
+the verified candidate content hash and global aggregate counts. A sampled
+compaction checkpoint records the complete check population but includes at
+most 20 deterministically selected checks and their statements, prioritizing
+the check status that explains the checkpoint classification. This keeps the
+review surface bounded without presenting the projection as the complete raw
+evidence.
 
 ## Evidence-bound cases
 
@@ -141,6 +180,8 @@ Legacy cards are test material, not trusted memory. A regression fixture may
 demonstrate a user correction, an unsupported assistant claim, an ambiguous
 correction, a deduplication failure, or compaction drift. It may produce a
 candidate or an expected rejection, but it cannot bypass review and promotion.
+Deterministic sampling prevents convenient hand-picking, while separate
+strata retain strong evidence, conflict cases, and negative controls.
 
 Continuous-learning claims require paired or longitudinal evidence. Capture
 coverage proves preservation, not usefulness. Retrieval volume proves neither

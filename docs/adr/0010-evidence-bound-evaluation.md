@@ -19,6 +19,16 @@ and normalized-event projection are reported separately because a parser gap
 does not erase a preserved source snapshot, and a parsed record does not prove
 complete byte capture.
 
+A deterministic local review pack samples only candidates and compaction
+checkpoints whose episodes overlap the frozen corpus. Separate strata cover
+strong user evidence, stable repetition, compaction correction, semantic
+conflict, untrusted negative controls, and the four reviewable continuity
+states. The pack binds corpus, candidate, episode, and ledger-prefix identities
+but carries no label and grants no review or promotion state.
+Candidate samples retain only corpus-overlapping observations. Compaction
+samples retain complete status counts and a bounded deterministic projection
+of checks, while exact event IDs continue to point to the local evidence source.
+
 Each evaluation case references immutable evidence. Directly measurable values
 are checked against source-snapshot, retrieval, injection, adoption, tool-result,
 or file-change events. Interpretive measurements require a separate local
@@ -46,6 +56,9 @@ attestations remain local-only and are anchored in the evidence ledger.
   delivery, adoption, and task outcome are distinct observations.
 - Passing empty samples was rejected because an absent denominator provides no
   evidence for a quality claim.
+- Sampling every candidate generation without a corpus-membership filter was
+  rejected because unrelated local tasks would contaminate a historical
+  regression baseline.
 
 ## Consequences
 

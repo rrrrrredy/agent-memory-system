@@ -714,6 +714,29 @@ func runEvaluationCorpus(args []string) error {
 			return errors.New("legacy corpus verification failed")
 		}
 		return nil
+	case "review-pack":
+		flags := flag.NewFlagSet("eval corpus review-pack", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		corpusID := flags.String("corpus", "", "frozen corpus id (required)")
+		generation := flags.String("candidates", "", "current candidate generation (required)")
+		samplePerStratum := flags.Int("sample-per-stratum", 20,
+			"deterministic samples retained for each review stratum")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *corpusID == "" || *generation == "" {
+			return errors.New("eval corpus review-pack requires --root, --corpus, and --candidates")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, err := evaluation.PrepareLegacyReviewPack(store, *corpusID, *generation,
+			evaluation.LegacyReviewPackOptions{SamplePerStratum: *samplePerStratum})
+		if err != nil {
+			return err
+		}
+		return encodeIndented(result)
 	default:
 		return evalUsageError()
 	}
@@ -1764,7 +1787,7 @@ func deriveUsageError() error {
 }
 
 func evalUsageError() error {
-	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|attest|run|verify> [options]")
+	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|attest|run|verify> [options]")
 }
 
 func captureUsageError() error {

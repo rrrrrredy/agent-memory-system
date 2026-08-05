@@ -114,6 +114,7 @@ go run ./cmd/agentmem serve mcp --root <local-data-directory> --repo <private-me
 go run ./cmd/agentmem eval corpus freeze --root <local-data-directory> --legacy-root <legacy-context-journal-directory> --allow-incomplete
 go run ./cmd/agentmem eval corpus verify --root <local-data-directory> --corpus <corpus-id>
 go run ./cmd/agentmem eval corpus baseline --root <local-data-directory> --corpus <corpus-id> --run <run-id> --system-version <version>
+go run ./cmd/agentmem eval corpus review-pack --root <local-data-directory> --corpus <corpus-id> --candidates <candidate-generation>
 go run ./cmd/agentmem eval attest --root <local-data-directory> --file <evaluation-attestation.json>
 go run ./cmd/agentmem eval run --root <local-data-directory> --file <evaluation-input.json> --repo <private-memory-directory> --enforce
 go run ./cmd/agentmem eval verify --root <local-data-directory> --suite <suite-id> --run <run-id>
@@ -232,6 +233,11 @@ parser projection gaps are measured separately. Interpretive quality labels
 must be recorded first as append-only case attestations, and a run cannot pass
 on empty samples or unresolved evidence. See
 [continuous-learning evaluation](docs/evaluation.md).
+
+`eval corpus review-pack` deterministically samples corpus-overlapping
+candidates and compaction checkpoints for human review. The pack stays under
+the local evidence root, binds the exact corpus and current derivation hashes,
+and never labels or promotes a candidate.
 
 `backup create` produces one authenticated age archive outside every Git
 worktree. It verifies the ledger before capture, rejects active writers and

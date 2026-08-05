@@ -3,6 +3,8 @@ package evaluation
 import (
 	"time"
 
+	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
+	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -15,6 +17,8 @@ const (
 	EvaluationVersion            = "learning-evaluation/v1alpha1"
 	EvaluationAttestationSchema  = "learning-evaluation-attestation/v1alpha1"
 	AttestationResultSchema      = "learning-evaluation-attestation-result/v1alpha1"
+	LegacyReviewPackSchema       = "legacy-regression-review-pack/v1alpha2"
+	LegacyReviewPackResultSchema = "legacy-regression-review-pack-result/v1alpha2"
 )
 
 type ArtifactRole string
@@ -107,6 +111,91 @@ type LegacyCaptureInputOptions struct {
 	SystemVersion   string
 	MinimumCoverage float64
 	Now             func() time.Time
+}
+
+type LegacyReviewPackOptions struct {
+	SamplePerStratum int
+}
+
+type LegacyReviewPack struct {
+	SchemaVersion           string                              `json:"schema_version"`
+	PackID                  string                              `json:"pack_id"`
+	CorpusID                string                              `json:"corpus_id"`
+	CorpusContentSHA256     string                              `json:"corpus_content_sha256"`
+	CandidateGeneration     string                              `json:"candidate_generation"`
+	CandidateManifestSHA256 string                              `json:"candidate_manifest_sha256"`
+	CandidatesSHA256        string                              `json:"candidates_sha256"`
+	EpisodeGeneration       string                              `json:"episode_generation"`
+	EpisodesSHA256          string                              `json:"episodes_sha256"`
+	SourceEvidencePrefix    candidates.EvidencePrefix           `json:"source_evidence_prefix"`
+	SamplePerStratum        int                                 `json:"sample_per_stratum"`
+	CorpusCounts            CorpusCounts                        `json:"corpus_counts"`
+	CandidatePopulation     map[string]int                      `json:"candidate_population"`
+	CompactionPopulation    map[string]int                      `json:"compaction_population"`
+	CandidateSamples        map[string][]CandidateReviewSample  `json:"candidate_samples"`
+	CompactionSamples       map[string][]CompactionReviewSample `json:"compaction_samples"`
+	Privacy                 string                              `json:"privacy"`
+}
+
+type CandidateReviewSample struct {
+	SelectionRankSHA256                string                       `json:"selection_rank_sha256"`
+	CandidateID                        string                       `json:"candidate_id"`
+	CandidateContentSHA256             string                       `json:"candidate_content_sha256"`
+	SemanticKeySHA256                  string                       `json:"semantic_key_sha256"`
+	Kind                               candidates.CandidateKind     `json:"kind"`
+	Text                               string                       `json:"text"`
+	Polarity                           candidates.CandidatePolarity `json:"polarity"`
+	Scope                              candidates.CandidateScope    `json:"scope"`
+	CorpusSupportTypes                 []candidates.SupportType     `json:"corpus_support_types"`
+	GlobalSupportTypes                 []candidates.SupportType     `json:"global_support_types"`
+	CorpusObservations                 []candidates.Observation     `json:"corpus_observations"`
+	GlobalEpisodeCount                 int                          `json:"global_episode_count"`
+	GlobalEvidenceEventCount           int                          `json:"global_evidence_event_count"`
+	FirstSeenAt                        time.Time                    `json:"first_seen_at"`
+	LastSeenAt                         time.Time                    `json:"last_seen_at"`
+	Validation                         candidates.Validation        `json:"validation"`
+	ConflictGroupID                    string                       `json:"conflict_group_id,omitempty"`
+	ConflictingCandidateIDs            []string                     `json:"conflicting_candidate_ids,omitempty"`
+	RelatedCandidateIDs                []string                     `json:"related_candidate_ids,omitempty"`
+	RequiresExplicitRuleChangeApproval bool                         `json:"requires_explicit_rule_change_approval"`
+	Privacy                            string                       `json:"privacy"`
+}
+
+type CompactionReviewSample struct {
+	SelectionRankSHA256     string                     `json:"selection_rank_sha256"`
+	EpisodeID               string                     `json:"episode_id"`
+	Agent                   ledger.Agent               `json:"agent"`
+	CheckpointID            string                     `json:"checkpoint_id"`
+	EventIDs                []string                   `json:"event_ids"`
+	ObservedAt              time.Time                  `json:"observed_at"`
+	RepresentationEventIDs  []string                   `json:"representation_event_ids,omitempty"`
+	RepresentationAvailable bool                       `json:"representation_available"`
+	Status                  episodes.ContinuityStatus  `json:"status"`
+	Issues                  []episodes.DerivationIssue `json:"issues,omitempty"`
+	TotalChecks             int                        `json:"total_checks"`
+	CheckPopulation         map[string]int             `json:"check_population"`
+	Checks                  []CompactionCheckReview    `json:"checks"`
+	Privacy                 string                     `json:"privacy"`
+}
+
+type CompactionCheckReview struct {
+	SelectionRankSHA256 string                   `json:"selection_rank_sha256"`
+	Check               episodes.ContinuityCheck `json:"check"`
+	Statement           *episodes.Statement      `json:"statement,omitempty"`
+}
+
+type LegacyReviewPackResult struct {
+	SchemaVersion        string         `json:"schema_version"`
+	PackID               string         `json:"pack_id"`
+	PackPath             string         `json:"pack_path"`
+	PackSHA256           string         `json:"pack_sha256"`
+	CandidateSamples     int            `json:"candidate_samples"`
+	UniqueCandidates     int            `json:"unique_candidates"`
+	CompactionSamples    int            `json:"compaction_samples"`
+	CandidatePopulation  map[string]int `json:"candidate_population"`
+	CompactionPopulation map[string]int `json:"compaction_population"`
+	Reused               bool           `json:"reused"`
+	Privacy              string         `json:"privacy"`
 }
 
 type FreezeResult struct {

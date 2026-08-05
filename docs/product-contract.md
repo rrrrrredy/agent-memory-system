@@ -205,7 +205,10 @@ retrieval receipt, and attestation.
 - verifiable new-device restore and load.
 
 The legacy context-journal cards, index, and rollouts are frozen evaluation
-corpora. They are not bulk-promoted into active memory.
+corpora. They are not bulk-promoted into active memory. Local regression review
+packs MUST bind the frozen corpus and current derivation identities, exclude
+episodes outside that corpus, retain negative controls and conflicts, and
+remain unlabeled until an independent review or attestation is recorded.
 
 ## Explicit non-goals
 
