@@ -6,6 +6,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
+	"github.com/rrrrrredy/agent-memory-system/internal/retrieval"
 )
 
 const (
@@ -17,6 +18,12 @@ const (
 	EvaluationVersion             = "learning-evaluation/v1alpha1"
 	EvaluationAttestationSchema   = "learning-evaluation-attestation/v1alpha1"
 	AttestationResultSchema       = "learning-evaluation-attestation-result/v1alpha1"
+	TaskAttemptRequestSchema      = "task-attempt-request/v1alpha1"
+	TaskAttemptContractSchema     = "task-attempt-contract/v1alpha1"
+	TaskAttemptVerdictSchema      = "task-attempt-verdict/v1alpha1"
+	TaskAttemptReceiptSchema      = "task-attempt-receipt/v1alpha1"
+	TaskAttemptResultSchema       = "task-attempt-record-result/v1alpha1"
+	TaskAttemptVerificationSchema = "task-attempt-verification/v1alpha1"
 	LegacyReviewPackSchema        = "legacy-regression-review-pack/v1alpha2"
 	LegacyReviewPackResultSchema  = "legacy-regression-review-pack-result/v1alpha2"
 	LegacyReviewQueueSchema       = "legacy-regression-review-queue/v1alpha1"
@@ -374,10 +381,11 @@ type MemoryMeasurement struct {
 }
 
 type CorrectionMeasurement struct {
-	SemanticKeySHA256              string `json:"semantic_key_sha256"`
-	EligibleFollowupOpportunities  int    `json:"eligible_followup_opportunities"`
-	RepeatedCorrections            int    `json:"repeated_corrections"`
-	RepeatedCorrectionsAfterMemory int    `json:"repeated_corrections_after_memory"`
+	SemanticKeySHA256              string   `json:"semantic_key_sha256"`
+	AttemptIDs                     []string `json:"attempt_ids"`
+	EligibleFollowupOpportunities  int      `json:"eligible_followup_opportunities"`
+	RepeatedCorrections            int      `json:"repeated_corrections"`
+	RepeatedCorrectionsAfterMemory int      `json:"repeated_corrections_after_memory"`
 }
 
 type DriftLabel string
@@ -421,33 +429,48 @@ type TrialMeasurement struct {
 }
 
 type PairedOutcomeMeasurement struct {
-	PairID    string           `json:"pair_id"`
-	Baseline  TrialMeasurement `json:"baseline"`
-	Treatment TrialMeasurement `json:"treatment"`
+	PairID             string           `json:"pair_id"`
+	BaselineAttemptID  string           `json:"baseline_attempt_id"`
+	TreatmentAttemptID string           `json:"treatment_attempt_id"`
+	Baseline           TrialMeasurement `json:"baseline"`
+	Treatment          TrialMeasurement `json:"treatment"`
 }
 
+type QualityProfile string
+
+const (
+	QualityProfileComponent            QualityProfile = "component"
+	QualityProfileContinuousLearning   QualityProfile = "continuous_learning"
+	EvaluationAuthorityMeasurementOnly                = "measurement_only"
+	ContinuousLearningEfficacyIssue                   = "continuous_learning efficacy is not evaluable: fixed versioned policy, complete population, and independently runnable oracle are not bound"
+)
+
 type EvaluationThresholds struct {
-	MinimumCaptureCoverage        *float64 `json:"minimum_capture_coverage,omitempty"`
-	MaximumFalseMemoryRate        *float64 `json:"maximum_false_memory_rate,omitempty"`
-	MaximumUnknownMemoryRate      *float64 `json:"maximum_unknown_memory_rate,omitempty"`
-	MaximumRepeatedCorrectionRate *float64 `json:"maximum_repeated_correction_rate,omitempty"`
-	MinimumDriftPrecision         *float64 `json:"minimum_drift_precision,omitempty"`
-	MinimumDriftRecall            *float64 `json:"minimum_drift_recall,omitempty"`
-	MaximumMeanRetrievalTokens    *float64 `json:"maximum_mean_retrieval_tokens,omitempty"`
-	MinimumMeanOutcomeScoreDelta  *float64 `json:"minimum_mean_outcome_score_delta,omitempty"`
-	MaximumHarmfulOutcomes        *float64 `json:"maximum_harmful_outcomes,omitempty"`
+	MinimumCaptureCoverage         *float64 `json:"minimum_capture_coverage,omitempty"`
+	MaximumFalseMemoryRate         *float64 `json:"maximum_false_memory_rate,omitempty"`
+	MaximumUnknownMemoryRate       *float64 `json:"maximum_unknown_memory_rate,omitempty"`
+	MaximumRepeatedCorrectionRate  *float64 `json:"maximum_repeated_correction_rate,omitempty"`
+	MinimumDriftPrecision          *float64 `json:"minimum_drift_precision,omitempty"`
+	MinimumDriftRecall             *float64 `json:"minimum_drift_recall,omitempty"`
+	MaximumMeanRetrievalTokens     *float64 `json:"maximum_mean_retrieval_tokens,omitempty"`
+	MinimumMeanOutcomeScoreDelta   *float64 `json:"minimum_mean_outcome_score_delta,omitempty"`
+	MaximumMeanCorrectionDelta     *float64 `json:"maximum_mean_correction_delta,omitempty"`
+	MaximumHarmfulOutcomes         *float64 `json:"maximum_harmful_outcomes,omitempty"`
+	MinimumCorrectionOpportunities *float64 `json:"minimum_correction_opportunities,omitempty"`
+	MinimumPairedOutcomePairs      *float64 `json:"minimum_paired_outcome_pairs,omitempty"`
 }
 
 type EvaluationInput struct {
-	SchemaVersion string               `json:"schema_version"`
-	SuiteID       string               `json:"suite_id"`
-	RunID         string               `json:"run_id"`
-	CreatedAt     time.Time            `json:"created_at"`
-	SystemVersion string               `json:"system_version"`
-	CorpusID      string               `json:"corpus_id,omitempty"`
-	Cases         []EvaluationCase     `json:"cases"`
-	Thresholds    EvaluationThresholds `json:"thresholds"`
-	Privacy       string               `json:"privacy"`
+	SchemaVersion  string               `json:"schema_version"`
+	SuiteID        string               `json:"suite_id"`
+	RunID          string               `json:"run_id"`
+	CreatedAt      time.Time            `json:"created_at"`
+	SystemVersion  string               `json:"system_version"`
+	QualityProfile QualityProfile       `json:"quality_profile"`
+	CorpusID       string               `json:"corpus_id,omitempty"`
+	Cases          []EvaluationCase     `json:"cases"`
+	Thresholds     EvaluationThresholds `json:"thresholds"`
+	Privacy        string               `json:"privacy"`
 }
 
 type RatioMetric struct {
@@ -541,6 +564,8 @@ type EvaluationReport struct {
 	InputSHA256               string             `json:"input_sha256"`
 	InputBlob                 *ledger.BlobRef    `json:"input_blob,omitempty"`
 	SystemVersion             string             `json:"system_version"`
+	QualityProfile            QualityProfile     `json:"quality_profile"`
+	Authority                 string             `json:"authority"`
 	CorpusID                  string             `json:"corpus_id,omitempty"`
 	CasesChecked              int                `json:"cases_checked"`
 	EvidenceReferencesChecked int                `json:"evidence_references_checked"`
@@ -578,4 +603,152 @@ type RunVerificationReport struct {
 	ReferencesChecked int      `json:"references_checked"`
 	Issues            []string `json:"issues"`
 	Privacy           string   `json:"privacy"`
+}
+
+type TaskCondition string
+
+const (
+	TaskConditionBaseline TaskCondition = "baseline"
+	TaskConditionMemory   TaskCondition = "memory"
+)
+
+type TaskOracle struct {
+	Kind           string `json:"kind"`
+	ID             string `json:"id"`
+	Version        string `json:"version"`
+	VerdictEventID string `json:"verdict_event_id"`
+}
+
+type TaskAttemptRequest struct {
+	SchemaVersion            string                      `json:"schema_version"`
+	TaskID                   string                      `json:"task_id"`
+	AttemptID                string                      `json:"attempt_id"`
+	Agent                    ledger.Agent                `json:"agent"`
+	SemanticKeySHA256        string                      `json:"semantic_key_sha256,omitempty"`
+	TaskSpecSHA256           string                      `json:"task_spec_sha256"`
+	AcceptanceCriteriaSHA256 string                      `json:"acceptance_criteria_sha256"`
+	ExecutionConfigSHA256    string                      `json:"execution_config_sha256"`
+	Condition                TaskCondition               `json:"condition"`
+	WindowStartEventID       string                      `json:"window_start_event_id"`
+	WindowEndEventID         string                      `json:"window_end_event_id"`
+	RetrievalReceiptID       string                      `json:"retrieval_receipt_id,omitempty"`
+	InjectionID              string                      `json:"injection_id,omitempty"`
+	AdoptionID               string                      `json:"adoption_id,omitempty"`
+	MemoryReferences         []retrieval.MemoryReference `json:"memory_references"`
+	Oracle                   TaskOracle                  `json:"oracle"`
+	Privacy                  string                      `json:"privacy"`
+}
+
+type TaskAttemptContract struct {
+	SchemaVersion            string        `json:"schema_version"`
+	TaskID                   string        `json:"task_id"`
+	AttemptID                string        `json:"attempt_id"`
+	Agent                    ledger.Agent  `json:"agent"`
+	SemanticKeySHA256        string        `json:"semantic_key_sha256"`
+	TaskSpecSHA256           string        `json:"task_spec_sha256"`
+	AcceptanceCriteriaSHA256 string        `json:"acceptance_criteria_sha256"`
+	ExecutionConfigSHA256    string        `json:"execution_config_sha256"`
+	Condition                TaskCondition `json:"condition"`
+	WindowEndEventID         string        `json:"window_end_event_id"`
+	Oracle                   TaskOracle    `json:"oracle"`
+	Privacy                  string        `json:"privacy"`
+}
+
+type TaskVerdict string
+
+const (
+	TaskVerdictPass TaskVerdict = "pass"
+	TaskVerdictFail TaskVerdict = "fail"
+)
+
+type ResultLabel string
+
+const (
+	ResultLabelSuccess ResultLabel = "success"
+	ResultLabelError   ResultLabel = "error"
+	ResultLabelNeutral ResultLabel = "neutral"
+)
+
+type UserMessageLabel string
+
+const (
+	UserMessageCorrection    UserMessageLabel = "correction"
+	UserMessageNotCorrection UserMessageLabel = "not_correction"
+)
+
+type LabeledResultEvent struct {
+	EventID string      `json:"event_id"`
+	Label   ResultLabel `json:"label"`
+}
+
+type LabeledUserMessage struct {
+	EventID string           `json:"event_id"`
+	Label   UserMessageLabel `json:"label"`
+}
+
+type TaskAttemptVerdict struct {
+	SchemaVersion  string               `json:"schema_version"`
+	TaskID         string               `json:"task_id"`
+	AttemptID      string               `json:"attempt_id"`
+	Verdict        TaskVerdict          `json:"verdict"`
+	Score          float64              `json:"score"`
+	TotalTokens    int                  `json:"total_tokens"`
+	ResultEvents   []LabeledResultEvent `json:"result_events"`
+	UserMessages   []LabeledUserMessage `json:"user_messages"`
+	TaskSpecSHA256 string               `json:"task_spec_sha256"`
+	CriteriaSHA256 string               `json:"acceptance_criteria_sha256"`
+	ConfigSHA256   string               `json:"execution_config_sha256"`
+	Privacy        string               `json:"privacy"`
+}
+
+type BoundEventReference struct {
+	EventID       string `json:"event_id"`
+	RecordHash    string `json:"record_hash"`
+	PayloadSHA256 string `json:"payload_sha256"`
+}
+
+type TaskAttemptReceipt struct {
+	SchemaVersion            string                      `json:"schema_version"`
+	ReceiptID                string                      `json:"receipt_id"`
+	RecordedAt               time.Time                   `json:"recorded_at"`
+	TaskID                   string                      `json:"task_id"`
+	AttemptID                string                      `json:"attempt_id"`
+	Agent                    ledger.Agent                `json:"agent"`
+	SemanticKeySHA256        string                      `json:"semantic_key_sha256,omitempty"`
+	TaskSpecSHA256           string                      `json:"task_spec_sha256"`
+	AcceptanceCriteriaSHA256 string                      `json:"acceptance_criteria_sha256"`
+	ExecutionConfigSHA256    string                      `json:"execution_config_sha256"`
+	Condition                TaskCondition               `json:"condition"`
+	WindowStart              BoundEventReference         `json:"window_start"`
+	WindowEnd                BoundEventReference         `json:"window_end"`
+	RetrievalReceiptID       string                      `json:"retrieval_receipt_id,omitempty"`
+	InjectionID              string                      `json:"injection_id,omitempty"`
+	AdoptionID               string                      `json:"adoption_id,omitempty"`
+	MemoryReferences         []retrieval.MemoryReference `json:"memory_references"`
+	Oracle                   TaskOracle                  `json:"oracle"`
+	Verdict                  BoundEventReference         `json:"verdict"`
+	ResultEvents             []BoundEventReference       `json:"result_events"`
+	UserMessages             []BoundEventReference       `json:"user_messages"`
+	Measurement              TrialMeasurement            `json:"measurement"`
+	BindingStatus            string                      `json:"binding_status"`
+	Authority                string                      `json:"authority"`
+	RequestSHA256            string                      `json:"request_sha256"`
+	Privacy                  string                      `json:"privacy"`
+}
+
+type TaskAttemptResult struct {
+	SchemaVersion string             `json:"schema_version"`
+	Receipt       TaskAttemptReceipt `json:"receipt"`
+	EventID       string             `json:"event_id"`
+	RecordHash    string             `json:"record_hash"`
+	Reused        bool               `json:"reused"`
+	Privacy       string             `json:"privacy"`
+}
+
+type TaskAttemptVerification struct {
+	SchemaVersion string   `json:"schema_version"`
+	ReceiptID     string   `json:"receipt_id"`
+	EventsChecked int      `json:"events_checked"`
+	Issues        []string `json:"issues"`
+	Privacy       string   `json:"privacy"`
 }

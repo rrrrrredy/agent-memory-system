@@ -4,6 +4,7 @@
   "run_id": "empty-denominator",
   "created_at": "2026-01-01T00:00:00Z",
   "system_version": "synthetic-v1",
+  "quality_profile": "component",
   "cases": [
     {
       "case_id": "capture-empty",

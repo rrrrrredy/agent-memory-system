@@ -103,7 +103,21 @@ Controls:
 - model self-confirmation does not count as independent evidence;
 - conflicts and stale claims fail closed;
 - promotion is auditable and revocable;
-- retrieval receipts link memory use to downstream outcomes.
+- retrieval and injection receipts bind exact delivery;
+- non-unknown adoption outcomes require causally bound result evidence;
+- replayable task-attempt receipts bind comparable baseline and memory runs.
+
+Reporter and oracle identities are currently self-declared. These controls
+make claims attributable and replayable, but do not cryptographically
+authenticate a person or harness and do not turn a judgment into objective
+truth.
+
+Evaluation thresholds and case selection are also caller-supplied. A caller can
+select favorable cases or permissive thresholds, so even a fully replayed
+`continuous_learning` report has `measurement_only` authority and is blocked
+from release readiness. A future efficacy gate must reconstruct the complete
+eligible population from a frozen snapshot and apply a versioned policy rather
+than trust submitted population metadata.
 
 ### Cross-device semantic conflict
 
@@ -130,6 +144,8 @@ Controls:
 - an independent UTF-8 byte budget;
 - current user instruction outranks recalled memory;
 - retrieval, exact delivery, adoption, and outcome receipts;
+- complete causal task-attempt windows with exact result and user-message
+  coverage;
 - trusted scopes supplied by local configuration, never prompt content;
 - complete portable-repository verification with fail-closed reads;
 - compaction continuity tests;

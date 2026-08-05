@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -68,7 +69,8 @@ func Run(store *ledger.Store, input EvaluationInput, options RunOptions) (result
 	portableRevisions, portableIssues := loadPortableRevisions(store.Root(), options.PortableRoot,
 		hasEvidenceKind(input, "portable_revision"))
 	report.Issues = append(report.Issues, portableIssues...)
-	if hasCategory(input, CategoryRetrievalCost) {
+	if hasCategory(input, CategoryRetrievalCost) || hasCategory(input, CategoryRepeatedCorrection) ||
+		hasCategory(input, CategoryPairedOutcome) {
 		receipts := retrieval.Verify(store)
 		for _, issue := range receipts.Issues {
 			report.Issues = append(report.Issues, "retrieval receipts: "+issue)
@@ -84,8 +86,15 @@ func Run(store *ledger.Store, input EvaluationInput, options RunOptions) (result
 		}
 	}
 	ledgerRecords := map[string]ledger.Record{}
+	allRecords := map[string]indexedRecord{}
+	orderedRecords := []ledger.Record{}
 	existingRuns := map[string]ledger.Event{}
 	appender, err := store.NewAppenderAfterVisit(func(record ledger.Record) error {
+		if _, duplicate := allRecords[record.Event.EventID]; duplicate {
+			return fmt.Errorf("duplicate evidence event id %q", record.Event.EventID)
+		}
+		orderedRecords = append(orderedRecords, record)
+		allRecords[record.Event.EventID] = indexedRecord{Record: record, Index: len(orderedRecords)}
 		if _, wanted := wantedLedger[record.Event.EventID]; wanted {
 			ledgerRecords[record.Event.EventID] = record
 		}
@@ -142,7 +151,8 @@ func Run(store *ledger.Store, input EvaluationInput, options RunOptions) (result
 			}
 		}
 		caseIssues, attestations := validateCaseEvidence(
-			store, evaluationCase, caseRecords, caseArtifacts, corpusManifest)
+			store, evaluationCase, caseRecords, caseArtifacts, corpusManifest,
+			allRecords, orderedRecords)
 		report.Issues = append(report.Issues, caseIssues...)
 		report.AttestedReferences += attestations
 	}
@@ -213,13 +223,18 @@ func Run(store *ledger.Store, input EvaluationInput, options RunOptions) (result
 		ReportEventID: eventID}, nil
 }
 
-func VerifyRun(store *ledger.Store, suiteID, runID string) RunVerificationReport {
+func VerifyRun(store *ledger.Store, suiteID, runID string,
+	portableRoots ...string) RunVerificationReport {
 	verification := RunVerificationReport{
 		SchemaVersion: runVerificationSchema, SuiteID: suiteID, RunID: runID,
 		Issues: []string{}, Privacy: "local_only",
 	}
 	if store == nil || !safeIdentifier(suiteID) || !safeIdentifier(runID) {
 		verification.Issues = append(verification.Issues, "store, suite_id, and run_id are required")
+		return verification
+	}
+	if ledgerVerification := store.Verify(); len(ledgerVerification.Issues) != 0 {
+		verification.Issues = append(verification.Issues, "evidence ledger verification failed")
 		return verification
 	}
 	runPath := evaluationRunPath(store.Root(), suiteID, runID)
@@ -252,6 +267,11 @@ func VerifyRun(store *ledger.Store, suiteID, runID string) RunVerificationReport
 	if stored.SuiteID != suiteID || stored.RunID != runID || stored.CasesChecked != len(input.Cases) {
 		verification.Issues = append(verification.Issues, "evaluation report identity is inconsistent")
 	}
+	recalculated, calculateErr := Calculate(input)
+	if calculateErr != nil {
+		verification.Issues = append(verification.Issues, "evaluation input cannot be recalculated")
+		return verification
+	}
 	inputCanonical, _ := json.Marshal(input)
 	inputDigest := sha256.Sum256(inputCanonical)
 	if stored.InputSHA256 != hex.EncodeToString(inputDigest[:]) {
@@ -264,23 +284,35 @@ func VerifyRun(store *ledger.Store, suiteID, runID string) RunVerificationReport
 		verification.Issues = append(verification.Issues, "evaluation input blob content is invalid")
 	}
 	wantedEvent := evaluationRunEventID(input, stored)
-	found := false
+	var runRecord *ledger.Record
+	allRecords := map[string]indexedRecord{}
+	orderedRecords := []ledger.Record{}
 	if err := store.VisitRecords(func(record ledger.Record) error {
+		if _, duplicate := allRecords[record.Event.EventID]; duplicate {
+			return fmt.Errorf("duplicate event id %s", record.Event.EventID)
+		}
+		orderedRecords = append(orderedRecords, record)
+		allRecords[record.Event.EventID] = indexedRecord{Record: record, Index: len(orderedRecords)}
 		if record.Event.EventID == wantedEvent {
-			expectedSHA := sha256Hex(reportData)
-			if record.Event.Kind != ledger.KindEvaluationRun || record.Event.Payload == nil ||
-				record.Event.Payload.Blob == nil || record.Event.Payload.SHA256 != expectedSHA ||
-				record.Event.Payload.Bytes != int64(len(reportData)) ||
-				record.Event.Payload.Blob.SHA256 != expectedSHA ||
-				record.Event.Payload.Blob.Bytes != int64(len(reportData)) {
-				return nil
-			}
-			found = verifyBlob(store, *record.Event.Payload.Blob) == nil
+			copy := record
+			runRecord = &copy
 		}
 		return nil
 	}); err != nil {
-		verification.Issues = append(verification.Issues, "evidence ledger verification failed")
-	} else if !found {
+		verification.Issues = append(verification.Issues, "read evaluation evidence: "+err.Error())
+		return verification
+	}
+	portableRoot := ""
+	if len(portableRoots) != 0 {
+		portableRoot = portableRoots[0]
+	}
+	replayed := replayEvaluationEvidence(store, input, recalculated, portableRoot,
+		allRecords, orderedRecords)
+	if !sameReplayedReport(stored, replayed) {
+		verification.Issues = append(verification.Issues, "evaluation report does not match complete evidence replay")
+	}
+	if runRecord == nil || !validEvaluationRunEvent(store, *runRecord, input, stored,
+		reportData, allRecords) {
 		verification.Issues = append(verification.Issues, "evaluation run event is missing or invalid")
 	}
 	verification.CasesChecked = stored.CasesChecked
@@ -289,9 +321,152 @@ func VerifyRun(store *ledger.Store, suiteID, runID string) RunVerificationReport
 	return verification
 }
 
+func sameDerivedReport(stored, calculated EvaluationReport) bool {
+	return stored.SchemaVersion == calculated.SchemaVersion &&
+		stored.EvaluationVersion == calculated.EvaluationVersion &&
+		stored.SuiteID == calculated.SuiteID && stored.RunID == calculated.RunID &&
+		stored.InputSHA256 == calculated.InputSHA256 && stored.SystemVersion == calculated.SystemVersion &&
+		stored.QualityProfile == calculated.QualityProfile && stored.Authority == calculated.Authority &&
+		stored.CorpusID == calculated.CorpusID &&
+		stored.CasesChecked == calculated.CasesChecked && reflect.DeepEqual(stored.Capture, calculated.Capture) &&
+		reflect.DeepEqual(stored.FalseMemory, calculated.FalseMemory) &&
+		reflect.DeepEqual(stored.Corrections, calculated.Corrections) &&
+		reflect.DeepEqual(stored.CompactionDrift, calculated.CompactionDrift) &&
+		reflect.DeepEqual(stored.Retrieval, calculated.Retrieval) &&
+		reflect.DeepEqual(stored.Outcomes, calculated.Outcomes) &&
+		reflect.DeepEqual(stored.Gates, calculated.Gates) && stored.Privacy == calculated.Privacy
+}
+
+func sameReplayedReport(stored, replayed EvaluationReport) bool {
+	return sameDerivedReport(stored, replayed) &&
+		stored.EvidenceReferencesChecked == replayed.EvidenceReferencesChecked &&
+		stored.AttestedReferences == replayed.AttestedReferences &&
+		stored.ReleaseReady == replayed.ReleaseReady &&
+		reflect.DeepEqual(stored.Issues, replayed.Issues)
+}
+
+func replayEvaluationEvidence(store *ledger.Store, input EvaluationInput, report EvaluationReport,
+	portableRoot string, allRecords map[string]indexedRecord,
+	orderedRecords []ledger.Record) EvaluationReport {
+	corpusArtifacts := map[string]CorpusArtifact{}
+	var corpusManifest *CorpusManifest
+	if input.CorpusID != "" {
+		verification := VerifyCorpus(store, input.CorpusID)
+		if len(verification.Issues) != 0 {
+			for _, issue := range verification.Issues {
+				report.Issues = append(report.Issues, "corpus: "+issue)
+			}
+		} else if manifest, err := LoadCorpusManifest(store, input.CorpusID); err != nil {
+			report.Issues = append(report.Issues, "corpus manifest unavailable")
+		} else {
+			corpusManifest = &manifest
+			for _, artifact := range manifest.Artifacts {
+				corpusArtifacts[artifact.ArtifactID] = artifact
+			}
+		}
+	}
+	portableRevisions, portableIssues := loadPortableRevisions(store.Root(), portableRoot,
+		hasEvidenceKind(input, "portable_revision"))
+	report.Issues = append(report.Issues, portableIssues...)
+	if hasCategory(input, CategoryRetrievalCost) || hasCategory(input, CategoryRepeatedCorrection) ||
+		hasCategory(input, CategoryPairedOutcome) {
+		for _, issue := range retrieval.Verify(store).Issues {
+			report.Issues = append(report.Issues, "retrieval receipts: "+issue)
+		}
+	}
+	for _, evaluationCase := range input.Cases {
+		caseRecords := map[string]ledger.Record{}
+		caseArtifacts := map[string]CorpusArtifact{}
+		for _, reference := range evaluationCase.Evidence {
+			switch reference.Kind {
+			case "ledger_event":
+				indexed, exists := allRecords[reference.ID]
+				if !exists {
+					report.Issues = append(report.Issues, "case "+evaluationCase.CaseID+": ledger evidence missing: "+reference.ID)
+					continue
+				}
+				if indexed.Record.RecordHash != reference.SHA256 {
+					report.Issues = append(report.Issues, "case "+evaluationCase.CaseID+": ledger evidence hash mismatch: "+reference.ID)
+					continue
+				}
+				caseRecords[reference.ID] = indexed.Record
+				report.EvidenceReferencesChecked++
+			case "corpus_artifact":
+				artifact, exists := corpusArtifacts[reference.ID]
+				if !exists || artifact.Blob.SHA256 != reference.SHA256 {
+					report.Issues = append(report.Issues, "case "+evaluationCase.CaseID+": corpus artifact missing or changed: "+reference.ID)
+					continue
+				}
+				caseArtifacts[reference.ID] = artifact
+				report.EvidenceReferencesChecked++
+			case "portable_revision":
+				revision, exists := portableRevisions[reference.ID]
+				if !exists || revision.TextSHA256 != reference.SHA256 {
+					report.Issues = append(report.Issues, "case "+evaluationCase.CaseID+": portable revision missing or changed: "+reference.ID)
+					continue
+				}
+				if evaluationCase.Memory != nil && revision.MemoryID != evaluationCase.Memory.MemoryID {
+					report.Issues = append(report.Issues, "case "+evaluationCase.CaseID+": portable revision memory_id mismatch")
+					continue
+				}
+				report.EvidenceReferencesChecked++
+			}
+		}
+		issues, attestations := validateCaseEvidence(store, evaluationCase, caseRecords,
+			caseArtifacts, corpusManifest, allRecords, orderedRecords)
+		report.Issues = append(report.Issues, issues...)
+		report.AttestedReferences += attestations
+	}
+	report.Issues = uniqueSorted(report.Issues)
+	report.ReleaseReady = len(report.Issues) == 0 && gatesPassed(report.Gates)
+	return report
+}
+
+func validEvaluationRunEvent(store *ledger.Store, record ledger.Record, input EvaluationInput,
+	report EvaluationReport, reportData []byte, allRecords map[string]indexedRecord) bool {
+	event := record.Event
+	expectedSHA := sha256Hex(reportData)
+	if report.InputBlob == nil || event.Kind != ledger.KindEvaluationRun ||
+		event.Payload == nil || event.Payload.Blob == nil ||
+		event.Payload.SHA256 != expectedSHA || event.Payload.Bytes != int64(len(reportData)) ||
+		event.Payload.Blob.SHA256 != expectedSHA || event.Payload.Blob.Bytes != int64(len(reportData)) ||
+		verifyBlob(store, *event.Payload.Blob) != nil || event.Source.DeviceID == "" || event.Source.OS == "" ||
+		!event.ObservedAt.UTC().Equal(input.CreatedAt.UTC()) ||
+		event.Completeness.Status != ledger.CompletenessComplete ||
+		event.Privacy.Classification != "local_only" {
+		return false
+	}
+	expectedSource := ledger.Source{
+		Agent: ledger.AgentUnknown, Adapter: evaluationAdapterName,
+		AdapterVersion: evaluationAdapterVersion, DeviceID: event.Source.DeviceID, OS: event.Source.OS,
+		ThreadID: input.SuiteID, SessionID: input.RunID, SourceEventID: input.RunID,
+		SourcePathHash: report.InputBlob.SHA256, SourceCursor: "run:" + input.SuiteID + "/" + input.RunID,
+	}
+	if event.Source != expectedSource {
+		return false
+	}
+	parents := []string{}
+	for _, evaluationCase := range input.Cases {
+		for _, reference := range evaluationCase.Evidence {
+			if reference.Kind == "ledger_event" {
+				if _, exists := allRecords[reference.ID]; exists {
+					parents = append(parents, reference.ID)
+				}
+			}
+		}
+	}
+	parents = sortedUniqueStrings(parents)
+	if len(parents) == 0 {
+		return event.Causality == nil
+	}
+	return event.Causality != nil && sameStrings(event.Causality.ParentEventIDs, parents) &&
+		event.Causality.CallID == "" && event.Causality.CompactionID == ""
+}
+
 func validateCaseEvidence(store *ledger.Store, evaluationCase EvaluationCase,
 	records map[string]ledger.Record, artifacts map[string]CorpusArtifact,
-	manifest *CorpusManifest) ([]string, int) {
+	manifest *CorpusManifest, allRecords map[string]indexedRecord,
+	orderedRecords []ledger.Record) ([]string, int) {
 	issues := []string{}
 	attestations := 0
 	for _, record := range records {
@@ -366,13 +541,8 @@ func validateCaseEvidence(store *ledger.Store, evaluationCase EvaluationCase,
 			}
 		}
 	case CategoryRepeatedCorrection:
-		if !hasKind(ledger.KindUserMessage) {
-			issues = append(issues, "case "+evaluationCase.CaseID+": correction measurement lacks user-message evidence")
-		}
-		if evaluationCase.Correction.RepeatedCorrectionsAfterMemory > 0 &&
-			(!hasKind(ledger.KindRetrieval) || !hasKind(ledger.KindAdoption)) {
-			issues = append(issues, "case "+evaluationCase.CaseID+": post-memory correction lacks retrieval and adoption evidence")
-		}
+		issues = append(issues, validateCorrectionAttemptEvidence(
+			store, evaluationCase, records, allRecords, orderedRecords)...)
 	case CategoryCompactionDrift:
 		if !hasKind(ledger.KindCompaction) {
 			issues = append(issues, "case "+evaluationCase.CaseID+": compaction measurement lacks compaction evidence")
@@ -380,16 +550,88 @@ func validateCaseEvidence(store *ledger.Store, evaluationCase EvaluationCase,
 	case CategoryRetrievalCost:
 		issues = append(issues, validateRetrievalEvidence(store, evaluationCase, records)...)
 	case CategoryPairedOutcome:
-		if !hasKind(ledger.KindToolResult, ledger.KindFileChange) {
-			issues = append(issues, "case "+evaluationCase.CaseID+": paired outcome lacks tool-result or file-change evidence")
-		}
+		issues = append(issues, validatePairedAttemptEvidence(
+			store, evaluationCase, records, allRecords, orderedRecords)...)
 	}
 	return issues, attestations
 }
 
 func requiresCaseAttestation(category CaseCategory) bool {
-	return category == CategoryFalseMemory || category == CategoryRepeatedCorrection ||
-		category == CategoryCompactionDrift || category == CategoryPairedOutcome
+	return category == CategoryFalseMemory || category == CategoryCompactionDrift
+}
+
+func validateCorrectionAttemptEvidence(store *ledger.Store, evaluationCase EvaluationCase,
+	caseRecords map[string]ledger.Record, allRecords map[string]indexedRecord,
+	orderedRecords []ledger.Record) []string {
+	measurement := evaluationCase.Correction
+	repeated := 0
+	for _, attemptID := range measurement.AttemptIDs {
+		record, referenced := caseRecords[attemptID]
+		if !referenced || record.Event.Kind != ledger.KindTaskAttempt {
+			return []string{"case " + evaluationCase.CaseID + ": correction measurement lacks exact task attempt " + attemptID}
+		}
+		verification := verifyTaskAttemptRecord(store, record, allRecords, orderedRecords)
+		if len(verification.Issues) != 0 {
+			return []string{"case " + evaluationCase.CaseID + ": task attempt " + attemptID + " failed replay: " + strings.Join(verification.Issues, "; ")}
+		}
+		receipt, err := decodeTaskAttemptReceipt(store, record.Event)
+		if err != nil || receipt.Condition != TaskConditionMemory || receipt.Agent != evaluationCase.Agent ||
+			receipt.SemanticKeySHA256 != measurement.SemanticKeySHA256 {
+			return []string{"case " + evaluationCase.CaseID + ": correction task attempt has the wrong condition, agent, or semantic key"}
+		}
+		if receipt.Measurement.UserCorrections > 0 {
+			repeated++
+		}
+	}
+	if measurement.EligibleFollowupOpportunities != len(measurement.AttemptIDs) ||
+		measurement.RepeatedCorrections != repeated ||
+		measurement.RepeatedCorrectionsAfterMemory != repeated {
+		return []string{"case " + evaluationCase.CaseID + ": correction counts do not match replayed task attempts"}
+	}
+	return nil
+}
+
+func validatePairedAttemptEvidence(store *ledger.Store, evaluationCase EvaluationCase,
+	caseRecords map[string]ledger.Record, allRecords map[string]indexedRecord,
+	orderedRecords []ledger.Record) []string {
+	measurement := evaluationCase.PairedOutcome
+	load := func(id string) (TaskAttemptReceipt, error) {
+		record, referenced := caseRecords[id]
+		if !referenced || record.Event.Kind != ledger.KindTaskAttempt {
+			return TaskAttemptReceipt{}, errors.New("paired outcome lacks exact task attempt " + id)
+		}
+		verification := verifyTaskAttemptRecord(store, record, allRecords, orderedRecords)
+		if len(verification.Issues) != 0 {
+			return TaskAttemptReceipt{}, errors.New("task attempt " + id + " failed replay: " + strings.Join(verification.Issues, "; "))
+		}
+		return decodeTaskAttemptReceipt(store, record.Event)
+	}
+	baseline, err := load(measurement.BaselineAttemptID)
+	if err != nil {
+		return []string{"case " + evaluationCase.CaseID + ": " + err.Error()}
+	}
+	treatment, err := load(measurement.TreatmentAttemptID)
+	if err != nil {
+		return []string{"case " + evaluationCase.CaseID + ": " + err.Error()}
+	}
+	if !comparableTaskAttempts(baseline, treatment, evaluationCase.Agent) {
+		return []string{"case " + evaluationCase.CaseID + ": paired task attempts are not comparable"}
+	}
+	if baseline.Measurement != measurement.Baseline || treatment.Measurement != measurement.Treatment {
+		return []string{"case " + evaluationCase.CaseID + ": paired measurements do not match replayed task attempts"}
+	}
+	return nil
+}
+
+func comparableTaskAttempts(baseline, treatment TaskAttemptReceipt, agent ledger.Agent) bool {
+	return baseline.Condition == TaskConditionBaseline && treatment.Condition == TaskConditionMemory &&
+		baseline.Agent == agent && treatment.Agent == agent &&
+		baseline.TaskID == treatment.TaskID && baseline.TaskSpecSHA256 == treatment.TaskSpecSHA256 &&
+		baseline.AcceptanceCriteriaSHA256 == treatment.AcceptanceCriteriaSHA256 &&
+		baseline.ExecutionConfigSHA256 == treatment.ExecutionConfigSHA256 &&
+		baseline.SemanticKeySHA256 == treatment.SemanticKeySHA256 &&
+		baseline.Oracle.Kind == treatment.Oracle.Kind && baseline.Oracle.ID == treatment.Oracle.ID &&
+		baseline.Oracle.Version == treatment.Oracle.Version
 }
 
 func validateRetrievalEvidence(store *ledger.Store, evaluationCase EvaluationCase,

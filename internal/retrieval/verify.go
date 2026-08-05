@@ -172,6 +172,14 @@ func Verify(store *ledger.Store) VerificationReport {
 				report.Issues = append(report.Issues, fmt.Sprintf("adoption %s references outcome evidence from another task context", adoption.AdoptionID))
 			} else if err := verifyOutcomeEvidence(store, evidenceEvent); err != nil {
 				report.Issues = append(report.Issues, fmt.Sprintf("adoption %s has invalid outcome evidence: %v", adoption.AdoptionID, err))
+			} else {
+				causalParent := adoption.InjectionID
+				if causalParent == "" {
+					causalParent = adoption.RetrievalReceiptID
+				}
+				if !eventDescendsFrom(events, eventIndexes, evidenceID, causalParent) {
+					report.Issues = append(report.Issues, fmt.Sprintf("adoption %s has outcome evidence without memory-delivery causality", adoption.AdoptionID))
+				}
 			}
 		}
 		expectedParents := append([]string{adoption.RetrievalReceiptID}, adoption.OutcomeEvidenceEventIDs...)

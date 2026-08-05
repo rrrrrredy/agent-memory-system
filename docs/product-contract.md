@@ -182,17 +182,24 @@ Raw-byte capture coverage and normalized-event projection quality MUST be
 reported separately. A parser gap does not prove loss of preserved source
 bytes, and a parsed record does not prove full source capture.
 
-False-memory, correction-grouping, compaction-drift, and paired-outcome
-measurements MUST bind the exact measured value to a prior local append-only
-attestation. False-memory and compaction ground-truth labels require a human
-attestor. A named deterministic harness may attest reproducible counting or
-paired-result measurements. The model under evaluation cannot certify its own
+False-memory and compaction-drift measurements MUST bind the exact measured
+value to a prior local append-only attestation, and their ground-truth labels
+require a human attestor. Repeated-correction and paired-outcome measurements
+MUST instead be derived from replayed local task-attempt receipts. Those
+receipts bind a complete causal evidence window, task and acceptance-contract
+hashes, exact memory exposure, and an oracle verdict; their authority is
+measurement-only. The model under evaluation cannot certify its own
 interpretation merely by supplying a label or hash in the evaluation input.
 
-A metric with no denominator is `not_evaluable`, never a passing zero. Release readiness
-requires at least one configured threshold, all gates passing, and successful
-resolution of every required corpus artifact, ledger record, portable revision,
-retrieval receipt, and attestation.
+A metric with no denominator is `not_evaluable`, never a passing zero. A
+component profile may exercise one bounded, measurement-only quality check. The
+`continuous_learning` profile requires all six quality categories, all twelve
+caller-supplied gates, positive minimum counts for correction opportunities and
+paired outcomes, and successful resolution and replay of every required
+artifact and receipt. It remains measurement-only and cannot establish product
+efficacy or release readiness until fixed versioned policy, deterministic
+complete-population reconstruction, and independently runnable oracle checks
+are implemented together.
 
 ### Cross-device and cross-agent reliability
 

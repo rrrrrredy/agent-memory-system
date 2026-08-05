@@ -245,18 +245,19 @@ The first contract covers six categories:
 | --- | --- | --- |
 | Capture coverage | complete, partial, missing, and separately accounted missing records | exact source-snapshot or gap records |
 | False memory | incorrect, unsupported, or stale active memory | exact portable revision and human attestation |
-| Repeated correction | repeated corrections after memory became available | user-message evidence and case attestation |
+| Repeated correction | memory-conditioned task attempts with at least one exact user-correction label | replayed task-attempt receipts |
 | Compaction drift | precision and recall against reviewed drift labels | compaction evidence and human attestation |
 | Retrieval cost | selected items, bytes, estimated tokens, adoption, outcome | exact retrieval and adoption receipts |
-| Paired outcome | treatment minus baseline task result | tool-result or file-change evidence and case attestation |
+| Paired outcome | treatment minus baseline task result | comparable replayed baseline and memory task-attempt receipts |
 
 An attestation contains the full measured value, case identity, Agent,
 attestor, time, and reason. `eval attest` records it as an
 `evaluation_attestation` event before the case is run. The evaluation then
 compares the event payload with the case measurement and verifies its ledger
 record hash. False-memory and compaction-drift ground-truth labels require a
-human attestor. Deterministic counting and paired-result cases may use a named
-harness.
+human attestor. Repeated-correction and paired-outcome measurements do not
+accept aggregate attestations as their source of truth. They are recomputed
+from task-attempt receipts described below.
 
 ```text
 agentmem eval attest \
@@ -268,6 +269,62 @@ The command returns the event ID and record hash to place in the case's
 `ledger_event` references. Re-recording the identical attestation is
 idempotent. A changed measurement creates a different event and cannot satisfy
 the original case.
+
+## Evidence-bound task attempts
+
+An outcome claim needs a stable task identity and a closed observation window.
+Create a structured oracle verdict as a complete local `tool_result`, then bind
+it with:
+
+```text
+agentmem eval attempt record \
+  --root <local-evidence-directory> \
+  --file <task-attempt-request.json>
+
+agentmem eval attempt verify \
+  --root <local-evidence-directory> \
+  --receipt <task-attempt-receipt-id>
+```
+
+The request fixes the task, attempt, task-spec hash, acceptance-criteria hash,
+execution-config hash, Agent, condition, exact ledger window, and oracle
+identity/version. The first event contains the same structured task contract;
+its source adapter and the verdict source must match that oracle. A baseline
+window must contain no memory retrieval or injection in its window or causal
+ancestry. A memory window must contain exactly the declared verified retrieval
+and injection, followed by an adopted-action claim for the exact delivered
+revision set. Those revisions must resolve through local promotion provenance
+to the contract's semantic key. Every result must be a causal descendant of
+the baseline start or the treatment injection, and every user message must
+descend from the same condition anchor through backward-only ledger edges.
+
+The oracle verdict must label every observed `tool_result`, `file_change`, and
+`user_message` in the window. The receipt derives success, error count, user
+correction count, score, and token count from that exact verdict and preserves
+record and payload hashes without copying raw messages or tool output. Its
+authority is fixed to `measurement_only`; it cannot review, promote, export, or
+authorize a rule change.
+
+Memory references, result labels, and user-message labels are sorted canonical
+arrays. Missing or JSON `null` arrays are rejected rather than treated as empty
+evidence.
+
+`causal_complete` means the declared ledger window is complete, contains no
+observed gap, has exact label coverage, and has the required causal links. It
+does not authenticate a self-declared human or harness identity, prove that a
+provider emitted no unavailable event, or turn an oracle judgment into
+objective truth. Those limitations stay visible in the local evidence layer.
+
+Repeated-correction cases list sorted task-attempt receipt IDs. The denominator
+is the number of complete memory-conditioned attempts, and the numerator is the
+number whose fully covered window contains at least one oracle-labeled user
+correction. A zero therefore requires an observed closed window; absence of a
+user-message reference alone is never accepted as zero evidence.
+
+Paired-outcome cases name one baseline and one treatment receipt. The evaluator
+requires identical task, task-spec, acceptance criteria, execution config,
+semantic key, Agent, and oracle identity/version before deriving deltas. The
+treatment must have exact memory delivery; the baseline must have none.
 
 ## Metrics and gates
 
@@ -282,10 +339,30 @@ The report calculates:
 - paired changes in success, score, errors, user corrections, and total
   tokens.
 
-Thresholds are explicit in each evaluation input. A zero denominator is
-`not_evaluable`, never a passing zero. A report is release-ready only when at
-least one gate exists, every gate passes, the corpus verifies, and every
-required evidence reference and attestation resolves without an issue.
+Thresholds are explicit caller-supplied values in each evaluation input. A zero
+denominator is `not_evaluable`, never a passing zero. Every report has
+`authority: measurement_only`. A `component` report can be release-ready only
+for its bounded diagnostic when at least one gate exists, every gate passes,
+the corpus verifies, and every required evidence reference and attestation
+resolves without an issue. That status is not a product-efficacy claim.
+
+Every input declares a `quality_profile`. `component` supports a focused
+diagnostic gate. `continuous_learning` requires all six categories and all
+twelve thresholds, including positive minimum counts for correction
+opportunities and comparable outcome pairs, plus a gate on mean user-correction
+delta. It currently produces a complete measurement-only diagnostic and always
+records an issue stating that efficacy is not evaluable. It cannot become
+release-ready because oracle authority and the complete eligible population are
+not independently bound.
+
+Enabling a real efficacy gate requires one atomic policy upgrade: a versioned
+policy ID must resolve to fixed thresholds and eligibility rules; a population
+ID must resolve to a manifest deterministically rebuilt from a frozen ledger
+and repository snapshot; the measured-subject set must equal that manifest;
+and each oracle must be a keyed verifier that can rerun its checker against the
+bound task, criteria, configuration, and result blobs. A caller-provided trust
+flag, allowlist, subject-list hash, source string, or signature alone is not
+sufficient.
 
 ```text
 agentmem eval run \
@@ -296,14 +373,21 @@ agentmem eval run \
 
 agentmem eval verify \
   --root <local-evidence-directory> \
+  --repo <portable-memory-directory> \
   --suite <suite-id> \
   --run <run-id>
 ```
 
 `eval run` writes immutable input and report files under the local evidence
 root and appends an `evaluation_run` event. `eval verify` checks their hashes,
-the input blob, report blob, and run event. Use a new run ID for a new source
-state or measurement.
+the input blob, report blob, and run event, recomputes report metrics from the
+input, and replays evidence for all six categories, including correction and
+paired-outcome task-attempt receipts. Use a new run ID for a new source state or
+measurement.
+
+`--enforce` therefore fails for `continuous_learning` in the current schema,
+even when all twelve diagnostic gates pass. This fail-closed behavior prevents
+replayable claims from being misreported as independently established efficacy.
 
 ## Regression policy
 
@@ -314,7 +398,7 @@ candidate or an expected rejection, but it cannot bypass review and promotion.
 Deterministic sampling prevents convenient hand-picking, while separate
 strata retain strong evidence, conflict cases, and negative controls.
 
-Continuous-learning claims require paired or longitudinal evidence. Capture
+Future continuous-learning efficacy claims require paired or longitudinal evidence. Capture
 coverage proves preservation, not usefulness. Retrieval volume proves neither
 adoption nor improved outcomes. Improvements must reduce repeated mistakes or
 measured work while false-memory, drift, harmful-outcome, and context-cost

@@ -47,7 +47,9 @@ func Calculate(input EvaluationInput) (EvaluationReport, error) {
 		SchemaVersion: EvaluationReportSchema, EvaluationVersion: EvaluationVersion,
 		SuiteID: input.SuiteID, RunID: input.RunID,
 		InputSHA256: hex.EncodeToString(inputDigest[:]), SystemVersion: input.SystemVersion,
-		CorpusID: input.CorpusID, CasesChecked: len(input.Cases), Issues: []string{},
+		CorpusID: input.CorpusID, QualityProfile: input.QualityProfile,
+		Authority:    EvaluationAuthorityMeasurementOnly,
+		CasesChecked: len(input.Cases), Issues: []string{},
 		Capture: CaptureMetrics{Unit: CaptureUnitNone}, Privacy: "local_only",
 	}
 
@@ -195,6 +197,9 @@ func Calculate(input EvaluationInput) (EvaluationReport, error) {
 	}
 
 	report.Gates = evaluateGates(input.Thresholds, report)
+	if input.QualityProfile == QualityProfileContinuousLearning {
+		report.Issues = append(report.Issues, ContinuousLearningEfficacyIssue)
+	}
 	// Metric calculation alone never proves a release gate. Run resolves every
 	// referenced artifact before it may set ReleaseReady.
 	report.ReleaseReady = false
@@ -217,6 +222,10 @@ func validateInput(input EvaluationInput) error {
 	if input.Privacy != "local_only" {
 		return errors.New("evaluation input privacy must be local_only")
 	}
+	if input.QualityProfile != QualityProfileComponent &&
+		input.QualityProfile != QualityProfileContinuousLearning {
+		return errors.New("quality_profile must be component or continuous_learning")
+	}
 	if input.CorpusID != "" && !strings.HasPrefix(input.CorpusID, "corpus-") {
 		return errors.New("corpus_id must use the corpus- prefix")
 	}
@@ -227,6 +236,15 @@ func validateInput(input EvaluationInput) error {
 		return err
 	}
 	seenCases := map[string]struct{}{}
+	seenMeasuredSubjects := map[string]string{}
+	claimSubject := func(kind, id, caseID string) error {
+		key := kind + "\x00" + id
+		if previous, exists := seenMeasuredSubjects[key]; exists {
+			return fmt.Errorf("case %q repeats measured subject %q from case %q", caseID, id, previous)
+		}
+		seenMeasuredSubjects[key] = caseID
+		return nil
+	}
 	captureUnit := CaptureUnitNone
 	for index, evaluationCase := range input.Cases {
 		if !safeIdentifier(evaluationCase.CaseID) {
@@ -265,12 +283,59 @@ func validateInput(input EvaluationInput) error {
 		if err := validateCase(evaluationCase); err != nil {
 			return fmt.Errorf("case %q: %w", evaluationCase.CaseID, err)
 		}
+		switch evaluationCase.Category {
+		case CategoryCaptureCoverage:
+			for _, reference := range evaluationCase.Evidence {
+				if err := claimSubject("capture:"+reference.Kind, reference.ID, evaluationCase.CaseID); err != nil {
+					return err
+				}
+			}
+		case CategoryFalseMemory:
+			if err := claimSubject("memory", evaluationCase.Memory.MemoryID, evaluationCase.CaseID); err != nil {
+				return err
+			}
+		case CategoryRepeatedCorrection:
+			for _, attemptID := range evaluationCase.Correction.AttemptIDs {
+				if err := claimSubject("correction_attempt", attemptID, evaluationCase.CaseID); err != nil {
+					return err
+				}
+			}
+		case CategoryCompactionDrift:
+			if err := claimSubject("compaction", evaluationCase.Compaction.CheckpointID, evaluationCase.CaseID); err != nil {
+				return err
+			}
+			for _, reference := range evaluationCase.Evidence {
+				if err := claimSubject("compaction_evidence:"+reference.Kind,
+					reference.ID, evaluationCase.CaseID); err != nil {
+					return err
+				}
+			}
+		case CategoryRetrievalCost:
+			if err := claimSubject("retrieval", evaluationCase.Retrieval.RetrievalID, evaluationCase.CaseID); err != nil {
+				return err
+			}
+		case CategoryPairedOutcome:
+			if err := claimSubject("outcome_pair", evaluationCase.PairedOutcome.PairID, evaluationCase.CaseID); err != nil {
+				return err
+			}
+			for _, attemptID := range []string{evaluationCase.PairedOutcome.BaselineAttemptID,
+				evaluationCase.PairedOutcome.TreatmentAttemptID} {
+				if err := claimSubject("paired_attempt", attemptID, evaluationCase.CaseID); err != nil {
+					return err
+				}
+			}
+		}
 		if evaluationCase.Category == CategoryCaptureCoverage {
 			if captureUnit == CaptureUnitNone {
 				captureUnit = evaluationCase.Capture.Unit
 			} else if captureUnit != evaluationCase.Capture.Unit {
 				return errors.New("capture cases in one run must use the same unit")
 			}
+		}
+	}
+	if input.QualityProfile == QualityProfileContinuousLearning {
+		if err := validateContinuousLearningProfile(input); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -326,10 +391,13 @@ func validateCaseMeasurement(evaluationCase EvaluationCase) error {
 	case CategoryRepeatedCorrection:
 		measurement := evaluationCase.Correction
 		if measurement == nil || !validSHA256(measurement.SemanticKeySHA256) ||
+			len(measurement.AttemptIDs) == 0 || !sortedUniqueAttemptIDs(measurement.AttemptIDs) ||
 			measurement.EligibleFollowupOpportunities < 0 || measurement.RepeatedCorrections < 0 ||
 			measurement.RepeatedCorrectionsAfterMemory < 0 ||
 			measurement.RepeatedCorrections > measurement.EligibleFollowupOpportunities ||
-			measurement.RepeatedCorrectionsAfterMemory > measurement.RepeatedCorrections {
+			measurement.RepeatedCorrectionsAfterMemory > measurement.RepeatedCorrections ||
+			measurement.EligibleFollowupOpportunities != len(measurement.AttemptIDs) ||
+			measurement.RepeatedCorrectionsAfterMemory != measurement.RepeatedCorrections {
 			return errors.New("correction measurement is inconsistent")
 		}
 	case CategoryCompactionDrift:
@@ -358,6 +426,9 @@ func validateCaseMeasurement(evaluationCase EvaluationCase) error {
 	case CategoryPairedOutcome:
 		measurement := evaluationCase.PairedOutcome
 		if measurement == nil || !safeIdentifier(measurement.PairID) ||
+			!strings.HasPrefix(measurement.BaselineAttemptID, "task-attempt-") ||
+			!strings.HasPrefix(measurement.TreatmentAttemptID, "task-attempt-") ||
+			measurement.BaselineAttemptID == measurement.TreatmentAttemptID ||
 			!validTrial(measurement.Baseline) || !validTrial(measurement.Treatment) {
 			return errors.New("paired outcome measurement is invalid")
 		}
@@ -390,6 +461,15 @@ func evaluateGates(thresholds EvaluationThresholds, report EvaluationReport) []G
 	addMinimum("compaction_drift_recall", thresholds.MinimumDriftRecall, report.CompactionDrift.Recall.Value)
 	addMaximum("mean_retrieval_tokens", thresholds.MaximumMeanRetrievalTokens, report.Retrieval.MeanTokens)
 	addMinimum("mean_outcome_score_delta", thresholds.MinimumMeanOutcomeScoreDelta, report.Outcomes.MeanScoreDelta)
+	addMaximum("mean_correction_delta", thresholds.MaximumMeanCorrectionDelta, report.Outcomes.MeanCorrectionDelta)
+	if thresholds.MinimumCorrectionOpportunities != nil {
+		actual := float64(report.Corrections.EligibleFollowupOpportunities)
+		addMinimum("correction_opportunities", thresholds.MinimumCorrectionOpportunities, &actual)
+	}
+	if thresholds.MinimumPairedOutcomePairs != nil {
+		actual := float64(report.Outcomes.Pairs)
+		addMinimum("paired_outcome_pairs", thresholds.MinimumPairedOutcomePairs, &actual)
+	}
 	if thresholds.MaximumHarmfulOutcomes != nil {
 		var actual *float64
 		if report.Retrieval.Deliveries > 0 {
@@ -480,18 +560,88 @@ func validateThresholds(thresholds EvaluationThresholds) error {
 		}
 	}
 	for name, value := range map[string]*float64{
-		"maximum_mean_retrieval_tokens": thresholds.MaximumMeanRetrievalTokens,
-		"maximum_harmful_outcomes":      thresholds.MaximumHarmfulOutcomes,
+		"maximum_mean_retrieval_tokens":    thresholds.MaximumMeanRetrievalTokens,
+		"maximum_harmful_outcomes":         thresholds.MaximumHarmfulOutcomes,
+		"minimum_correction_opportunities": thresholds.MinimumCorrectionOpportunities,
+		"minimum_paired_outcome_pairs":     thresholds.MinimumPairedOutcomePairs,
 	} {
 		if value != nil && (*value < 0 || math.IsNaN(*value) || math.IsInf(*value, 0)) {
 			return fmt.Errorf("threshold %s must be non-negative", name)
+		}
+		if value != nil && (name == "minimum_correction_opportunities" ||
+			name == "minimum_paired_outcome_pairs") && math.Trunc(*value) != *value {
+			return fmt.Errorf("threshold %s must be a whole number", name)
 		}
 	}
 	if value := thresholds.MinimumMeanOutcomeScoreDelta; value != nil &&
 		(*value < -1 || *value > 1 || math.IsNaN(*value) || math.IsInf(*value, 0)) {
 		return errors.New("minimum_mean_outcome_score_delta must be between -1 and 1")
 	}
+	if value := thresholds.MaximumMeanCorrectionDelta; value != nil &&
+		(math.IsNaN(*value) || math.IsInf(*value, 0)) {
+		return errors.New("maximum_mean_correction_delta must be finite")
+	}
 	return nil
+}
+
+func validateContinuousLearningProfile(input EvaluationInput) error {
+	requiredCategories := map[CaseCategory]bool{
+		CategoryCaptureCoverage: false, CategoryFalseMemory: false,
+		CategoryRepeatedCorrection: false, CategoryCompactionDrift: false,
+		CategoryRetrievalCost: false, CategoryPairedOutcome: false,
+	}
+	for _, evaluationCase := range input.Cases {
+		if _, required := requiredCategories[evaluationCase.Category]; required {
+			requiredCategories[evaluationCase.Category] = true
+		}
+	}
+	for _, category := range []CaseCategory{
+		CategoryCaptureCoverage, CategoryFalseMemory, CategoryRepeatedCorrection,
+		CategoryCompactionDrift, CategoryRetrievalCost, CategoryPairedOutcome,
+	} {
+		present := requiredCategories[category]
+		if !present {
+			return fmt.Errorf("continuous_learning profile requires category %q", category)
+		}
+	}
+	t := input.Thresholds
+	requiredThresholds := []struct {
+		name  string
+		value *float64
+	}{
+		{"minimum_capture_coverage", t.MinimumCaptureCoverage},
+		{"maximum_false_memory_rate", t.MaximumFalseMemoryRate},
+		{"maximum_unknown_memory_rate", t.MaximumUnknownMemoryRate},
+		{"maximum_repeated_correction_rate", t.MaximumRepeatedCorrectionRate},
+		{"minimum_drift_precision", t.MinimumDriftPrecision},
+		{"minimum_drift_recall", t.MinimumDriftRecall},
+		{"maximum_mean_retrieval_tokens", t.MaximumMeanRetrievalTokens},
+		{"minimum_mean_outcome_score_delta", t.MinimumMeanOutcomeScoreDelta},
+		{"maximum_mean_correction_delta", t.MaximumMeanCorrectionDelta},
+		{"maximum_harmful_outcomes", t.MaximumHarmfulOutcomes},
+		{"minimum_correction_opportunities", t.MinimumCorrectionOpportunities},
+		{"minimum_paired_outcome_pairs", t.MinimumPairedOutcomePairs},
+	}
+	for _, threshold := range requiredThresholds {
+		name, value := threshold.name, threshold.value
+		if value == nil {
+			return fmt.Errorf("continuous_learning profile requires threshold %s", name)
+		}
+	}
+	if *t.MinimumCorrectionOpportunities < 1 || *t.MinimumPairedOutcomePairs < 1 {
+		return errors.New("continuous_learning profile requires positive evidence sample minimums")
+	}
+	return nil
+}
+
+func sortedUniqueAttemptIDs(values []string) bool {
+	for index, value := range values {
+		if !strings.HasPrefix(value, "task-attempt-") ||
+			(index > 0 && values[index-1] >= value) {
+			return false
+		}
+	}
+	return true
 }
 
 func requireJSONEOF(decoder *json.Decoder) error {

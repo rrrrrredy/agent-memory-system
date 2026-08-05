@@ -49,12 +49,13 @@ func BuildLegacyCaptureInput(store *ledger.Store, corpusID string,
 	}
 	minimum := options.MinimumCoverage
 	input := EvaluationInput{
-		SchemaVersion: EvaluationInputSchemaVersion,
-		SuiteID:       options.SuiteID,
-		RunID:         options.RunID,
-		CreatedAt:     options.Now().UTC(),
-		SystemVersion: options.SystemVersion,
-		CorpusID:      corpusID,
+		SchemaVersion:  EvaluationInputSchemaVersion,
+		SuiteID:        options.SuiteID,
+		RunID:          options.RunID,
+		CreatedAt:      options.Now().UTC(),
+		SystemVersion:  options.SystemVersion,
+		QualityProfile: QualityProfileComponent,
+		CorpusID:       corpusID,
 		Thresholds: EvaluationThresholds{
 			MinimumCaptureCoverage: &minimum,
 		},

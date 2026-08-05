@@ -137,6 +137,13 @@ func RecordAdoption(store *ledger.Store, context Context, request AdoptionReques
 		if err := verifyOutcomeEvidence(store, event); err != nil {
 			return AdoptionReceipt{}, fmt.Errorf("outcome evidence event %q: %w", eventID, err)
 		}
+		causalParent := request.InjectionID
+		if causalParent == "" {
+			causalParent = request.RetrievalReceiptID
+		}
+		if !eventDescendsFrom(evidenceEvents, eventIndexes, eventID, causalParent) {
+			return AdoptionReceipt{}, fmt.Errorf("outcome evidence event %q is not causally bound to memory delivery", eventID)
+		}
 	}
 
 	requestBytes, err := json.Marshal(request)
@@ -203,6 +210,7 @@ func validateAdoptionRequest(request AdoptionRequest) error {
 	}
 	seen := map[string]struct{}{}
 	requiresOutcomeEvidence := false
+	attributedOutcomes := 0
 	for _, item := range request.Items {
 		if !validMemoryReference(item.MemoryReference) {
 			return errors.New("adoption request has an invalid memory reference")
@@ -225,6 +233,7 @@ func validateAdoptionRequest(request AdoptionRequest) error {
 		}
 		if item.Outcome != OutcomeUnknown {
 			requiresOutcomeEvidence = true
+			attributedOutcomes++
 		}
 		if strings.TrimSpace(item.Reason) == "" {
 			return errors.New("each adoption item requires a reason")
@@ -233,11 +242,51 @@ func validateAdoptionRequest(request AdoptionRequest) error {
 	if !isSortedUnique(request.OutcomeEvidenceEventIDs) {
 		return errors.New("outcome evidence event ids must be sorted and unique")
 	}
-	if requiresOutcomeEvidence && request.Reporter.Kind != "human" &&
-		len(request.OutcomeEvidenceEventIDs) == 0 {
-		return errors.New("agent and harness outcome claims require independent evidence events")
+	if requiresOutcomeEvidence && request.InjectionID == "" {
+		return errors.New("task outcome claims require an exact memory injection")
+	}
+	if requiresOutcomeEvidence && len(request.OutcomeEvidenceEventIDs) == 0 {
+		return errors.New("task outcome claims require causally bound evidence events")
+	}
+	if attributedOutcomes > 1 {
+		return errors.New("one outcome evidence set cannot be attributed to multiple memories")
 	}
 	return nil
+}
+
+func eventDescendsFrom(events map[string]ledger.Event, indexes map[string]int,
+	eventID, ancestorID string) bool {
+	if eventID == ancestorID {
+		_, exists := events[eventID]
+		return exists
+	}
+	if _, exists := events[ancestorID]; !exists {
+		return false
+	}
+	seen := map[string]struct{}{}
+	queue := []string{eventID}
+	for len(queue) != 0 {
+		current := queue[0]
+		queue = queue[1:]
+		if _, duplicate := seen[current]; duplicate {
+			continue
+		}
+		seen[current] = struct{}{}
+		event, exists := events[current]
+		if !exists || event.Causality == nil {
+			continue
+		}
+		for _, parent := range event.Causality.ParentEventIDs {
+			if _, parentExists := events[parent]; !parentExists || indexes[parent] >= indexes[current] {
+				continue
+			}
+			if parent == ancestorID {
+				return true
+			}
+			queue = append(queue, parent)
+		}
+	}
+	return false
 }
 
 func appendAdoptionEvent(store *ledger.Store, receipt AdoptionReceipt, context Context) error {

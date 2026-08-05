@@ -93,6 +93,7 @@
         "memory_adoption",
         "evaluation_corpus",
         "evaluation_attestation",
+        "task_attempt",
         "evaluation_run",
         "gap",
         "unknown"

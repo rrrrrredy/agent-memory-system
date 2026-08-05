@@ -15,8 +15,10 @@ func TestRecordAttestationIsAppendOnlyAndMeasurementBound(t *testing.T) {
 	}
 	now := time.Unix(500, 0).UTC()
 	attestation := correctionAttestation(now, CorrectionMeasurement{
-		SemanticKeySHA256: repeatedSHA("a"), EligibleFollowupOpportunities: 2,
-		RepeatedCorrections: 1,
+		SemanticKeySHA256:             repeatedSHA("a"),
+		AttemptIDs:                    []string{"task-attempt-" + repeatedSHA("1"), "task-attempt-" + repeatedSHA("2")},
+		EligibleFollowupOpportunities: 2, RepeatedCorrections: 1,
+		RepeatedCorrectionsAfterMemory: 1,
 	})
 	result, err := RecordAttestation(store, attestation, func() time.Time { return now.Add(time.Second) })
 	if err != nil {
@@ -44,8 +46,10 @@ func TestRecordAttestationIsAppendOnlyAndMeasurementBound(t *testing.T) {
 	}
 	mismatch := attestation.evaluationCase()
 	mismatch.Correction = &CorrectionMeasurement{
-		SemanticKeySHA256: repeatedSHA("a"), EligibleFollowupOpportunities: 2,
-		RepeatedCorrections: 2,
+		SemanticKeySHA256:             repeatedSHA("a"),
+		AttemptIDs:                    []string{"task-attempt-" + repeatedSHA("1"), "task-attempt-" + repeatedSHA("2")},
+		EligibleFollowupOpportunities: 2, RepeatedCorrections: 2,
+		RepeatedCorrectionsAfterMemory: 2,
 	}
 	if err := validateAttestationRecord(store, mismatch, record); err == nil ||
 		!strings.Contains(err.Error(), "does not match") {

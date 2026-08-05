@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
 func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
@@ -18,10 +20,10 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "unknown subcommand", args: []string{"derive", "unknown"}, message: "derive <episodes|candidates>"},
 		{name: "candidate flags", args: []string{"derive", "candidates"}, message: "requires --root and --episodes"},
 		{name: "episode flags", args: []string{"derive", "episodes"}, message: "requires --root"},
-		{name: "missing eval subcommand", args: []string{"eval"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attest|run|verify>"},
-		{name: "unknown eval subcommand", args: []string{"eval", "unknown"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attest|run|verify>"},
-		{name: "missing eval corpus subcommand", args: []string{"eval", "corpus"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attest|run|verify>"},
-		{name: "unknown eval corpus subcommand", args: []string{"eval", "corpus", "unknown"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attest|run|verify>"},
+		{name: "missing eval subcommand", args: []string{"eval"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attempt record|attempt verify|attest|run|verify>"},
+		{name: "unknown eval subcommand", args: []string{"eval", "unknown"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attempt record|attempt verify|attest|run|verify>"},
+		{name: "missing eval corpus subcommand", args: []string{"eval", "corpus"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attempt record|attempt verify|attest|run|verify>"},
+		{name: "unknown eval corpus subcommand", args: []string{"eval", "corpus", "unknown"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attempt record|attempt verify|attest|run|verify>"},
 		{name: "eval corpus baseline flags", args: []string{"eval", "corpus", "baseline"}, message: "requires --root, --corpus, --run, and --system-version"},
 		{name: "eval corpus freeze flags", args: []string{"eval", "corpus", "freeze"}, message: "requires --root and --legacy-root"},
 		{name: "eval corpus verify flags", args: []string{"eval", "corpus", "verify"}, message: "requires --root and --corpus"},
@@ -31,6 +33,8 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "eval corpus Agent assessment import flags", args: []string{"eval", "corpus", "agent-assessment", "import-external"}, message: "requires projection, submission, assessor, claimed model, harness, prompt, and time metadata"},
 		{name: "eval corpus controlled Agent assessment flags", args: []string{"eval", "corpus", "agent-assessment", "run-openai"}, message: "requires --root, --projection, --model, and --confirm-remote-disclosure"},
 		{name: "eval attest flags", args: []string{"eval", "attest"}, message: "requires --root and --file"},
+		{name: "eval attempt record flags", args: []string{"eval", "attempt", "record"}, message: "requires --root and --file"},
+		{name: "eval attempt verify flags", args: []string{"eval", "attempt", "verify"}, message: "requires --root and --receipt"},
 		{name: "eval run flags", args: []string{"eval", "run"}, message: "requires --root and --file"},
 		{name: "eval verify flags", args: []string{"eval", "verify"}, message: "requires --root, --suite, and --run"},
 		{name: "missing inject adapter", args: []string{"inject"}, message: "inject <codex|claude-code|opencode>"},
@@ -108,6 +112,29 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 				t.Fatalf("run(%v) error = %v, want message containing %q", test.args, err, test.message)
 			}
 		})
+	}
+}
+
+func TestEvaluationRunEnforceRejectsContinuousMeasurementOnly(t *testing.T) {
+	root := t.TempDir()
+	if _, err := ledger.Init(root); err != nil {
+		t.Fatal(err)
+	}
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devNull.Close()
+	stdout := os.Stdout
+	os.Stdout = devNull
+	defer func() { os.Stdout = stdout }()
+	fixture, err := filepath.Abs(filepath.Join("..", "..", "evals", "fixtures", "quality-pass.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runEvaluationRun([]string{"--root", root, "--file", fixture, "--enforce"})
+	if err == nil || !strings.Contains(err.Error(), "not release-ready") {
+		t.Fatalf("continuous measurement-only report passed --enforce: %v", err)
 	}
 }
 

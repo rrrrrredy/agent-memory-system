@@ -123,6 +123,39 @@ func Export(store *ledger.Store, repositoryRoot string, options ExportOptions) (
 	return result, nil
 }
 
+// ResolveSemanticKey maps a portable revision back to its verified local
+// promotion source without adding private provenance to the portable format.
+func ResolveSemanticKey(store *ledger.Store, memoryID, portableRevisionID string) (string, error) {
+	if store == nil {
+		return "", errors.New("store is required")
+	}
+	histories, err := promotion.ListHistories(store)
+	if err != nil {
+		return "", err
+	}
+	for _, history := range histories {
+		if history.MemoryID != memoryID {
+			continue
+		}
+		projected, err := projectHistory(history)
+		if err != nil {
+			return "", err
+		}
+		for index, revision := range projected {
+			if revision.RevisionID != portableRevisionID {
+				continue
+			}
+			if index >= len(history.Revisions) || history.Revisions[index].Source == nil ||
+				history.Revisions[index].Source.SemanticKeySHA256 == "" {
+				return "", errors.New("portable revision has no local semantic source")
+			}
+			return history.Revisions[index].Source.SemanticKeySHA256, nil
+		}
+		return "", errors.New("portable revision is absent from its local promotion history")
+	}
+	return "", errors.New("portable memory is absent from local promotion history")
+}
+
 func projectHistory(history promotion.History) ([]Revision, error) {
 	localToPortable := map[string]string{}
 	result := make([]Revision, 0, len(history.Revisions))

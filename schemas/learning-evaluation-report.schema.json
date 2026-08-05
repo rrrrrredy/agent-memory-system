@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "evaluation_version", "suite_id", "run_id", "input_sha256",
-    "input_blob", "system_version", "cases_checked", "evidence_references_checked",
+    "input_blob", "system_version", "quality_profile", "authority", "cases_checked", "evidence_references_checked",
     "attested_references", "capture", "false_memory", "corrections", "compaction_drift",
     "retrieval", "outcomes", "gates", "release_ready", "issues", "report_sha256", "privacy"
   ],
@@ -18,6 +18,8 @@
     "input_sha256": {"$ref": "#/$defs/sha256"},
     "input_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
     "system_version": {"type": "string", "minLength": 1},
+    "quality_profile": {"enum": ["component", "continuous_learning"]},
+    "authority": {"const": "measurement_only"},
     "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
     "cases_checked": {"type": "integer", "minimum": 1},
     "evidence_references_checked": {"type": "integer", "minimum": 0},
@@ -34,6 +36,15 @@
     "report_sha256": {"$ref": "#/$defs/sha256"},
     "privacy": {"const": "local_only"}
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"quality_profile": {"const": "continuous_learning"}},
+        "required": ["quality_profile"]
+      },
+      "then": {"properties": {"release_ready": {"const": false}}}
+    }
+  ],
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "identifier": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,160}$"},

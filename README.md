@@ -300,6 +300,13 @@ must be recorded first as append-only case attestations, and a run cannot pass
 on empty samples or unresolved evidence. See
 [continuous-learning evaluation](docs/evaluation.md).
 
+Repeated-correction and paired-outcome gates use replayable local task-attempt
+receipts instead of self-reported aggregate counts. The
+`continuous_learning` profile requires the complete six-category, twelve-gate
+diagnostic shape. It remains `measurement_only` and cannot claim product
+efficacy until a versioned fixed policy, a deterministically closed population,
+and independently runnable oracles are bound to the run.
+
 `eval corpus review-pack` deterministically samples corpus-overlapping
 candidates and compaction checkpoints for human review. The pack stays under
 the local evidence root, binds the exact corpus and current derivation hashes,

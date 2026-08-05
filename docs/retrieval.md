@@ -179,13 +179,19 @@ agentmem recall adoption \
 
 Every item must reference a revision selected by the named retrieval or
 injection receipt. A memory that was not adopted cannot be assigned a task
-outcome. Agent and harness claims of helpful, neutral, or harmful results require
-complete, hash-verified `tool_result` or `file_change` events; retrieval,
-injection, adoption, and Agent-message events cannot prove effectiveness. The
-result event must follow the referenced delivery and belong to the same task
-context. A human report is retained as a direct attestation. Reporter kinds are
-`human`, `agent`, and `harness`.
+outcome. Every helpful, neutral, or harmful claim, including a human claim,
+requires an exact injection plus complete, hash-verified `tool_result` or
+`file_change` evidence that causally descends from that delivery. Retrieval,
+injection, adoption, and Agent-message events cannot prove effectiveness. One
+outcome evidence set cannot be attributed to more than one memory.
+
+Reporter kinds are `human`, `agent`, and `harness`, but those identities are
+self-declared rather than authenticated. An adoption outcome therefore remains
+an attributed observation. Replayable task-attempt receipts and comparable
+baseline/memory runs provide measurement inputs, but do not establish product
+efficacy without fixed policy, complete-population reconstruction, and an
+independently runnable oracle.
 
 `recall verify` checks receipt integrity, event ordering, content hashes,
-budgets, and reference relationships. A retrieval without a later outcome is
-reported as open, not corrupt.
+causal ancestry, budgets, and reference relationships. A retrieval without a
+later adoption observation is reported as open, not corrupt.

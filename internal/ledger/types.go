@@ -33,6 +33,7 @@ const (
 	KindAdoption              EventKind = "memory_adoption"
 	KindEvaluationCorpus      EventKind = "evaluation_corpus"
 	KindEvaluationAttestation EventKind = "evaluation_attestation"
+	KindTaskAttempt           EventKind = "task_attempt"
 	KindEvaluationRun         EventKind = "evaluation_run"
 	KindGap                   EventKind = "gap"
 	KindUnknown               EventKind = "unknown"

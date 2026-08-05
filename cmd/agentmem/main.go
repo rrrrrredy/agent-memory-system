@@ -599,6 +599,9 @@ func runRecallVerify(args []string) error {
 }
 
 func runEvaluation(args []string) error {
+	if len(args) == 0 {
+		return evalUsageError()
+	}
 	switch args[0] {
 	case "corpus":
 		if len(args) < 2 {
@@ -607,10 +610,78 @@ func runEvaluation(args []string) error {
 		return runEvaluationCorpus(args[1:])
 	case "attest":
 		return runEvaluationAttest(args[1:])
+	case "attempt":
+		if len(args) < 2 {
+			return evalUsageError()
+		}
+		return runEvaluationAttempt(args[1:])
 	case "run":
 		return runEvaluationRun(args[1:])
 	case "verify":
 		return runEvaluationVerify(args[1:])
+	default:
+		return evalUsageError()
+	}
+}
+
+func runEvaluationAttempt(args []string) error {
+	switch args[0] {
+	case "record":
+		flags := flag.NewFlagSet("eval attempt record", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		requestPath := flags.String("file", "", "task attempt request JSON file, or - for stdin (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *requestPath == "" {
+			return errors.New("eval attempt record requires --root and --file")
+		}
+		reader := os.Stdin
+		var file *os.File
+		var err error
+		if *requestPath != "-" {
+			file, err = os.Open(*requestPath)
+			if err != nil {
+				return fmt.Errorf("open task attempt request: %w", err)
+			}
+			defer file.Close()
+			reader = file
+		}
+		request, err := evaluation.DecodeTaskAttemptRequest(reader)
+		if err != nil {
+			return err
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, err := evaluation.RecordTaskAttempt(store, request, nil)
+		if err != nil {
+			return err
+		}
+		return encodeIndented(result)
+	case "verify":
+		flags := flag.NewFlagSet("eval attempt verify", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		receiptID := flags.String("receipt", "", "task attempt receipt id (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *receiptID == "" {
+			return errors.New("eval attempt verify requires --root and --receipt")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		report := evaluation.VerifyTaskAttempt(store, *receiptID)
+		if err := encodeIndented(report); err != nil {
+			return err
+		}
+		if len(report.Issues) != 0 {
+			return errors.New("task attempt verification failed")
+		}
+		return nil
 	default:
 		return evalUsageError()
 	}
@@ -927,7 +998,7 @@ func runEvaluationRun(args []string) error {
 		return err
 	}
 	if *enforce && !result.Report.ReleaseReady {
-		return errors.New("continuous-learning evaluation gates did not pass")
+		return errors.New("evaluation is not release-ready")
 	}
 	return nil
 }
@@ -935,6 +1006,7 @@ func runEvaluationRun(args []string) error {
 func runEvaluationVerify(args []string) error {
 	flags := flag.NewFlagSet("eval verify", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
+	portableRoot := flags.String("repo", "", "portable memory repository (required when the run references portable revisions)")
 	suiteID := flags.String("suite", "", "evaluation suite id (required)")
 	runID := flags.String("run", "", "evaluation run id (required)")
 	if err := flags.Parse(args); err != nil {
@@ -947,7 +1019,7 @@ func runEvaluationVerify(args []string) error {
 	if err != nil {
 		return err
 	}
-	report := evaluation.VerifyRun(store, *suiteID, *runID)
+	report := evaluation.VerifyRun(store, *suiteID, *runID, *portableRoot)
 	if err := encodeIndented(report); err != nil {
 		return err
 	}
@@ -2115,7 +2187,7 @@ func deriveUsageError() error {
 }
 
 func evalUsageError() error {
-	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attest|run|verify> [options]")
+	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attempt record|attempt verify|attest|run|verify> [options]")
 }
 
 func captureUsageError() error {

@@ -37,11 +37,14 @@ binds case, Agent, attestor, time, and reason. False-memory and compaction-drift
 ground truth requires a human attestor; deterministic harnesses may attest
 counting and paired-result cases.
 
-Metric calculation is pure and never certifies a release. A persisted run may
-be release-ready only after every reference resolves, the optional corpus and
-portable repository verify, at least one threshold is configured, and every
-gate passes. Missing denominators are `not_evaluable`. Inputs, reports, and
-attestations remain local-only and are anchored in the evidence ledger.
+Metric calculation is pure and never certifies a release. A persisted component
+run may be release-ready only for its bounded diagnostic after every reference
+resolves, the optional corpus and portable repository verify, at least one
+threshold is configured, and every gate passes. A continuous-learning run
+remains measurement-only until a later policy binds fixed thresholds, a
+deterministically complete population, and independently runnable oracles.
+Missing denominators are `not_evaluable`. Inputs, reports, and attestations
+remain local-only and are anchored in the evidence ledger.
 
 ## Alternatives
 

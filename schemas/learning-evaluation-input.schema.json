@@ -5,7 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "suite_id", "run_id", "created_at", "system_version",
+    "schema_version", "suite_id", "run_id", "created_at", "system_version", "quality_profile",
     "cases", "thresholds", "privacy"
   ],
   "properties": {
@@ -14,6 +14,7 @@
     "run_id": {"$ref": "#/$defs/identifier"},
     "created_at": {"type": "string", "format": "date-time"},
     "system_version": {"type": "string", "minLength": 1},
+    "quality_profile": {"enum": ["component", "continuous_learning"]},
     "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
     "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}, "minItems": 1},
     "thresholds": {"$ref": "#/$defs/thresholds"},
@@ -61,11 +62,15 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "semantic_key_sha256", "eligible_followup_opportunities", "repeated_corrections",
+        "semantic_key_sha256", "attempt_ids", "eligible_followup_opportunities", "repeated_corrections",
         "repeated_corrections_after_memory"
       ],
       "properties": {
         "semantic_key_sha256": {"$ref": "#/$defs/sha256"},
+        "attempt_ids": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^task-attempt-[a-f0-9]{64}$"}
+        },
         "eligible_followup_opportunities": {"type": "integer", "minimum": 0},
         "repeated_corrections": {"type": "integer", "minimum": 0},
         "repeated_corrections_after_memory": {"type": "integer", "minimum": 0}
@@ -111,9 +116,11 @@
     "paired_outcome": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pair_id", "baseline", "treatment"],
+      "required": ["pair_id", "baseline_attempt_id", "treatment_attempt_id", "baseline", "treatment"],
       "properties": {
         "pair_id": {"$ref": "#/$defs/identifier"},
+        "baseline_attempt_id": {"type": "string", "pattern": "^task-attempt-[a-f0-9]{64}$"},
+        "treatment_attempt_id": {"type": "string", "pattern": "^task-attempt-[a-f0-9]{64}$"},
         "baseline": {"$ref": "#/$defs/trial"},
         "treatment": {"$ref": "#/$defs/trial"}
       }
@@ -179,7 +186,10 @@
         "minimum_drift_recall": {"$ref": "#/$defs/unit_interval"},
         "maximum_mean_retrieval_tokens": {"type": "number", "minimum": 0},
         "minimum_mean_outcome_score_delta": {"type": "number", "minimum": -1, "maximum": 1},
-        "maximum_harmful_outcomes": {"type": "number", "minimum": 0}
+        "maximum_mean_correction_delta": {"type": "number"},
+        "maximum_harmful_outcomes": {"type": "number", "minimum": 0},
+        "minimum_correction_opportunities": {"type": "number", "minimum": 0},
+        "minimum_paired_outcome_pairs": {"type": "number", "minimum": 0}
       }
     }
   }

@@ -128,7 +128,7 @@ func TestBuildContextUsesActualInjectionReceiptAndAdoptionClosesObservation(t *t
 	for _, memory := range contextResult.Memories {
 		items = append(items, AdoptionItem{
 			MemoryReference: memory, Adoption: AdoptionAdopted,
-			Outcome: OutcomeHelpful, Reason: "The task result was checked by the user.",
+			Outcome: OutcomeUnknown, Reason: "The delivered memory was observed by the user.",
 		})
 	}
 	receipt, err := RecordAdoption(store, Context{
@@ -280,7 +280,7 @@ func TestAdoptionRejectsMemoryOutsideDeliveryAndUnavailableEvidence(t *testing.T
 	}
 }
 
-func TestAdoptionRequiresCompleteResultEvidenceForNonHumanClaims(t *testing.T) {
+func TestAdoptionRequiresCompleteResultEvidenceForEveryOutcomeClaim(t *testing.T) {
 	store, err := ledger.Init(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -294,7 +294,7 @@ func TestAdoptionRequiresCompleteResultEvidenceForNonHumanClaims(t *testing.T) {
 	}
 	appendOutcomeEvidenceFixture(t, store, "stale-result-event", ledger.KindToolResult,
 		ledger.CompletenessComplete)
-	result, err := Search(store, repository, Request{
+	result, err := BuildContext(store, repository, Request{
 		SchemaVersion: RequestSchemaVersion,
 		Query:         "focused test success",
 		Context:       context,
@@ -305,9 +305,10 @@ func TestAdoptionRequiresCompleteResultEvidenceForNonHumanClaims(t *testing.T) {
 	request := AdoptionRequest{
 		SchemaVersion:      AdoptionRequestSchemaVersion,
 		Reporter:           Reporter{Kind: "harness", ID: "regression-suite"},
-		RetrievalReceiptID: result.ReceiptID,
+		RetrievalReceiptID: result.Retrieval.ReceiptID,
+		InjectionID:        result.InjectionID,
 		Items: []AdoptionItem{{
-			MemoryReference: result.Selected[0].MemoryReference,
+			MemoryReference: result.Memories[0],
 			Adoption:        AdoptionAdopted,
 			Outcome:         OutcomeHelpful,
 			Reason:          "The focused test passed.",
@@ -329,8 +330,13 @@ func TestAdoptionRequiresCompleteResultEvidenceForNonHumanClaims(t *testing.T) {
 	if _, err := RecordAdoption(store, context, request); err == nil {
 		t.Fatal("partial tool result was accepted as outcome evidence")
 	}
+	request.Reporter = Reporter{Kind: "human", ID: "reviewer"}
+	request.OutcomeEvidenceEventIDs = nil
+	if _, err := RecordAdoption(store, context, request); err == nil {
+		t.Fatal("human outcome claim without result evidence was accepted")
+	}
 	appendOutcomeEvidenceFixture(t, store, "complete-result-event", ledger.KindToolResult,
-		ledger.CompletenessComplete)
+		ledger.CompletenessComplete, result.InjectionID)
 	request.OutcomeEvidenceEventIDs = []string{"complete-result-event"}
 	if _, err := RecordAdoption(store, context, request); err != nil {
 		t.Fatalf("complete tool result was rejected: %v", err)
@@ -381,7 +387,7 @@ type portableFixture struct {
 }
 
 func appendOutcomeEvidenceFixture(t *testing.T, store *ledger.Store, eventID string,
-	kind ledger.EventKind, status ledger.CompletenessStatus) {
+	kind ledger.EventKind, status ledger.CompletenessStatus, parents ...string) {
 	t.Helper()
 	now := time.Now().UTC()
 	payload := ledger.InlinePayload("utf-8", "text/plain", eventID)
@@ -389,7 +395,7 @@ func appendOutcomeEvidenceFixture(t *testing.T, store *ledger.Store, eventID str
 	if status != ledger.CompletenessComplete {
 		completeness.Reason = "fixture is intentionally incomplete"
 	}
-	_, err := store.Append(ledger.Event{
+	event := ledger.Event{
 		SchemaVersion: ledger.SchemaVersion,
 		EventID:       eventID,
 		Kind:          kind,
@@ -406,7 +412,11 @@ func appendOutcomeEvidenceFixture(t *testing.T, store *ledger.Store, eventID str
 		Payload:      &payload,
 		Completeness: completeness,
 		Privacy:      ledger.Privacy{Classification: PrivacyLocalOnly},
-	})
+	}
+	if len(parents) != 0 {
+		event.Causality = &ledger.Causality{ParentEventIDs: parents}
+	}
+	_, err := store.Append(event)
 	if err != nil {
 		t.Fatal(err)
 	}
