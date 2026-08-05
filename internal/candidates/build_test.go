@@ -165,6 +165,59 @@ func TestBuildHandlesEmptySourceAndRejectsInvalidShardCounts(t *testing.T) {
 	}
 }
 
+func TestBuildSeparatesIdenticalEpisodeContentFromDifferentLedgerPrefixes(t *testing.T) {
+	store, err := ledger.Init(filepath.Join(t.TempDir(), "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstEpisodes, err := episodes.Build(store, episodes.BuildOptions{ShardCount: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstCandidates, err := Build(store, BuildOptions{
+		EpisodeGenerationPath: firstEpisodes.GenerationPath, ShardCount: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)
+	payload := ledger.InlinePayload("utf-8", "application/json", `{}`)
+	if _, err := store.Append(ledger.Event{
+		SchemaVersion: ledger.SchemaVersion, EventID: "global-claude-source",
+		Kind: ledger.KindSourceSnapshot, ObservedAt: now, RecordedAt: now,
+		Source: ledger.Source{
+			Agent: ledger.AgentClaudeCode, Adapter: "claude-code-companion-files",
+			AdapterVersion: "claude-code-companion-files/v1alpha1",
+			DeviceID:       store.DeviceID(), ThreadID: "global-claude-home",
+		},
+		Payload: &payload, Completeness: ledger.Completeness{Status: ledger.CompletenessComplete},
+		Privacy: ledger.Privacy{Classification: "local_only"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	secondEpisodes, err := episodes.Build(store, episodes.BuildOptions{ShardCount: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secondEpisodes.EpisodesSHA256 != firstEpisodes.EpisodesSHA256 ||
+		secondEpisodes.SourceLastRecordHash == firstEpisodes.SourceLastRecordHash {
+		t.Fatalf("fixture did not preserve episode content across different ledger prefixes: first=%+v second=%+v",
+			firstEpisodes, secondEpisodes)
+	}
+	secondCandidates, err := Build(store, BuildOptions{
+		EpisodeGenerationPath: secondEpisodes.GenerationPath, ShardCount: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secondCandidates.GenerationPath == firstCandidates.GenerationPath ||
+		secondCandidates.CandidatesSHA256 != firstCandidates.CandidatesSHA256 || secondCandidates.Reused {
+		t.Fatalf("candidate generations did not preserve distinct provenance: first=%+v second=%+v",
+			firstCandidates, secondCandidates)
+	}
+}
+
 func TestGenerationVerificationRejectsCoordinatedContentTamper(t *testing.T) {
 	store, episodeGeneration := createEpisodeGeneration(t, policyEpisodes()[:1])
 	built, err := Build(store, BuildOptions{EpisodeGenerationPath: episodeGeneration, ShardCount: 1})

@@ -119,7 +119,7 @@ func Build(store *ledger.Store, options BuildOptions) (BuildResult, error) {
 		return result, fmt.Errorf("create generations root: %w", err)
 	}
 	generationName := strings.ReplaceAll(DerivationVersion, "/", "-") + "-" +
-		source.manifest.EpisodesSHA256
+		source.manifestSHA256
 	finalPath := filepath.Join(generationsRoot, generationName)
 	if existing, ok, err := loadExistingGeneration(finalPath, source, result); err != nil {
 		return result, err
