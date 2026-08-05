@@ -76,6 +76,10 @@ func TestEncryptedBackupRoundTripAndRestoreReceipt(t *testing.T) {
 	if !foundRestore {
 		t.Fatal("restore operation was not appended to local evidence")
 	}
+	blob, err := store.PutBlob(strings.NewReader("evidence appended after recovery"))
+	if err != nil || blob.Bytes == 0 {
+		t.Fatalf("restored evidence store was not writable: %+v, %v", blob, err)
+	}
 	if _, err := Restore(RestoreOptions{
 		Archive: fixture.archive, IdentityPaths: []string{fixture.identity}, Target: target,
 	}); err == nil {

@@ -186,7 +186,11 @@ func (s *Store) PutBlob(reader io.Reader) (BlobRef, error) {
 	if err := ensureEvidenceRootOutsideGit(s.root); err != nil {
 		return BlobRef{}, err
 	}
-	temp, err := os.CreateTemp(filepath.Join(s.root, "evidence", "tmp"), "blob-*")
+	tempRoot := filepath.Join(s.root, "evidence", "tmp")
+	if err := os.MkdirAll(tempRoot, 0o700); err != nil {
+		return BlobRef{}, fmt.Errorf("create blob temp directory: %w", err)
+	}
+	temp, err := os.CreateTemp(tempRoot, "blob-*")
 	if err != nil {
 		return BlobRef{}, fmt.Errorf("create blob temp file: %w", err)
 	}

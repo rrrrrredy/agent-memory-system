@@ -68,6 +68,11 @@ store, appends a local restore record, and then renames it into place. Any
 failure removes staging and leaves the target absent. Filesystem deletion is not
 secure erasure, so the target volume should provide device encryption.
 
+Volatile scratch files are intentionally absent from an archive. The restored
+store recreates its private blob staging directory on the first write, so a
+verified replacement remains writable for later capture, evaluation, and
+backup operations.
+
 Restore preserves the logical store identity. Do not continue writing to both
 the original and restored copy. For an additional live device, initialize a new
 evidence store instead and share only promoted memory through the private Git
