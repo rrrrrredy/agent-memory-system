@@ -106,12 +106,12 @@ For a replacement device:
 1. install and verify the binary;
 2. restore the encrypted evidence archive to a new local path;
 3. clone the separate private promoted-memory repository;
-4. run the complete diagnostic gate;
+4. run the recovery-integrity diagnostic gate;
 5. test one offline retrieval for each Agent that will use the device;
 6. enable hooks, plugins, MCP configuration, or automatic synchronization only
    after explicit approval.
 
-The diagnostic gate is:
+The recovery-integrity gate is:
 
 ```text
 agentmem doctor \
@@ -120,10 +120,13 @@ agentmem doctor \
   --require-repo
 ```
 
-It checks the evidence chain and blobs, candidate reviews, promoted revisions,
-rule-change approvals, retrieval and adoption receipts, the complete portable
-repository, and every reachable Git data commit. A non-ready report exits with
-an error.
+It checks every present evidence record and blob, candidate review, promoted
+revision, rule-change approval, retrieval and adoption receipt, portable
+repository record, and reachable Git data commit. A non-ready report exits
+with an error. `ready` is an integrity result: it does not prove that a session
+which never reached a configured source was captured, that a backup is recent,
+or that a continuous-learning evaluation has passed. Verify capture coverage,
+backup freshness, and evaluation results as separate acceptance evidence.
 
 For an additional device rather than a replacement, use `agentmem init` for a
 new local evidence root, clone and verify the private memory repository, then

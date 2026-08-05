@@ -8,10 +8,11 @@ agent runtime makes locally available before deriving memories from it. Raw
 evidence stays local by default. Only reviewed, redacted, promoted memories may
 enter a separate private Git repository.
 
-> Status: v1alpha1 foundation. Evidence capture, review and promotion, portable
-> memory, verified Git synchronization, bounded cross-Agent retrieval,
-> evidence-bound evaluation, and authenticated encrypted backup and recovery
-> are implemented.
+> Status: v1alpha1 foundation. The evidence, review, promotion, synchronization,
+> retrieval, evaluation, and encrypted-recovery protocols are implemented and
+> covered by synthetic cross-platform tests. Native Agent integrations remain
+> opt-in and version-sensitive. A passing test suite proves the controls, not
+> real-world learning efficacy or capture of data a runtime never exposed.
 
 ## Product boundary
 
@@ -68,6 +69,54 @@ canonical data and is never merged through Git.
 - `adapters`: Codex, Claude Code, and OpenCode evidence adapters
 - `integrations`: optional Agent-native live capture and injection bridges
 - `evals`: synthetic continuous-learning and sync reliability fixtures
+
+## Install
+
+Tagged releases contain checksum-listed binaries for Windows, macOS, and
+Linux. Pin the tag when downloading an installer; the installer verifies the
+selected archive against the release `SHA256SUMS` before replacing the binary.
+
+Windows PowerShell:
+
+```powershell
+$version = "v0.1.0"
+Invoke-WebRequest "https://raw.githubusercontent.com/rrrrrredy/agent-memory-system/$version/scripts/install.ps1" -OutFile install-agentmem.ps1
+.\install-agentmem.ps1 -Version $version
+agentmem version
+```
+
+macOS:
+
+```sh
+version="v0.1.0"
+curl -fsSLo install-agentmem.sh "https://raw.githubusercontent.com/rrrrrredy/agent-memory-system/${version}/scripts/install.sh"
+AGENTMEM_VERSION="${version}" sh install-agentmem.sh
+agentmem version
+```
+
+Linux users can download the matching release archive and `SHA256SUMS`, verify
+the archive with `sha256sum -c`, and place `agentmem` on `PATH`. Release
+archives also include the versioned schemas, documentation, and optional
+integration assets. No installer edits Agent configuration or enables hooks.
+
+## First local store
+
+Keep both the evidence root and OpenCode staging outside every Git worktree:
+
+```text
+agentmem init --root <local-evidence-directory>
+agentmem import codex --root <local-evidence-directory> --path <codex-sessions-directory>
+agentmem import claude-home --root <local-evidence-directory> --path <claude-home-directory>
+agentmem capture opencode --root <local-evidence-directory> --staging <non-Git-staging-directory>
+agentmem derive episodes --root <local-evidence-directory>
+agentmem doctor --root <local-evidence-directory>
+```
+
+Choose only the import commands for installed Agents. Review the adapter
+capability documents before treating an import as complete. Candidate review,
+promotion, the separate private memory repository, synchronization, retrieval,
+and backup remain explicit later steps; the command reference below and linked
+documents define each gate.
 
 ## Development
 
@@ -248,11 +297,15 @@ blob references without extracting plaintext. Restore targets must not exist;
 successful recovery appends a local restore record before committing the new
 store. See [encrypted evidence backup and recovery](docs/backup-recovery.md).
 
-`doctor` verifies the complete local learning state. With `--repo` it also
-checks the portable repository and reachable Git history; `--require-repo`
-makes that repository mandatory for new-device acceptance.
+`doctor` verifies the integrity of every present local learning record. With
+`--repo` it also checks the portable repository and reachable Git history;
+`--require-repo` makes that repository mandatory for a recovery-integrity
+check. `ready` does not assert that an unobserved Agent session was captured or
+that continuous-learning efficacy has been established. Capture coverage and
+quality evaluation remain separate evidence-bound gates.
 
-Tagged releases publish checksum-listed Windows, macOS, and Linux binaries.
+Tagged releases publish checksum-listed Windows, macOS, and Linux binaries plus
+the versioned documentation, schemas, and optional Agent integration assets.
 The installers under `scripts` replace only the Windows or macOS executable and
 never edit evidence, Agent configuration, hooks, or synchronization schedules.
 
@@ -273,3 +326,4 @@ never edit evidence, Agent configuration, hooks, or synchronization schedules.
   explicit user approval.
 
 See [the product contract](docs/product-contract.md) for normative requirements.
+Release maintainers should also follow [the release checklist](docs/releasing.md).

@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -33,6 +35,18 @@ jobs:
         working-directory: integrations/opencode
       - run: pnpm typecheck
         working-directory: integrations/opencode
+      - name: Validate release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Release tags must be SemVer without build metadata, for example v0.1.0 or v0.2.0-alpha.1." >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main || {
+            echo "Release tag must point to a commit reachable from origin/main." >&2
+            exit 1
+          }
       - name: Build release archives
         shell: bash
         env:
@@ -57,6 +71,10 @@ jobs:
               -ldflags "-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA} -X main.buildDate=${build_date}" \
               -o "${directory}/${binary}" ./cmd/agentmem
             cp LICENSE README.md "${directory}/"
+            git archive HEAD docs schemas integrations scripts | tar -x -C "${directory}"
+            for capability in adapters/*/CAPABILITIES.md; do
+              install -D "${capability}" "${directory}/${capability}"
+            done
             if [ "${goos}" = "windows" ]; then
               (cd "${directory}" && zip -q -r "../${name}.zip" .)
             else

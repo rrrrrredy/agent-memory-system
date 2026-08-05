@@ -2,6 +2,8 @@
 /bin/
 /dist/
 /coverage/
+/agentmem
+/agentmem.exe
 node_modules/
 
 # Local-only runtime data. Never commit evidence or indexes.

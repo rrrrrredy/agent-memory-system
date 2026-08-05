@@ -59,7 +59,7 @@ The plugin retrieves on `chat.message`, injects through
 through `experimental.session.compacting`. These OpenCode hooks are
 version-sensitive and experimental; the shared MCP server is the stable
 fallback. The compatibility baseline is type-checked against
-`@opencode-ai/plugin` 1.18.13. The plugin is disabled unless both the local
+`@opencode-ai/plugin` 1.18.11. The plugin is disabled unless both the local
 evidence root and portable repository are configured. It is never installed
 automatically and does not replace event capture or historical reconciliation.
 See `docs/retrieval.md`.

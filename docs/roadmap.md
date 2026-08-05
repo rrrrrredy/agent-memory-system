@@ -49,7 +49,9 @@ No raw evidence is migrated when the private repository is created.
 
 ## M4: Retrieval, evaluation, and recovery
 
-Status: implemented in the v1alpha1 foundation.
+Status: protocol implementation is complete in the v1alpha1 foundation.
+Independent real-runtime and longitudinal efficacy evidence remains an
+operational acceptance requirement, not a claim made by the synthetic suite.
 
 - Cross-agent local query and MCP retrieval.
 - Bounded injection with provenance and adoption receipts.
