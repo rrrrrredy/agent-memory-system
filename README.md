@@ -169,6 +169,8 @@ go run ./cmd/agentmem eval corpus verify --root <local-data-directory> --corpus 
 go run ./cmd/agentmem eval corpus baseline --root <local-data-directory> --corpus <corpus-id> --run <run-id> --system-version <version>
 go run ./cmd/agentmem eval corpus review-pack --root <local-data-directory> --corpus <corpus-id> --candidates <candidate-generation>
 go run ./cmd/agentmem eval corpus review-queue --root <local-data-directory> --pack <review-pack-id> --candidate-limit 20 --compaction-limit 20
+go run ./cmd/agentmem eval corpus agent-assessment prepare --root <local-data-directory> --queue <review-queue-id>
+go run ./cmd/agentmem eval corpus agent-assessment import-external --root <local-data-directory> --projection <agent-projection-id> --file <submission.json> --assessor-id <id> --claimed-provider <provider> --claimed-model <model> --harness-version <version> --prompt-sha256 <sha256> --data-disclosure-claim <remote|local|unknown> --assessed-at <rfc3339>
 go run ./cmd/agentmem eval attest --root <local-data-directory> --file <evaluation-attestation.json>
 go run ./cmd/agentmem eval run --root <local-data-directory> --file <evaluation-input.json> --repo <private-memory-directory> --enforce
 go run ./cmd/agentmem eval verify --root <local-data-directory> --suite <suite-id> --run <run-id>

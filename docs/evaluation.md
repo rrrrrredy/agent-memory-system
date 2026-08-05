@@ -67,6 +67,10 @@ agentmem eval corpus review-queue \
   --pack <review-pack-id> \
   --candidate-limit 20 \
   --compaction-limit 20
+
+agentmem eval corpus agent-assessment prepare \
+  --root <local-evidence-directory> \
+  --queue <review-queue-id>
 ```
 
 `--allow-incomplete` changes only the command exit policy. It does not hide,
@@ -121,11 +125,64 @@ The generated Markdown treats all quoted text as untrusted evidence and warns
 the reviewer not to execute it. Generation does not infer truth, append an
 attestation, change a candidate status, promote memory, modify Agent rules, or
 export anything to Git. This artifact must not be handed directly to a general
-tool-enabled Agent. A future assessment harness must isolate untrusted content,
-use a blind review input, fix reviewer kind to `agent`, validate exact item
-coverage, and emit a separate content-addressed result. Agent judgments remain
+tool-enabled Agent. The assessment boundary isolates untrusted content, uses a
+blind input, fixes reviewer kind to `agent`, validates exact item coverage, and
+emits a separate content-addressed result. Agent judgments remain
 provisional evidence: they are not human truth and cannot by themselves
 authorize promotion or satisfy a gate that explicitly requires human truth.
+
+### Provisional Agent assessment
+
+`eval corpus agent-assessment prepare` regenerates and verifies the queue and
+pack, then resolves only their referenced evidence from the bound ledger
+prefix. It writes a local binding manifest under
+`derived/evaluations/agent-projections` and a separate minimal blind payload
+under `derived/evaluations/agent-payloads`. The binding manifest retains source
+hashes and completeness state for local validation and must not be supplied to
+an external assessor. The payload uses opaque IDs and omits source bindings,
+strata, labels, validation states, support classifications, completeness
+decisions, coverage values, and approval flags. Text is bounded, marked
+untrusted, and never exported or transmitted by this command. Candidate,
+checkpoint, and unit ordering is deterministically permuted using local binding
+material that is absent from the payload, so queue strata cannot be recovered
+from array position.
+
+The CLI deliberately does not run a general Agent, arbitrary subprocess, or
+model API. If the blind payload is assessed elsewhere, that disclosure is a
+separate explicit action. The canonical rubric is
+`evals/prompts/agent-assessment-v1.md`; the response must follow
+`legacy-agent-assessment-submission/v1alpha1`. An imported file cannot prove
+which provider or model produced it, whether tools were registered, or where
+the payload was disclosed. Blindness applies to structured metadata and array
+position, not to the unredacted evidence text itself. That text may contain
+identifiers, secrets, or label-like words and therefore requires a separate
+sensitive-content scan and explicit disclosure decision before it leaves the
+device.
+
+Validate and store an external submission with:
+
+```text
+agentmem eval corpus agent-assessment import-external \
+  --root <local-evidence-directory> \
+  --projection <agent-projection-id> \
+  --file <submission.json> \
+  --assessor-id <stable-id> \
+  --claimed-provider <provider> \
+  --claimed-model <model> \
+  --harness-version <version> \
+  --prompt-sha256 <sha256> \
+  --data-disclosure-claim <remote|local|unknown> \
+  --assessed-at <rfc3339>
+```
+
+The importer rebuilds both local artifacts from the queue, pack, and ledger
+before accepting output. It requires exact item coverage, sorted unique reason
+and evidence references, valid enums, and direct evidence for every
+non-insufficient judgment. The stored artifact fixes reviewer kind to `agent`,
+marks isolation `unverified_external`, leaves tools registered unknown, records
+provider, model, and disclosure values only as claims, and fixes authority to
+`provisional_only`. It does not append to the evidence ledger, create a human
+review, attest an evaluation, promote memory, or authorize a rule change.
 
 ## Evidence-bound cases
 

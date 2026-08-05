@@ -15,6 +15,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/adapters/claudecode"
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
 	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
+	"github.com/rrrrrredy/agent-memory-system/internal/agentassessment"
 	"github.com/rrrrrredy/agent-memory-system/internal/autosync"
 	"github.com/rrrrrredy/agent-memory-system/internal/backup"
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
@@ -773,6 +774,82 @@ func runEvaluationCorpus(args []string) error {
 		result, err := evaluation.PrepareLegacyReviewQueue(store, *packID,
 			evaluation.LegacyReviewQueueOptions{
 				CandidateLimit: *candidateLimit, CompactionLimit: *compactionLimit,
+			})
+		if err != nil {
+			return err
+		}
+		return encodeIndented(result)
+	case "agent-assessment":
+		if len(args) < 2 {
+			return evalUsageError()
+		}
+		return runAgentAssessment(args[1:])
+	default:
+		return evalUsageError()
+	}
+}
+
+func runAgentAssessment(args []string) error {
+	switch args[0] {
+	case "prepare":
+		flags := flag.NewFlagSet("eval corpus agent-assessment prepare", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		queueID := flags.String("queue", "", "verified local review queue id (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *queueID == "" {
+			return errors.New("eval corpus agent-assessment prepare requires --root and --queue")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, err := agentassessment.PrepareProjection(store, *queueID)
+		if err != nil {
+			return err
+		}
+		return encodeIndented(result)
+	case "import-external":
+		flags := flag.NewFlagSet("eval corpus agent-assessment import-external", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		projectionID := flags.String("projection", "", "verified local binding manifest id (required)")
+		filePath := flags.String("file", "", "Agent submission JSON file, or - for stdin (required)")
+		assessorID := flags.String("assessor-id", "", "stable Agent assessor id (required)")
+		provider := flags.String("claimed-provider", "", "unverified model provider claim (required)")
+		model := flags.String("claimed-model", "", "unverified model id claim (required)")
+		harnessVersion := flags.String("harness-version", "", "external harness version claim (required)")
+		promptSHA256 := flags.String("prompt-sha256", "", "assessment prompt SHA-256 (required)")
+		disclosureClaim := flags.String("data-disclosure-claim", "unknown", "remote, local, or unknown")
+		assessedAt := flags.String("assessed-at", "", "RFC3339 assessment time (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *projectionID == "" || *filePath == "" || *assessorID == "" ||
+			*provider == "" || *model == "" || *harnessVersion == "" ||
+			*promptSHA256 == "" || *assessedAt == "" {
+			return errors.New("eval corpus agent-assessment import-external requires projection, submission, assessor, claimed model, harness, prompt, and time metadata")
+		}
+		reader := os.Stdin
+		var file *os.File
+		var err error
+		if *filePath != "-" {
+			file, err = os.Open(*filePath)
+			if err != nil {
+				return fmt.Errorf("open Agent assessment submission: %w", err)
+			}
+			defer file.Close()
+			reader = file
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, err := agentassessment.ImportExternalAssessment(store, *projectionID, reader,
+			agentassessment.AssessmentOptions{
+				AssessorID: *assessorID, ClaimedProvider: *provider, ClaimedModel: *model,
+				HarnessVersion: *harnessVersion, PromptSHA256: *promptSHA256,
+				DataDisclosureClaim: *disclosureClaim, AssessedAt: *assessedAt,
 			})
 		if err != nil {
 			return err
@@ -2010,7 +2087,7 @@ func deriveUsageError() error {
 }
 
 func evalUsageError() error {
-	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|attest|run|verify> [options]")
+	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|attest|run|verify> [options]")
 }
 
 func captureUsageError() error {

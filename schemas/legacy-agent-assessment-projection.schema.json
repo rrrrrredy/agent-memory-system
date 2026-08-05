@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-agent-assessment-projection.schema.json",
+  "title": "Local Agent assessment binding manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "projection_id", "projection_content_sha256",
+    "payload_id", "payload_content_sha256", "queue_id",
+    "queue_sha256", "pack_id", "pack_sha256", "corpus_id", "corpus_content_sha256",
+    "candidate_manifest_sha256", "candidates_sha256", "episodes_sha256",
+    "source_evidence_prefix", "extraction_version", "evidence_blocks",
+    "candidate_items", "compaction_items", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-agent-assessment-projection/v1alpha1"},
+    "projection_id": {"type": "string", "pattern": "^agent-projection-[a-f0-9]{64}$"},
+    "projection_content_sha256": {"$ref": "#/$defs/sha256"},
+    "payload_id": {"type": "string", "pattern": "^agent-payload-[a-f0-9]{64}$"},
+    "payload_content_sha256": {"$ref": "#/$defs/sha256"},
+    "queue_id": {"type": "string", "pattern": "^review-queue-[a-f0-9]{64}$"},
+    "queue_sha256": {"$ref": "#/$defs/sha256"},
+    "pack_id": {"type": "string", "pattern": "^review-pack-[a-f0-9]{64}$"},
+    "pack_sha256": {"$ref": "#/$defs/sha256"},
+    "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+    "corpus_content_sha256": {"$ref": "#/$defs/sha256"},
+    "candidate_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "candidates_sha256": {"$ref": "#/$defs/sha256"},
+    "episodes_sha256": {"$ref": "#/$defs/sha256"},
+    "source_evidence_prefix": {"$ref": "#/$defs/source_prefix"},
+    "extraction_version": {"const": "agent-assessment-projection/v1alpha1"},
+    "evidence_blocks": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/evidence_block"},
+      "maxItems": 20000
+    },
+    "candidate_items": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/candidate_item"},
+      "maxItems": 200
+    },
+    "compaction_items": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/compaction_item"},
+      "maxItems": 200
+    },
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "opaque_id": {"type": "string", "pattern": "^(agent-item|assessment-unit|blind-evidence)-[a-f0-9]{64}$"},
+    "gap_code": {
+      "enum": [
+        "missing_event", "incomplete_event", "missing_payload", "non_text_payload",
+        "oversized_payload", "blob_unavailable", "payload_mismatch",
+        "missing_representation", "checks_not_fully_projected"
+      ]
+    },
+    "source_prefix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records", "last_record_hash"],
+      "properties": {
+        "records": {"type": "integer", "minimum": 1},
+        "last_record_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "evidence_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "block_id", "record_sha256", "sequence", "kind", "agent", "completeness",
+        "payload_sha256", "payload_bytes", "extracted_sha256", "text", "untrusted_content"
+      ],
+      "properties": {
+        "block_id": {"type": "string", "pattern": "^blind-evidence-[a-f0-9]{64}$"},
+        "record_sha256": {"$ref": "#/$defs/sha256"},
+        "sequence": {"type": "integer", "minimum": 1},
+        "kind": {
+          "enum": [
+            "user_message", "agent_message", "reasoning", "tool_call", "tool_result",
+            "approval", "file_change", "attachment", "subagent_event", "compaction",
+            "system_event", "source_snapshot", "memory_retrieval", "memory_injection",
+            "memory_adoption", "evaluation_corpus", "evaluation_attestation",
+            "evaluation_run", "gap", "unknown"
+          ]
+        },
+        "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
+        "completeness": {"enum": ["complete", "partial", "missing", "unknown"]},
+        "payload_sha256": {"$ref": "#/$defs/sha256"},
+        "payload_bytes": {"type": "integer", "minimum": 0, "maximum": 65536},
+        "extracted_sha256": {"$ref": "#/$defs/sha256"},
+        "text": {"type": "string", "maxLength": 65536},
+        "untrusted_content": {"const": true}
+      }
+    },
+    "block_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^blind-evidence-[a-f0-9]{64}$"},
+      "uniqueItems": true,
+      "maxItems": 20000
+    },
+    "gap_codes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/gap_code"},
+      "uniqueItems": true
+    },
+    "candidate_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id", "subject_sha256", "text", "untrusted_content",
+        "evidence_block_ids", "evidence_complete"
+      ],
+      "properties": {
+        "item_id": {"type": "string", "pattern": "^agent-item-[a-f0-9]{64}$"},
+        "subject_sha256": {"$ref": "#/$defs/sha256"},
+        "text": {"type": "string", "minLength": 1},
+        "untrusted_content": {"const": true},
+        "evidence_block_ids": {"$ref": "#/$defs/block_ids"},
+        "evidence_complete": {"type": "boolean"},
+        "evidence_gap_codes": {"$ref": "#/$defs/gap_codes"}
+      }
+    },
+    "compaction_unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit_id", "subject_sha256", "statement", "untrusted_content",
+        "source_evidence_block_ids", "representation_evidence_block_ids",
+        "evidence_complete"
+      ],
+      "properties": {
+        "unit_id": {"type": "string", "pattern": "^assessment-unit-[a-f0-9]{64}$"},
+        "subject_sha256": {"$ref": "#/$defs/sha256"},
+        "statement": {"type": "string", "minLength": 1},
+        "untrusted_content": {"const": true},
+        "source_evidence_block_ids": {"$ref": "#/$defs/block_ids"},
+        "representation_evidence_block_ids": {"$ref": "#/$defs/block_ids"},
+        "correction_evidence_block_ids": {"$ref": "#/$defs/block_ids"},
+        "evidence_complete": {"type": "boolean"},
+        "evidence_gap_codes": {"$ref": "#/$defs/gap_codes"}
+      }
+    },
+    "compaction_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id", "checkpoint_evidence_block_ids", "checkpoint_evidence_complete",
+        "all_units_projected", "units"
+      ],
+      "properties": {
+        "item_id": {"type": "string", "pattern": "^agent-item-[a-f0-9]{64}$"},
+        "checkpoint_evidence_block_ids": {"$ref": "#/$defs/block_ids"},
+        "checkpoint_evidence_complete": {"type": "boolean"},
+        "all_units_projected": {"type": "boolean"},
+        "projection_gap_codes": {"$ref": "#/$defs/gap_codes"},
+        "units": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/compaction_unit"},
+          "maxItems": 20
+        }
+      }
+    }
+  }
+}

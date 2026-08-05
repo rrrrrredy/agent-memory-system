@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -132,7 +133,89 @@ func loadLegacyReviewPack(store *ledger.Store, packID string) (LegacyReviewPack,
 	if expected := "review-pack-" + sha256Hex(identityBytes); expected != pack.PackID {
 		return LegacyReviewPack{}, nil, errors.New("review pack content does not match its deterministic identity")
 	}
+	canonical, err := marshalIndented(pack)
+	if err != nil {
+		return LegacyReviewPack{}, nil, fmt.Errorf("encode canonical review pack: %w", err)
+	}
+	if !bytes.Equal(data, canonical) {
+		return LegacyReviewPack{}, nil, errors.New("review pack is not in its canonical immutable encoding")
+	}
 	return pack, data, nil
+}
+
+// LoadVerifiedLegacyReviewSource reads and validates a queue, its backing pack,
+// their deterministic identities, and their exact canonical encodings.
+func LoadVerifiedLegacyReviewSource(
+	store *ledger.Store, queueID string,
+) (VerifiedLegacyReviewSource, error) {
+	var result VerifiedLegacyReviewSource
+	if !strings.HasPrefix(queueID, "review-queue-") ||
+		!validSHA256(strings.TrimPrefix(queueID, "review-queue-")) {
+		return result, errors.New("invalid review queue id")
+	}
+	data, err := readSecureReviewFile(store,
+		filepath.Join("derived", "evaluations", "review-queues", queueID, "queue.json"),
+		maximumLegacyReviewQueueBytes)
+	if err != nil {
+		return result, fmt.Errorf("read review queue: %w", err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var queue LegacyReviewQueue
+	if err := decoder.Decode(&queue); err != nil {
+		return result, fmt.Errorf("decode review queue: %w", err)
+	}
+	if err := requireJSONEOF(decoder); err != nil {
+		return result, err
+	}
+	if queue.SchemaVersion != LegacyReviewQueueSchema || queue.QueueID != queueID ||
+		queue.Privacy != "local_only" {
+		return result, errors.New("review queue metadata is invalid")
+	}
+	candidateLimit, err := legacyReviewQueueLimit(queue.CandidateLimit, "candidate_limit")
+	if err != nil || candidateLimit != queue.CandidateLimit {
+		return result, errors.New("review queue candidate limit is invalid")
+	}
+	compactionLimit, err := legacyReviewQueueLimit(queue.CompactionLimit, "compaction_limit")
+	if err != nil || compactionLimit != queue.CompactionLimit {
+		return result, errors.New("review queue compaction limit is invalid")
+	}
+	pack, packBytes, err := loadLegacyReviewPack(store, queue.PackID)
+	if err != nil {
+		return result, err
+	}
+	if queue.PackSHA256 != sha256Hex(packBytes) || queue.CorpusID != pack.CorpusID ||
+		queue.CandidateGeneration != pack.CandidateGeneration ||
+		queue.EpisodeGeneration != pack.EpisodeGeneration {
+		return result, errors.New("review queue does not match its review pack")
+	}
+	expectedCandidates := selectCandidateReviewItems(pack, candidateLimit)
+	expectedCompactions := selectCompactionReviewItems(pack, compactionLimit)
+	if !reflect.DeepEqual(queue.CandidateItems, expectedCandidates) ||
+		!reflect.DeepEqual(queue.CompactionItems, expectedCompactions) {
+		return result, errors.New("review queue items do not match deterministic selection")
+	}
+	identity := queue
+	identity.QueueID = ""
+	identityBytes, err := json.Marshal(identity)
+	if err != nil {
+		return result, fmt.Errorf("encode review queue identity: %w", err)
+	}
+	if expected := "review-queue-" + sha256Hex(identityBytes); expected != queue.QueueID {
+		return result, errors.New("review queue content does not match its deterministic identity")
+	}
+	canonical, err := marshalIndented(queue)
+	if err != nil {
+		return result, fmt.Errorf("encode canonical review queue: %w", err)
+	}
+	if !bytes.Equal(data, canonical) {
+		return result, errors.New("review queue is not in its canonical immutable encoding")
+	}
+	result.Queue = queue
+	result.QueueBytes = data
+	result.Pack = pack
+	result.PackBytes = packBytes
+	return result, nil
 }
 
 func validateLegacyReviewPack(pack LegacyReviewPack, suppliedID string) error {

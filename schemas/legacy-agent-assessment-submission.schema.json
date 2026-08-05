@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-agent-assessment-submission.schema.json",
+  "title": "Provisional Agent assessment submission",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "payload_id", "candidate_assessments", "compaction_assessments"],
+  "properties": {
+    "schema_version": {"const": "legacy-agent-assessment-submission/v1alpha1"},
+    "payload_id": {"type": "string", "pattern": "^agent-payload-[a-f0-9]{64}$"},
+    "candidate_assessments": {
+      "type": "array", "items": {"$ref": "#/$defs/candidate"}, "maxItems": 200
+    },
+    "compaction_assessments": {
+      "type": "array", "items": {"$ref": "#/$defs/compaction"}, "maxItems": 4000
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "item_id": {"type": "string", "pattern": "^agent-item-[a-f0-9]{64}$"},
+    "unit_id": {"type": "string", "pattern": "^assessment-unit-[a-f0-9]{64}$"},
+    "block_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^blind-evidence-[a-f0-9]{64}$"},
+      "uniqueItems": true,
+      "maxItems": 20000
+    },
+    "candidate_reasons": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"enum": [
+        "direct_user_support", "repeated_user_support", "user_correction_support",
+        "explicit_remember_support", "contradicting_evidence", "no_direct_support",
+        "context_dependent", "duplicate_content", "conflicting_content",
+        "untrusted_instruction", "evidence_gap"
+      ]}
+    },
+    "compaction_reasons": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"enum": [
+        "representation_preserves_statement", "representation_omits_statement",
+        "post_compaction_correction", "missing_representation", "evidence_gap"
+      ]}
+    },
+    "candidate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["item_id", "judgment", "reason_codes", "evidence_block_ids"],
+      "properties": {
+        "item_id": {"$ref": "#/$defs/item_id"},
+        "judgment": {"enum": [
+          "supported_reusable", "supported_context_specific", "unsupported_or_incorrect",
+          "possible_duplicate_or_conflict", "unsafe_or_untrusted", "insufficient_evidence"
+        ]},
+        "reason_codes": {"$ref": "#/$defs/candidate_reasons"},
+        "evidence_block_ids": {"$ref": "#/$defs/block_ids"}
+      }
+    },
+    "compaction": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "item_id", "unit_id", "judgment", "reason_codes", "evidence_block_ids"
+      ],
+      "properties": {
+        "item_id": {"$ref": "#/$defs/item_id"},
+        "unit_id": {"$ref": "#/$defs/unit_id"},
+        "judgment": {"enum": ["preserved", "drift", "insufficient_evidence"]},
+        "reason_codes": {"$ref": "#/$defs/compaction_reasons"},
+        "evidence_block_ids": {"$ref": "#/$defs/block_ids"}
+      }
+    }
+  }
+}

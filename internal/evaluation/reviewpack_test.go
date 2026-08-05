@@ -1,6 +1,7 @@
 package evaluation
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -176,6 +177,16 @@ func TestPrepareLegacyReviewPackSamplesOnlyFrozenCorpusAndReusesIdentity(t *test
 		queue.PackSHA256 != result.PackSHA256 || len(queue.CandidateItems) != 3 ||
 		len(queue.CompactionItems) != 2 || queue.Privacy != "local_only" {
 		t.Fatalf("review queue lost its evidence binding: %+v", queue)
+	}
+	verifiedSource, err := LoadVerifiedLegacyReviewSource(store, queueResult.QueueID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verifiedSource.Queue.QueueID != queueResult.QueueID ||
+		verifiedSource.Pack.PackID != result.PackID ||
+		!bytes.Equal(verifiedSource.QueueBytes, queueData) ||
+		!bytes.Equal(verifiedSource.PackBytes, data) {
+		t.Fatalf("verified review source lost its immutable bindings: %+v", verifiedSource)
 	}
 	seenCandidateItems := map[string]struct{}{}
 	for _, item := range queue.CandidateItems {

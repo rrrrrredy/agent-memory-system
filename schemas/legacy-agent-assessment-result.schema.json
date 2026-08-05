@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-agent-assessment-result.schema.json",
+  "title": "Validated provisional external Agent submission result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "assessment_id", "assessment_path", "projection_id", "payload_id",
+    "candidate_items", "compaction_units", "reused", "authority", "artifact_storage"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-agent-assessment-result/v1alpha1"},
+    "assessment_id": {"type": "string", "pattern": "^agent-assessment-[a-f0-9]{64}$"},
+    "assessment_path": {"type": "string", "minLength": 1},
+    "projection_id": {"type": "string", "pattern": "^agent-projection-[a-f0-9]{64}$"},
+    "payload_id": {"type": "string", "pattern": "^agent-payload-[a-f0-9]{64}$"},
+    "candidate_items": {"type": "integer", "minimum": 0, "maximum": 200},
+    "compaction_units": {"type": "integer", "minimum": 0, "maximum": 4000},
+    "reused": {"type": "boolean"},
+    "authority": {"const": "provisional_only"},
+    "artifact_storage": {"const": "local_only"}
+  }
+}

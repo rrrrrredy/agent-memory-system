@@ -243,6 +243,16 @@ type LegacyReviewQueueResult struct {
 	Privacy         string `json:"privacy"`
 }
 
+// VerifiedLegacyReviewSource is the fully checked source bundle used to derive
+// blind Agent-assessment inputs. The byte slices bind the exact immutable
+// artifacts rather than only their decoded representation.
+type VerifiedLegacyReviewSource struct {
+	Queue      LegacyReviewQueue
+	QueueBytes []byte
+	Pack       LegacyReviewPack
+	PackBytes  []byte
+}
+
 type FreezeResult struct {
 	SchemaVersion     string        `json:"schema_version"`
 	CorpusID          string        `json:"corpus_id"`
