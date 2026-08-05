@@ -27,6 +27,13 @@ its exact source bytes remain captured. Conversely, a usable parsed event does
 not prove that the complete source was preserved. Missing and partial material
 is retained as an explicit corpus issue; it is never synthesized.
 
+Missing raw bytes remain missing even after an exhaustive recovery search. The
+manifest therefore reports two separate values: raw capture coverage counts
+only complete source snapshots, while `accounted_missing` counts expected
+sources backed by verified `missing` gap events. `accounted_coverage` may reach
+100% when every expected source has an explicit disposition, but it never
+changes the raw coverage value or satisfies the raw capture gate.
+
 Corpus identity is deterministic over the source-root hash, artifact hashes,
 and rollout references. The manifest is stored as a blob, anchored by an
 `evaluation_corpus` event, and verified against the append-only ledger before
@@ -66,7 +73,7 @@ The first contract covers six categories:
 
 | Category | Primary measure | Required evidence |
 | --- | --- | --- |
-| Capture coverage | complete, partial, and missing expected records | exact source-snapshot or gap records |
+| Capture coverage | complete, partial, missing, and separately accounted missing records | exact source-snapshot or gap records |
 | False memory | incorrect, unsupported, or stale active memory | exact portable revision and human attestation |
 | Repeated correction | repeated corrections after memory became available | user-message evidence and case attestation |
 | Compaction drift | precision and recall against reviewed drift labels | compaction evidence and human attestation |

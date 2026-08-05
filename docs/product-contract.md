@@ -54,6 +54,17 @@ If capture is partial, interrupted, unsupported, corrupt, or permission
 limited, the adapter MUST append an explicit gap event. Silent loss is a
 contract failure.
 
+If an available raw source moved after its logical path was recorded, recovery
+MUST retain the original source identity, separately record the acquisition
+path identity, and verify the recovered bytes and thread identity before
+appending normalized events. A derived summary or card may never stand in for
+missing raw source bytes. An exhausted local search is recorded as a stable
+missing gap, not silently removed from coverage.
+
+Capture evaluation MUST report raw-byte coverage separately from accounted
+missing sources. An explicit missing gap improves loss accounting, not raw
+capture, and cannot satisfy a raw capture coverage gate.
+
 ## Truth and derivation
 
 1. Exact source bytes and append-only evidence records are local truth.

@@ -141,6 +141,10 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
+        "acquisition_path_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "source_cursor": {
           "type": "string"
         },

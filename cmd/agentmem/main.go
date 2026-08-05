@@ -31,6 +31,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/retrieval"
 	"github.com/rrrrrredy/agent-memory-system/internal/review"
 	"github.com/rrrrrredy/agent-memory-system/internal/ruleapproval"
+	"github.com/rrrrrredy/agent-memory-system/internal/sourcerecovery"
 )
 
 var (
@@ -1535,6 +1536,10 @@ func runCapture(args []string) error {
 		return runCaptureHook(args[1:])
 	case "reconcile":
 		return runCaptureReconcile(args[1:])
+	case "recover":
+		return runCaptureRecover(args[1:])
+	case "plan-recovery":
+		return runCapturePlanRecovery(args[1:])
 	default:
 		return captureUsageError()
 	}
@@ -1604,6 +1609,61 @@ func runCaptureReconcile(args []string) error {
 		return err
 	}
 	return reconcileErr
+}
+
+func runCaptureRecover(args []string) error {
+	flags := flag.NewFlagSet("capture recover", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	sourceRoot := flags.String("source-root", "", "local root containing recovered raw sources (required)")
+	manifestPath := flags.String("manifest", "", "source recovery manifest JSON file (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *sourceRoot == "" || *manifestPath == "" {
+		return errors.New("capture recover requires --root, --source-root, and --manifest")
+	}
+	manifest, err := sourcerecovery.OpenManifestFile(*manifestPath)
+	if err != nil {
+		return err
+	}
+	defer manifest.Close()
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, recoveryErr := sourcerecovery.Apply(store, *sourceRoot, manifest, time.Time{})
+	if err := encodeIndented(result); err != nil {
+		return err
+	}
+	return recoveryErr
+}
+
+func runCapturePlanRecovery(args []string) error {
+	if len(args) == 0 || args[0] != "legacy-codex" {
+		return captureUsageError()
+	}
+	flags := flag.NewFlagSet("capture plan-recovery legacy-codex", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	corpusID := flags.String("corpus", "", "verified legacy corpus id (required)")
+	sourceRoot := flags.String("source-root", "", "local directory to search for moved rollouts (required)")
+	output := flags.String("output", "", "new local recovery manifest path outside Git (required)")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" || *corpusID == "" || *sourceRoot == "" || *output == "" {
+		return errors.New("capture plan-recovery legacy-codex requires --root, --corpus, --source-root, and --output")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := sourcerecovery.PlanLegacyCodex(
+		store, *corpusID, *sourceRoot, *output, time.Time{},
+	)
+	if encodeErr := encodeIndented(result); encodeErr != nil {
+		return encodeErr
+	}
+	return err
 }
 
 func captureAgent(value string) (ledger.Agent, error) {
@@ -1708,7 +1768,7 @@ func evalUsageError() error {
 }
 
 func captureUsageError() error {
-	return errors.New("usage: agentmem capture <opencode --root <local-evidence-directory> --staging <non-Git-local-directory> [--binary opencode]|hook <codex|claude-code> --root <local-evidence-directory>|reconcile <codex|claude-code> --root <local-evidence-directory> --path <agent-source-path> [--full-reconcile]>")
+	return errors.New("usage: agentmem capture <opencode --root <local-evidence-directory> --staging <non-Git-local-directory> [--binary opencode]|hook <codex|claude-code> --root <local-evidence-directory>|reconcile <codex|claude-code> --root <local-evidence-directory> --path <agent-source-path> [--full-reconcile]|plan-recovery legacy-codex --root <local-evidence-directory> --corpus <corpus-id> --source-root <search-directory> --output <new-manifest.json>|recover --root <local-evidence-directory> --source-root <recovered-source-directory> --manifest <source-recovery-manifest.json>>")
 }
 
 func importUsageError() error {

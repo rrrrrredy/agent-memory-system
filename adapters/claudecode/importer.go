@@ -28,6 +28,7 @@ var sessionIDPattern = regexp.MustCompile(
 
 type Options = adapterjsonl.Options
 type Result = adapterjsonl.Result
+type SourceFile = adapterjsonl.SourceFile
 
 type transcriptRecord struct {
 	Type         string          `json:"type"`
@@ -63,7 +64,15 @@ type contentBlock struct {
 }
 
 func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result, error) {
-	return adapterjsonl.ImportPath(store, sourcePath, options, adapterjsonl.Spec{
+	return adapterjsonl.ImportPath(store, sourcePath, options, importerSpec())
+}
+
+func ImportSources(store *ledger.Store, sources []SourceFile, options Options) (Result, error) {
+	return adapterjsonl.ImportSources(store, sources, options, importerSpec())
+}
+
+func importerSpec() adapterjsonl.Spec {
+	return adapterjsonl.Spec{
 		Agent:            ledger.AgentClaudeCode,
 		AdapterName:      AdapterName,
 		AdapterVersion:   AdapterVersion,
@@ -73,7 +82,7 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result
 		MatchFile:        matchTranscript,
 		DiscoverThreadID: discoverThreadID,
 		Project:          projectRecord,
-	})
+	}
 }
 
 func matchTranscript(path string, entry fs.DirEntry) bool {

@@ -98,6 +98,43 @@ func TestCalculateDoesNotTreatEmptyDenominatorAsPass(t *testing.T) {
 	}
 }
 
+func TestCalculateSeparatesRawCaptureFromAccountedMissingSources(t *testing.T) {
+	minimum := 1.0
+	evaluationCase := captureCase("accounted-capture", 10, 8, 0, 2)
+	evaluationCase.Capture.AccountedMissing = 2
+	input := EvaluationInput{
+		SchemaVersion: EvaluationInputSchemaVersion, SuiteID: "accounted-capture",
+		RunID: "run-1", CreatedAt: time.Unix(101, 0).UTC(), SystemVersion: "test-v1",
+		Privacy: "local_only", Thresholds: EvaluationThresholds{MinimumCaptureCoverage: &minimum},
+		Cases: []EvaluationCase{evaluationCase},
+	}
+	report, err := Calculate(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Capture.Coverage.Value == nil || *report.Capture.Coverage.Value != 0.8 ||
+		report.Capture.AccountedCoverage == nil || report.Capture.AccountedCoverage.Value == nil ||
+		*report.Capture.AccountedCoverage.Value != 1 || report.Capture.AccountedMissing != 2 {
+		t.Fatalf("raw and accounted capture were conflated: %+v", report.Capture)
+	}
+	if len(report.Gates) != 1 || report.Gates[0].Status != "fail" {
+		t.Fatalf("accounted missing sources incorrectly passed the raw capture gate: %+v", report.Gates)
+	}
+}
+
+func TestCalculateRejectsAccountedMissingAboveMissingCount(t *testing.T) {
+	evaluationCase := captureCase("invalid-accounted", 1, 0, 0, 1)
+	evaluationCase.Capture.AccountedMissing = 2
+	input := EvaluationInput{
+		SchemaVersion: EvaluationInputSchemaVersion, SuiteID: "invalid-accounted",
+		RunID: "run-1", CreatedAt: time.Unix(102, 0).UTC(), SystemVersion: "test-v1",
+		Privacy: "local_only", Cases: []EvaluationCase{evaluationCase},
+	}
+	if _, err := Calculate(input); err == nil || !strings.Contains(err.Error(), "capture counts") {
+		t.Fatalf("invalid accounted missing count was accepted: %v", err)
+	}
+}
+
 func TestCalculateKeepsUnattestedMemoryLabelNonReleaseReady(t *testing.T) {
 	input := EvaluationInput{
 		SchemaVersion: EvaluationInputSchemaVersion, SuiteID: "invalid-memory",

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/source-recovery-plan-result.schema.json",
+  "title": "Legacy source recovery planning result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "corpus_id", "recovery_id", "manifest_sha256", "expected",
+    "available", "missing", "ambiguous", "files_examined", "issues", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "source-recovery-plan-result/v1alpha1"},
+    "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+    "recovery_id": {"type": "string", "pattern": "^source-recovery-[a-f0-9]{64}$"},
+    "manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "expected": {"type": "integer", "minimum": 1},
+    "available": {"type": "integer", "minimum": 0},
+    "missing": {"type": "integer", "minimum": 0},
+    "ambiguous": {"type": "integer", "minimum": 0},
+    "files_examined": {"type": "integer", "minimum": 0},
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "count"],
+        "properties": {
+          "code": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"},
+          "count": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "privacy": {"const": "local_only"}
+  }
+}

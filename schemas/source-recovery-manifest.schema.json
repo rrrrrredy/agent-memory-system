@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/source-recovery-manifest.schema.json",
+  "title": "Local source relocation recovery manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "created_at", "agent", "entries", "privacy"],
+  "properties": {
+    "schema_version": {"const": "source-recovery-manifest/v1alpha1"},
+    "recovery_id": {"type": "string", "pattern": "^source-recovery-[a-f0-9]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"oneOf": [{"$ref": "#/$defs/available"}, {"$ref": "#/$defs/missing"}]}
+    },
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "identity": {
+      "type": "object",
+      "required": ["logical_source_path_sha256", "thread_id", "status"],
+      "properties": {
+        "logical_source_path_sha256": {"$ref": "#/$defs/sha256"},
+        "thread_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "available": {
+      "allOf": [
+        {"$ref": "#/$defs/identity"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "logical_source_path_sha256", "thread_id", "status", "relative_path",
+            "expected_content_sha256", "expected_bytes"
+          ],
+          "properties": {
+            "logical_source_path_sha256": {"$ref": "#/$defs/sha256"},
+            "thread_id": {"type": "string", "minLength": 1},
+            "status": {"const": "available"},
+            "relative_path": {
+              "type": "string",
+              "minLength": 1,
+              "allOf": [
+                {"pattern": "^[^/]"},
+                {"not": {"pattern": "\\\\"}},
+                {"not": {"pattern": "(^|/)\\.\\.(/|$)"}}
+              ]
+            },
+            "expected_content_sha256": {"$ref": "#/$defs/sha256"},
+            "expected_bytes": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "missing": {
+      "allOf": [
+        {"$ref": "#/$defs/identity"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["logical_source_path_sha256", "thread_id", "status", "reason"],
+          "properties": {
+            "logical_source_path_sha256": {"$ref": "#/$defs/sha256"},
+            "thread_id": {"type": "string", "minLength": 1},
+            "status": {"const": "missing"},
+            "reason": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"}
+          }
+        }
+      ]
+    }
+  }
+}

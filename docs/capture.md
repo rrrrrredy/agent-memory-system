@@ -95,6 +95,57 @@ source trees, permission failures, Claude Code source warnings, and rejected
 path hints are retained as local gap evidence. The result is non-zero when the
 configured historical source could not be reconciled.
 
+## Source relocation recovery
+
+Agent upgrades, archival jobs, and device migrations may move a transcript
+after its original path was indexed. A normal import would treat the new path
+as a different source. A verified frozen legacy corpus can be compared with a
+local rollout archive first:
+
+```text
+agentmem capture plan-recovery legacy-codex \
+  --root <local-evidence-directory> \
+  --corpus <corpus-id> \
+  --source-root <local-rollout-archive> \
+  --output <new-source-recovery-manifest.json>
+```
+
+The planner considers only rollout references already marked `missing` by the
+frozen corpus. It parses candidate thread identities, accepts one exact
+candidate or multiple byte-identical copies, and quarantines differing
+candidates as `source_ambiguous_after_local_search`. It never overwrites an
+existing manifest. Unreadable or unidentifiable candidates are reported, and
+an otherwise unmatched source is marked `source_not_found_search_incomplete`
+instead of being presented as an exhaustive miss.
+
+Apply the local recovery manifest to preserve the original logical identity:
+
+```text
+agentmem capture recover \
+  --root <local-evidence-directory> \
+  --source-root <recovered-source-directory> \
+  --manifest <source-recovery-manifest.json>
+```
+
+Each `available` entry contains the original `logical_source_path_sha256`, the
+thread ID, a safe path relative to `--source-root`, and the expected content
+SHA-256 and byte count. The importer verifies all of those values. Events keep
+the original source hash while `acquisition_path_hash` records where the bytes
+were actually recovered. Codex and Claude Code JSONL sources are imported with
+one verified ledger scan per manifest; OpenCode exports use the same identity
+and content checks.
+
+Each `missing` entry contains the original source hash, thread ID, and a short
+machine-readable reason. It becomes a deterministic `missing` gap. Summaries,
+cards, or derived episodes are not accepted as substitutes for raw source
+bytes. Reapplying the same manifest does not duplicate evidence or gaps.
+
+The recovery manifest and source root are local evidence. The source root must
+be a real directory outside every Git worktree or bare repository. Entries
+cannot traverse its boundary or use symbolic links, and recovered paths are
+never written to CLI results. `recovery_id` is optional in the input; if
+supplied, it must match the manifest content.
+
 ## Verification and recovery
 
 `agentmem doctor` validates both the evidence hash chain and every durable hook

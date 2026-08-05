@@ -58,18 +58,19 @@ const (
 )
 
 type Source struct {
-	Agent          Agent  `json:"agent"`
-	Adapter        string `json:"adapter"`
-	AdapterVersion string `json:"adapter_version"`
-	DeviceID       string `json:"device_id"`
-	OS             string `json:"os,omitempty"`
-	ThreadID       string `json:"thread_id"`
-	SessionID      string `json:"session_id,omitempty"`
-	SourceEventID  string `json:"source_event_id,omitempty"`
-	SourcePathHash string `json:"source_path_hash,omitempty"`
-	SourceCursor   string `json:"source_cursor,omitempty"`
-	ByteStart      *int64 `json:"byte_start,omitempty"`
-	ByteEnd        *int64 `json:"byte_end,omitempty"`
+	Agent               Agent  `json:"agent"`
+	Adapter             string `json:"adapter"`
+	AdapterVersion      string `json:"adapter_version"`
+	DeviceID            string `json:"device_id"`
+	OS                  string `json:"os,omitempty"`
+	ThreadID            string `json:"thread_id"`
+	SessionID           string `json:"session_id,omitempty"`
+	SourceEventID       string `json:"source_event_id,omitempty"`
+	SourcePathHash      string `json:"source_path_hash,omitempty"`
+	AcquisitionPathHash string `json:"acquisition_path_hash,omitempty"`
+	SourceCursor        string `json:"source_cursor,omitempty"`
+	ByteStart           *int64 `json:"byte_start,omitempty"`
+	ByteEnd             *int64 `json:"byte_end,omitempty"`
 }
 
 type BlobRef struct {

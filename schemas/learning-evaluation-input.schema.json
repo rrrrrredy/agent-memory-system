@@ -42,7 +42,8 @@
         "expected": {"type": "integer", "minimum": 0},
         "complete": {"type": "integer", "minimum": 0},
         "partial": {"type": "integer", "minimum": 0},
-        "missing": {"type": "integer", "minimum": 0}
+        "missing": {"type": "integer", "minimum": 0},
+        "accounted_missing": {"type": "integer", "minimum": 0}
       }
     },
     "memory": {

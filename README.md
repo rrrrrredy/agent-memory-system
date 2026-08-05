@@ -87,6 +87,8 @@ go run ./cmd/agentmem capture hook claude-code --root <local-data-directory>
 go run ./cmd/agentmem capture reconcile codex --root <local-data-directory> --path <codex-rollout-file-or-sessions-directory>
 go run ./cmd/agentmem capture reconcile claude-code --root <local-data-directory> --path <claude-home-directory>
 go run ./cmd/agentmem capture opencode --root <local-data-directory> --staging <non-Git-local-directory>
+go run ./cmd/agentmem capture plan-recovery legacy-codex --root <local-data-directory> --corpus <corpus-id> --source-root <search-directory> --output <new-manifest.json>
+go run ./cmd/agentmem capture recover --root <local-data-directory> --source-root <recovered-source-directory> --manifest <source-recovery-manifest.json>
 go run ./cmd/agentmem derive episodes --root <local-data-directory>
 go run ./cmd/agentmem derive candidates --root <local-data-directory> --episodes <episode-generation>
 go run ./cmd/agentmem review apply --root <local-data-directory> --candidates <candidate-generation> --file <review-request.json>
@@ -135,6 +137,19 @@ applying a fixed input-size cutoff. `capture reconcile` later imports that
 spool together with the configured historical source and records missing,
 partial, unreadable, or out-of-root transcript hints as explicit gaps. No hook
 configuration is installed automatically. See [continuous local capture](docs/capture.md).
+
+When an Agent moves a historical source after its original path was recorded,
+`capture recover` imports an explicit local manifest in one batch. The manifest
+binds each available file to its original logical path hash, expected content
+hash, byte count, and thread identity; the current acquisition path receives a
+separate hash. Missing sources become deterministic gap events. Recovery
+manifests and recovered raw files stay outside Git, and a repeated recovery is
+idempotent. See [source relocation recovery](docs/capture.md#source-relocation-recovery).
+
+For a verified frozen context-journal corpus, `capture plan-recovery
+legacy-codex` searches a local archive by parsed thread identity and writes a
+new manifest without overwriting an existing file. Different candidate bytes
+for one thread are quarantined as ambiguous instead of being selected.
 
 `claude-home` is the preferred Claude Code reconciliation command. In addition
 to project and subagent transcripts, it captures prompt history and documented

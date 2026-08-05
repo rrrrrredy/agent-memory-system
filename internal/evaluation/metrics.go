@@ -64,6 +64,7 @@ func Calculate(input EvaluationInput) (EvaluationReport, error) {
 			report.Capture.Complete += measurement.Complete
 			report.Capture.Partial += measurement.Partial
 			report.Capture.Missing += measurement.Missing
+			report.Capture.AccountedMissing += measurement.AccountedMissing
 		case CategoryFalseMemory:
 			measurement := evaluationCase.Memory
 			report.FalseMemory.Total++
@@ -147,6 +148,13 @@ func Calculate(input EvaluationInput) (EvaluationReport, error) {
 	report.Capture.ObservedCoverage = ratio(
 		report.Capture.Complete+report.Capture.Partial, report.Capture.Expected,
 	)
+	if report.Capture.AccountedMissing > 0 {
+		accounted := ratio(
+			report.Capture.Complete+report.Capture.Partial+report.Capture.AccountedMissing,
+			report.Capture.Expected,
+		)
+		report.Capture.AccountedCoverage = &accounted
+	}
 	knownMemories := report.FalseMemory.Total - report.FalseMemory.Unknown
 	report.FalseMemory.FalseRate = ratio(report.FalseMemory.False, knownMemories)
 	report.FalseMemory.UnknownRate = ratio(report.FalseMemory.Unknown, report.FalseMemory.Total)
@@ -299,7 +307,8 @@ func validateCaseMeasurement(evaluationCase EvaluationCase) error {
 		if measurement == nil ||
 			(measurement.Unit != CaptureUnitEvidenceEvents && measurement.Unit != CaptureUnitLegacyRollouts) ||
 			measurement.Expected < 0 || measurement.Complete < 0 ||
-			measurement.Partial < 0 || measurement.Missing < 0 ||
+			measurement.Partial < 0 || measurement.Missing < 0 || measurement.AccountedMissing < 0 ||
+			measurement.AccountedMissing > measurement.Missing ||
 			measurement.Complete+measurement.Partial+measurement.Missing != measurement.Expected {
 			return errors.New("capture counts must be non-negative and sum to expected")
 		}

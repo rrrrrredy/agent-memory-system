@@ -29,6 +29,8 @@ type Options struct {
 	Now func() time.Time
 }
 
+type SourceFile = adapterjsonl.SourceFile
+
 type Result struct {
 	FilesExamined   int            `json:"files_examined"`
 	FilesChanged    int            `json:"files_changed"`
@@ -127,6 +129,28 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result
 	if len(files) == 0 {
 		return result, errors.New("no OpenCode session export JSON files found")
 	}
+	sources := make([]SourceFile, 0, len(files))
+	for _, path := range files {
+		sources = append(sources, SourceFile{Path: path})
+	}
+	return ImportSources(store, sources, options)
+}
+
+func ImportSources(store *ledger.Store, sources []SourceFile, options Options) (Result, error) {
+	result := Result{Kinds: map[string]int{}}
+	if store == nil {
+		return result, errors.New("store is required")
+	}
+	if len(sources) == 0 {
+		return result, errors.New("at least one source file is required")
+	}
+	if options.Now == nil {
+		options.Now = time.Now
+	}
+	validated, err := adapterjsonl.ValidateSources(sources)
+	if err != nil {
+		return result, err
+	}
 
 	known := map[string]struct{}{}
 	appender, err := store.NewAppenderAfterVisit(func(record ledger.Record) error {
@@ -136,9 +160,9 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result
 	if err != nil {
 		return result, fmt.Errorf("load OpenCode import state: %w", err)
 	}
-	for _, path := range files {
+	for _, source := range validated {
 		result.FilesExamined++
-		if err := importFile(store, appender, path, options, known, &result); err != nil {
+		if err := importFile(store, appender, source, options, known, &result); err != nil {
 			_ = appender.Close()
 			return result, fmt.Errorf("import OpenCode export: %w", err)
 		}
@@ -190,18 +214,23 @@ func collectExports(sourcePath string) ([]string, error) {
 func importFile(
 	store *ledger.Store,
 	appender *ledger.Appender,
-	path string,
+	source SourceFile,
 	options Options,
 	known map[string]struct{},
 	result *Result,
 ) error {
+	path := source.Path
 	before, err := os.Stat(path)
 	if err != nil {
 		return fmt.Errorf("inspect export: %w", err)
 	}
-	pathHash, err := adapterjsonl.HashSourcePath(path)
+	acquisitionPathHash, err := adapterjsonl.HashSourcePath(path)
 	if err != nil {
 		return err
+	}
+	pathHash := acquisitionPathHash
+	if source.LogicalSourcePathSHA256 != "" {
+		pathHash = source.LogicalSourcePathSHA256
 	}
 	file, err := os.Open(path)
 	if err != nil {
@@ -214,6 +243,12 @@ func importFile(
 	}
 	if closeErr != nil {
 		return fmt.Errorf("close export: %w", closeErr)
+	}
+	if source.ExpectedContentSHA256 != "" && blob.SHA256 != source.ExpectedContentSHA256 {
+		return errors.New("recovered source content digest does not match the manifest")
+	}
+	if source.ExpectedBytes != nil && blob.Bytes != *source.ExpectedBytes {
+		return errors.New("recovered source byte count does not match the manifest")
 	}
 	result.BytesCaptured += blob.Bytes
 	preserved, err := store.OpenBlob(blob)
@@ -238,6 +273,9 @@ func importFile(
 	threadID := info.ID
 	if threadID == "" {
 		threadID = "unknown-" + pathHash[:16]
+	}
+	if source.ExpectedThreadID != "" && threadID != source.ExpectedThreadID {
+		return errors.New("recovered source thread identity does not match the manifest")
 	}
 	snapshotID := adapterjsonl.DeterministicID("opencode-export-snapshot", pathHash, blob.SHA256)
 	completeness := ledger.Completeness{Status: ledger.CompletenessComplete}
@@ -265,7 +303,8 @@ func importFile(
 		Source: ledger.Source{
 			Agent: ledger.AgentOpenCode, Adapter: AdapterName, AdapterVersion: AdapterVersion,
 			DeviceID: store.DeviceID(), OS: runtime.GOOS, ThreadID: threadID,
-			SessionID: info.ID, SourcePathHash: pathHash, SourceCursor: "json:/",
+			SessionID: info.ID, SourcePathHash: pathHash,
+			AcquisitionPathHash: relocationHash(pathHash, acquisitionPathHash), SourceCursor: "json:/",
 			ByteStart: &start, ByteEnd: &end,
 		},
 		Payload: &ledger.Payload{Encoding: "binary", MediaType: "application/json", Blob: &blob,
@@ -283,7 +322,7 @@ func importFile(
 
 	if parseErr != nil || info.ID == "" {
 		reason := "invalid_export_schema: exact JSON document preserved but session info could not be decoded"
-		queueGap(store, known, &pending, snapshotID, pathHash, threadID, reason,
+		queueGap(store, known, &pending, snapshotID, pathHash, acquisitionPathHash, threadID, reason,
 			before.ModTime(), options.Now(), result)
 		if len(pending) > 0 {
 			result.FilesChanged++
@@ -292,13 +331,13 @@ func importFile(
 		return err
 	}
 	if inheritedReason != "" {
-		queueGap(store, known, &pending, snapshotID, pathHash, threadID, inheritedReason,
+		queueGap(store, known, &pending, snapshotID, pathHash, acquisitionPathHash, threadID, inheritedReason,
 			before.ModTime(), options.Now(), result)
 	}
 
 	projections := projectDocument(document, info, inheritedReason)
 	for _, item := range projections {
-		queueProjection(store, known, &pending, snapshotID, pathHash, threadID, item,
+		queueProjection(store, known, &pending, snapshotID, pathHash, acquisitionPathHash, threadID, item,
 			options.Now(), result)
 	}
 	if len(pending) > 0 {
@@ -412,7 +451,7 @@ func projectPart(raw json.RawMessage, pointer string, message messageInfo, inher
 
 func queueProjection(
 	store *ledger.Store, known map[string]struct{}, pending *[]ledger.Event,
-	snapshotID, pathHash, threadID string, item projection, recordedAt time.Time, result *Result,
+	snapshotID, pathHash, acquisitionPathHash, threadID string, item projection, recordedAt time.Time, result *Result,
 ) {
 	digest := sha256.Sum256(item.raw)
 	identity := item.sourceEventID
@@ -447,7 +486,9 @@ func queueProjection(
 			Agent: ledger.AgentOpenCode, Adapter: AdapterName, AdapterVersion: AdapterVersion,
 			DeviceID: store.DeviceID(), OS: runtime.GOOS, ThreadID: threadID,
 			SessionID: threadID, SourceEventID: item.sourceEventID,
-			SourcePathHash: pathHash, SourceCursor: "json:" + item.pointer,
+			SourcePathHash:      pathHash,
+			AcquisitionPathHash: relocationHash(pathHash, acquisitionPathHash),
+			SourceCursor:        "json:" + item.pointer,
 		},
 		Payload: &payload, Reasoning: item.reasoning,
 		Completeness: ledger.Completeness{Status: status, Reason: reason},
@@ -463,7 +504,7 @@ func queueProjection(
 
 func queueGap(
 	store *ledger.Store, known map[string]struct{}, pending *[]ledger.Event,
-	snapshotID, pathHash, threadID, reason string, modifiedAt, recordedAt time.Time, result *Result,
+	snapshotID, pathHash, acquisitionPathHash, threadID, reason string, modifiedAt, recordedAt time.Time, result *Result,
 ) {
 	eventID := adapterjsonl.DeterministicID("opencode-export-gap", pathHash, snapshotID, reason)
 	if _, exists := known[eventID]; exists {
@@ -476,7 +517,8 @@ func queueGap(
 		Source: ledger.Source{
 			Agent: ledger.AgentOpenCode, Adapter: AdapterName, AdapterVersion: AdapterVersion,
 			DeviceID: store.DeviceID(), OS: runtime.GOOS, ThreadID: threadID,
-			SessionID: threadID, SourcePathHash: pathHash, SourceCursor: "json:/",
+			SessionID: threadID, SourcePathHash: pathHash,
+			AcquisitionPathHash: relocationHash(pathHash, acquisitionPathHash), SourceCursor: "json:/",
 		},
 		Completeness: ledger.Completeness{Status: ledger.CompletenessPartial, Reason: reason},
 		Causality:    &ledger.Causality{ParentEventIDs: []string{snapshotID}},
@@ -526,6 +568,13 @@ func hasJSONValue(raw json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(raw)
 	return len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null")) &&
 		!bytes.Equal(trimmed, []byte("{}"))
+}
+
+func relocationHash(logical, acquisition string) string {
+	if logical == acquisition {
+		return ""
+	}
+	return acquisition
 }
 
 func joinReason(existing, added string) string {

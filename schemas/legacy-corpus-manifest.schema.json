@@ -89,6 +89,11 @@
           "items": {"type": "string", "minLength": 1},
           "uniqueItems": true
         },
+        "missing_gap_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
         "snapshot_blobs": {
           "type": "array",
           "items": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"}
@@ -120,6 +125,8 @@
         "captured_rollouts": {"type": "integer", "minimum": 0},
         "partial_rollouts": {"type": "integer", "minimum": 0},
         "missing_rollouts": {"type": "integer", "minimum": 0},
+        "accounted_missing_rollouts": {"type": "integer", "minimum": 0},
+        "unaccounted_missing_rollouts": {"type": "integer", "minimum": 0},
         "card_bytes": {"type": "integer", "minimum": 0},
         "rollout_snapshot_bytes": {"type": "integer", "minimum": 0},
         "incomplete_projected_events": {"type": "integer", "minimum": 0},

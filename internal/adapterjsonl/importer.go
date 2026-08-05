@@ -29,6 +29,17 @@ type Options struct {
 	Now           func() time.Time
 }
 
+// SourceFile separates the logical source identity from the path at which the
+// bytes were recovered. Expected content metadata is optional for ordinary
+// imports and required by the source-recovery workflow.
+type SourceFile struct {
+	Path                    string
+	LogicalSourcePathSHA256 string
+	ExpectedContentSHA256   string
+	ExpectedBytes           *int64
+	ExpectedThreadID        string
+}
+
 type Result struct {
 	FilesExamined  int            `json:"files_examined"`
 	FilesChanged   int            `json:"files_changed"`
@@ -79,28 +90,50 @@ type eventPointer struct {
 }
 
 func ImportPath(store *ledger.Store, sourcePath string, options Options, spec Spec) (Result, error) {
-	result := Result{Kinds: map[string]int{}}
 	if err := validateInputs(store, sourcePath, &options, spec); err != nil {
-		return result, err
+		return Result{Kinds: map[string]int{}}, err
 	}
 	files, err := collectFiles(sourcePath, spec.MatchFile)
 	if err != nil {
-		return result, err
+		return Result{Kinds: map[string]int{}}, err
 	}
 	if len(files) == 0 {
 		message := spec.NoFilesError
 		if message == "" {
 			message = "no matching JSONL files found"
 		}
-		return result, errors.New(message)
+		return Result{Kinds: map[string]int{}}, errors.New(message)
+	}
+	sources := make([]SourceFile, 0, len(files))
+	for _, path := range files {
+		sources = append(sources, SourceFile{Path: path})
+	}
+	return ImportSources(store, sources, options, spec)
+}
+
+// ImportSources imports an explicit source set with one verified ledger scan.
+// It is used when source files moved after their original logical paths were
+// recorded. Event identity remains bound to LogicalSourcePathSHA256 while the
+// actual acquisition path is recorded separately.
+func ImportSources(store *ledger.Store, sources []SourceFile, options Options, spec Spec) (Result, error) {
+	result := Result{Kinds: map[string]int{}}
+	if err := validateInputs(store, "explicit-source-set", &options, spec); err != nil {
+		return result, err
+	}
+	if len(sources) == 0 {
+		return result, errors.New("at least one source file is required")
+	}
+	validated, err := ValidateSources(sources)
+	if err != nil {
+		return result, err
 	}
 	state, appender, err := loadImportState(store, spec)
 	if err != nil {
 		return result, err
 	}
-	for _, path := range files {
+	for _, source := range validated {
 		result.FilesExamined++
-		if err := importFile(store, appender, path, options, spec, state, &result); err != nil {
+		if err := importFile(store, appender, source, options, spec, state, &result); err != nil {
 			_ = appender.Close()
 			return result, fmt.Errorf("import %s JSONL: %w", spec.Agent, err)
 		}
@@ -109,6 +142,49 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options, spec Sp
 		return result, err
 	}
 	return result, nil
+}
+
+func ValidateSources(sources []SourceFile) ([]SourceFile, error) {
+	validated := append([]SourceFile(nil), sources...)
+	seenLogical := map[string]struct{}{}
+	for index := range validated {
+		source := &validated[index]
+		if strings.TrimSpace(source.Path) == "" {
+			return nil, fmt.Errorf("source %d has no path", index)
+		}
+		absolute, err := filepath.Abs(source.Path)
+		if err != nil {
+			return nil, fmt.Errorf("resolve source %d: %w", index, err)
+		}
+		source.Path = absolute
+		if source.LogicalSourcePathSHA256 != "" {
+			if !validSHA256(source.LogicalSourcePathSHA256) {
+				return nil, fmt.Errorf("source %d has an invalid logical source path digest", index)
+			}
+			if _, duplicate := seenLogical[source.LogicalSourcePathSHA256]; duplicate {
+				return nil, fmt.Errorf("source %d repeats a logical source path digest", index)
+			}
+			seenLogical[source.LogicalSourcePathSHA256] = struct{}{}
+		}
+		if source.ExpectedContentSHA256 != "" && !validSHA256(source.ExpectedContentSHA256) {
+			return nil, fmt.Errorf("source %d has an invalid expected content digest", index)
+		}
+		if source.ExpectedBytes != nil && *source.ExpectedBytes < 0 {
+			return nil, fmt.Errorf("source %d has a negative expected byte count", index)
+		}
+	}
+	sort.Slice(validated, func(left, right int) bool {
+		leftIdentity := validated[left].LogicalSourcePathSHA256
+		if leftIdentity == "" {
+			leftIdentity = validated[left].Path
+		}
+		rightIdentity := validated[right].LogicalSourcePathSHA256
+		if rightIdentity == "" {
+			rightIdentity = validated[right].Path
+		}
+		return leftIdentity < rightIdentity
+	})
+	return validated, nil
 }
 
 func validateInputs(store *ledger.Store, sourcePath string, options *Options, spec Spec) error {
@@ -205,12 +281,13 @@ func loadImportState(store *ledger.Store, spec Spec) (*importState, *ledger.Appe
 func importFile(
 	store *ledger.Store,
 	appender *ledger.Appender,
-	path string,
+	source SourceFile,
 	options Options,
 	spec Spec,
 	state *importState,
 	result *Result,
 ) error {
+	path := source.Path
 	info, err := os.Stat(path)
 	if err != nil {
 		return fmt.Errorf("inspect source: %w", err)
@@ -218,19 +295,26 @@ func importFile(
 	if !info.Mode().IsRegular() {
 		return errors.New("source is not a regular file")
 	}
-	sourcePathHash, err := HashSourcePath(path)
+	acquisitionPathHash, err := HashSourcePath(path)
 	if err != nil {
 		return err
+	}
+	sourcePathHash := acquisitionPathHash
+	if source.LogicalSourcePathSHA256 != "" {
+		sourcePathHash = source.LogicalSourcePathSHA256
 	}
 	threadID, err := spec.DiscoverThreadID(path, sourcePathHash)
 	if err != nil {
 		return err
 	}
+	if source.ExpectedThreadID != "" && threadID != source.ExpectedThreadID {
+		return errors.New("recovered source thread identity does not match the manifest")
+	}
 
 	pending := make([]ledger.Event, 0, 256)
 	committed := state.committedOffset[sourcePathHash]
 	if committed > info.Size() {
-		queueTruncationGap(store, state, &pending, spec, sourcePathHash, threadID,
+		queueTruncationGap(store, state, &pending, spec, sourcePathHash, acquisitionPathHash, threadID,
 			committed, info.Size(), info.ModTime(), options.Now(), result)
 		committed = 0
 		state.committedOffset[sourcePathHash] = 0
@@ -264,6 +348,12 @@ func importFile(
 	if err != nil {
 		return fmt.Errorf("preserve source segment: %w", err)
 	}
+	if source.ExpectedContentSHA256 != "" && start == 0 && blob.SHA256 != source.ExpectedContentSHA256 {
+		return errors.New("recovered source content digest does not match the manifest")
+	}
+	if source.ExpectedBytes != nil && start == 0 && blob.Bytes != *source.ExpectedBytes {
+		return errors.New("recovered source byte count does not match the manifest")
+	}
 	capturedEnd := start + blob.Bytes
 	segmentID := DeterministicID(spec.IDNamespace+"-segment", sourcePathHash,
 		strconv.FormatInt(start, 10), strconv.FormatInt(capturedEnd, 10), blob.SHA256)
@@ -286,8 +376,10 @@ func importFile(
 		Source: ledger.Source{
 			Agent: spec.Agent, Adapter: spec.AdapterName, AdapterVersion: spec.AdapterVersion,
 			DeviceID: store.DeviceID(), OS: runtime.GOOS, ThreadID: threadID,
-			SourcePathHash: sourcePathHash, SourceCursor: fmt.Sprintf("bytes:%d-%d", start, capturedEnd),
-			ByteStart: &startValue, ByteEnd: &endValue,
+			SourcePathHash:      sourcePathHash,
+			AcquisitionPathHash: relocationHash(sourcePathHash, acquisitionPathHash),
+			SourceCursor:        fmt.Sprintf("bytes:%d-%d", start, capturedEnd),
+			ByteStart:           &startValue, ByteEnd: &endValue,
 		},
 		Payload:      &ledger.Payload{Encoding: "binary", MediaType: mediaType, Blob: &blob, SHA256: blob.SHA256, Bytes: blob.Bytes},
 		Completeness: segmentCompleteness, Privacy: ledger.Privacy{Classification: "local_only"},
@@ -319,12 +411,12 @@ func importFile(
 			trimmed := bytes.TrimSpace(line)
 			if !terminated && errors.Is(readErr, io.EOF) {
 				reason := "trailing_partial_json: source may still be writing; retry from this byte"
-				queueProjection(store, state, &pending, spec, segmentID, sourcePathHash, threadID,
+				queueProjection(store, state, &pending, spec, segmentID, sourcePathHash, acquisitionPathHash, threadID,
 					lineStart, lineEnd, line, info.ModTime(), options.Now(),
 					Projection{Kind: ledger.KindGap, CompletenessReason: reason}, result)
 			} else if !json.Valid(trimmed) {
 				reason := "invalid_json_line_terminated: source record is not valid JSON"
-				queueProjection(store, state, &pending, spec, segmentID, sourcePathHash, threadID,
+				queueProjection(store, state, &pending, spec, segmentID, sourcePathHash, acquisitionPathHash, threadID,
 					lineStart, lineEnd, line, info.ModTime(), options.Now(),
 					Projection{Kind: ledger.KindGap, CompletenessReason: reason}, result)
 				state.committedOffset[sourcePathHash] = lineEnd
@@ -344,7 +436,7 @@ func importFile(
 							projection.CompletenessReason = "timestamp_missing_or_invalid: used source modification time"
 						}
 					}
-					queueProjection(store, state, &pending, spec, segmentID, sourcePathHash, threadID,
+					queueProjection(store, state, &pending, spec, segmentID, sourcePathHash, acquisitionPathHash, threadID,
 						lineStart, lineEnd, line, observedAt, options.Now(), projection, result)
 				}
 				state.committedOffset[sourcePathHash] = lineEnd
@@ -387,7 +479,7 @@ func uniqueProjectionKeys(projections []Projection) []string {
 
 func queueProjection(
 	store *ledger.Store, state *importState, pending *[]ledger.Event, spec Spec,
-	segmentID, sourcePathHash, threadID string, byteStart, byteEnd int64,
+	segmentID, sourcePathHash, acquisitionPathHash, threadID string, byteStart, byteEnd int64,
 	rawLine []byte, observedAt, recordedAt time.Time, projection Projection, result *Result,
 ) {
 	rawDigest := sha256.Sum256(rawLine)
@@ -419,8 +511,10 @@ func queueProjection(
 			Agent: spec.Agent, Adapter: spec.AdapterName, AdapterVersion: spec.AdapterVersion,
 			DeviceID: store.DeviceID(), OS: runtime.GOOS, ThreadID: effectiveThreadID,
 			SessionID: projection.SessionID, SourceEventID: projection.SourceEventID,
-			SourcePathHash: sourcePathHash, SourceCursor: fmt.Sprintf("bytes:%d-%d", byteStart, byteEnd),
-			ByteStart: &startValue, ByteEnd: &endValue,
+			SourcePathHash:      sourcePathHash,
+			AcquisitionPathHash: relocationHash(sourcePathHash, acquisitionPathHash),
+			SourceCursor:        fmt.Sprintf("bytes:%d-%d", byteStart, byteEnd),
+			ByteStart:           &startValue, ByteEnd: &endValue,
 		},
 		Payload: &pointer, Reasoning: projection.Reasoning,
 		Completeness: ledger.Completeness{Status: status, Reason: projection.CompletenessReason},
@@ -439,7 +533,7 @@ func queueProjection(
 
 func queueTruncationGap(
 	store *ledger.Store, state *importState, pending *[]ledger.Event, spec Spec,
-	sourcePathHash, threadID string, previousOffset, currentSize int64,
+	sourcePathHash, acquisitionPathHash, threadID string, previousOffset, currentSize int64,
 	modifiedAt, recordedAt time.Time, result *Result,
 ) {
 	eventID := DeterministicID(spec.IDNamespace+"-truncation", sourcePathHash,
@@ -455,10 +549,11 @@ func queueTruncationGap(
 		Source: ledger.Source{
 			Agent: spec.Agent, Adapter: spec.AdapterName, AdapterVersion: spec.AdapterVersion,
 			DeviceID: store.DeviceID(), OS: runtime.GOOS, ThreadID: threadID,
-			SourcePathHash: sourcePathHash,
-			SourceCursor:   fmt.Sprintf("truncated:%d-to-%d", previousOffset, currentSize),
-			ByteStart:      &previousValue,
-			ByteEnd:        &currentValue,
+			SourcePathHash:      sourcePathHash,
+			AcquisitionPathHash: relocationHash(sourcePathHash, acquisitionPathHash),
+			SourceCursor:        fmt.Sprintf("truncated:%d-to-%d", previousOffset, currentSize),
+			ByteStart:           &previousValue,
+			ByteEnd:             &currentValue,
 		},
 		Completeness: ledger.Completeness{Status: ledger.CompletenessPartial,
 			Reason: "source_truncated: previously committed bytes are no longer present at this path"},
@@ -495,6 +590,21 @@ func HashSourcePath(path string) (string, error) {
 	}
 	sum := sha256.Sum256([]byte(normalized))
 	return hex.EncodeToString(sum[:]), nil
+}
+
+func relocationHash(logical, acquisition string) string {
+	if logical == acquisition {
+		return ""
+	}
+	return acquisition
+}
+
+func validSHA256(value string) bool {
+	if len(value) != sha256.Size*2 || value != strings.ToLower(value) {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 func DeterministicID(namespace string, parts ...string) string {

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/source-recovery-result.schema.json",
+  "title": "Local source relocation recovery result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "recovery_id", "manifest_sha256", "agent", "entries_checked",
+    "sources_recovered", "sources_missing", "manifest_reused", "gaps_appended",
+    "gaps_reused", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "source-recovery-result/v1alpha1"},
+    "recovery_id": {"type": "string", "pattern": "^source-recovery-[a-f0-9]{64}$"},
+    "manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "entries_checked": {"type": "integer", "minimum": 1},
+    "sources_recovered": {"type": "integer", "minimum": 0},
+    "sources_missing": {"type": "integer", "minimum": 0},
+    "manifest_reused": {"type": "boolean"},
+    "import": {"$ref": "capture-reconciliation.schema.json#/$defs/importResult"},
+    "opencode_import": {"$ref": "#/$defs/openCodeImport"},
+    "gaps_appended": {"type": "integer", "minimum": 0},
+    "gaps_reused": {"type": "integer", "minimum": 0},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "openCodeImport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files_examined", "files_changed", "source_snapshots", "events_appended",
+        "events_skipped", "gaps_appended", "bytes_captured", "kinds"
+      ],
+      "properties": {
+        "files_examined": {"type": "integer", "minimum": 0},
+        "files_changed": {"type": "integer", "minimum": 0},
+        "source_snapshots": {"type": "integer", "minimum": 0},
+        "events_appended": {"type": "integer", "minimum": 0},
+        "events_skipped": {"type": "integer", "minimum": 0},
+        "gaps_appended": {"type": "integer", "minimum": 0},
+        "bytes_captured": {"type": "integer", "minimum": 0},
+        "kinds": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}
+      }
+    }
+  }
+}

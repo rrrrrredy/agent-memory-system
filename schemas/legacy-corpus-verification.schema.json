@@ -14,6 +14,7 @@
     "artifacts_checked": {"type": "integer", "minimum": 0},
     "rollouts_checked": {"type": "integer", "minimum": 0},
     "snapshot_events_checked": {"type": "integer", "minimum": 0},
+    "missing_gap_events_checked": {"type": "integer", "minimum": 0},
     "issues": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
     "privacy": {"const": "local_only"}
   }

@@ -41,10 +41,11 @@ type snapshotPlan struct {
 }
 
 type rolloutState struct {
-	reference    RolloutReference
-	partial      bool
-	snapshotSeen map[string]struct{}
-	blobSeen     map[string]struct{}
+	reference      RolloutReference
+	partial        bool
+	snapshotSeen   map[string]struct{}
+	missingGapSeen map[string]struct{}
+	blobSeen       map[string]struct{}
 }
 
 type freezeScanState struct {
@@ -164,8 +165,10 @@ func FreezeLegacyCorpus(store *ledger.Store, legacyRoot string, options FreezeOp
 		state, exists := rolloutReferences[pathHash]
 		if !exists {
 			state = &rolloutState{
-				reference:    RolloutReference{SourcePathSHA256: pathHash, Status: "missing"},
-				snapshotSeen: map[string]struct{}{}, blobSeen: map[string]struct{}{},
+				reference:      RolloutReference{SourcePathSHA256: pathHash, Status: "missing"},
+				snapshotSeen:   map[string]struct{}{},
+				missingGapSeen: map[string]struct{}{},
+				blobSeen:       map[string]struct{}{},
 			}
 			rolloutReferences[pathHash] = state
 		}
@@ -243,7 +246,19 @@ func FreezeLegacyCorpus(store *ledger.Store, legacyRoot string, options FreezeOp
 			scan.evaluationIDs[event.EventID] = struct{}{}
 		}
 		state, wanted := scan.rollouts[event.Source.SourcePathHash]
-		if !wanted || event.Source.Agent != ledger.AgentCodex || event.Source.Adapter != "codex-jsonl" {
+		if !wanted || event.Source.Agent != ledger.AgentCodex {
+			return nil
+		}
+		if event.Kind == ledger.KindGap && event.Source.Adapter == "source-recovery" &&
+			event.Source.SourceCursor == "recovery:missing" &&
+			event.Completeness.Status == ledger.CompletenessMissing {
+			if _, exists := state.missingGapSeen[event.EventID]; !exists {
+				state.missingGapSeen[event.EventID] = struct{}{}
+				state.reference.MissingGapEventIDs = append(state.reference.MissingGapEventIDs, event.EventID)
+			}
+			return nil
+		}
+		if event.Source.Adapter != "codex-jsonl" {
 			return nil
 		}
 		if event.Kind == ledger.KindSourceSnapshot {
@@ -318,6 +333,7 @@ func FreezeLegacyCorpus(store *ledger.Store, legacyRoot string, options FreezeOp
 	for _, state := range rolloutReferences {
 		sort.Strings(state.reference.SessionIDs)
 		sort.Strings(state.reference.SnapshotEventIDs)
+		sort.Strings(state.reference.MissingGapEventIDs)
 		sort.Slice(state.reference.SnapshotBlobs, func(left, right int) bool {
 			return state.reference.SnapshotBlobs[left].SHA256 < state.reference.SnapshotBlobs[right].SHA256
 		})
@@ -326,9 +342,17 @@ func FreezeLegacyCorpus(store *ledger.Store, legacyRoot string, options FreezeOp
 		case len(state.reference.SnapshotEventIDs) == 0:
 			state.reference.Status = "missing"
 			result.Counts.MissingRollouts++
-			result.Issues = append(result.Issues, CorpusIssue{
-				Code: "rollout_not_captured", SourcePathSHA256: state.reference.SourcePathSHA256,
-			})
+			if len(state.reference.MissingGapEventIDs) > 0 {
+				result.Counts.AccountedMissingRollouts++
+				result.Issues = append(result.Issues, CorpusIssue{
+					Code: "rollout_missing_accounted", SourcePathSHA256: state.reference.SourcePathSHA256,
+				})
+			} else {
+				result.Counts.UnaccountedMissingRollouts++
+				result.Issues = append(result.Issues, CorpusIssue{
+					Code: "rollout_not_captured", SourcePathSHA256: state.reference.SourcePathSHA256,
+				})
+			}
 		case state.partial || !rangesBeginAtZeroAndContiguous(state.reference.CoveredRanges):
 			state.reference.Status = "partial"
 			result.Counts.PartialRollouts++
@@ -473,6 +497,9 @@ func VerifyCorpus(store *ledger.Store, corpusID string) CorpusVerificationReport
 		for _, eventID := range rollout.SnapshotEventIDs {
 			wantedEvents[eventID] = struct{}{}
 		}
+		for _, eventID := range rollout.MissingGapEventIDs {
+			wantedEvents[eventID] = struct{}{}
+		}
 	}
 	wantedEvents[freezeEventID(corpusID, manifestSHA)] = struct{}{}
 	found := map[string]ledger.Record{}
@@ -522,6 +549,19 @@ func VerifyCorpus(store *ledger.Store, corpusID string) CorpusVerificationReport
 				continue
 			}
 			report.SnapshotEventsChecked++
+		}
+		for _, eventID := range rollout.MissingGapEventIDs {
+			record, exists := found[eventID]
+			if !exists || record.Event.Kind != ledger.KindGap ||
+				record.Event.Source.Agent != ledger.AgentCodex ||
+				record.Event.Source.Adapter != "source-recovery" ||
+				record.Event.Source.SourceCursor != "recovery:missing" ||
+				record.Event.Source.SourcePathHash != rollout.SourcePathSHA256 ||
+				record.Event.Completeness.Status != ledger.CompletenessMissing {
+				report.Issues = append(report.Issues, "rollout missing gap mismatch: "+eventID)
+				continue
+			}
+			report.MissingGapEventsChecked++
 		}
 		for _, blob := range rollout.SnapshotBlobs {
 			if err := verifyBlob(store, blob); err != nil {
@@ -762,6 +802,8 @@ func validateCorpusManifest(manifest CorpusManifest) error {
 		previous = artifact.RelativePath
 	}
 	previous = ""
+	accountedMissing := 0
+	unaccountedMissing := 0
 	for _, rollout := range manifest.Rollouts {
 		if rollout.SourcePathSHA256 <= previous || !validSHA256(rollout.SourcePathSHA256) ||
 			(rollout.Status != "captured" && rollout.Status != "partial" && rollout.Status != "missing") {
@@ -770,9 +812,36 @@ func validateCorpusManifest(manifest CorpusManifest) error {
 		if rollout.Status == "missing" && len(rollout.SnapshotEventIDs) != 0 {
 			return errors.New("missing rollout unexpectedly has snapshots")
 		}
+		if !strictlySortedStrings(rollout.MissingGapEventIDs) {
+			return errors.New("rollout missing gap event ids are not unique and sorted")
+		}
+		if rollout.Status == "missing" {
+			if len(rollout.MissingGapEventIDs) > 0 {
+				accountedMissing++
+			} else {
+				unaccountedMissing++
+			}
+		}
 		previous = rollout.SourcePathSHA256
 	}
+	if manifest.Counts.AccountedMissingRollouts != 0 || manifest.Counts.UnaccountedMissingRollouts != 0 ||
+		accountedMissing > 0 {
+		if manifest.Counts.AccountedMissingRollouts != accountedMissing ||
+			manifest.Counts.UnaccountedMissingRollouts != unaccountedMissing ||
+			accountedMissing+unaccountedMissing != manifest.Counts.MissingRollouts {
+			return errors.New("corpus accounted missing rollout counts are inconsistent")
+		}
+	}
 	return nil
+}
+
+func strictlySortedStrings(values []string) bool {
+	for index, value := range values {
+		if strings.TrimSpace(value) == "" || index > 0 && values[index-1] >= value {
+			return false
+		}
+	}
+	return true
 }
 
 func loadCorpusManifestPath(path string) (CorpusManifest, error) {

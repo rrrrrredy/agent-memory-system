@@ -1,11 +1,15 @@
 package opencode
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/rrrrrredy/agent-memory-system/internal/adapterjsonl"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -154,5 +158,59 @@ func TestSanitizedExportIsExplicitlyPartial(t *testing.T) {
 	}
 	if !foundPartialReasoning {
 		t.Fatal("sanitized reasoning was presented as complete or exposed")
+	}
+}
+
+func TestImportSourcesPreservesLogicalAndAcquisitionIdentity(t *testing.T) {
+	root := t.TempDir()
+	store, err := ledger.Init(filepath.Join(root, "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(root, "archive", "ses_synthetic.json")
+	if err := os.MkdirAll(filepath.Dir(source), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	data := []byte(syntheticExport)
+	if err := os.WriteFile(source, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(data)
+	bytesExpected := int64(len(data))
+	logicalHash := strings.Repeat("a", 64)
+	result, err := ImportSources(store, []SourceFile{{
+		Path: source, LogicalSourcePathSHA256: logicalHash,
+		ExpectedContentSHA256: hex.EncodeToString(digest[:]), ExpectedBytes: &bytesExpected,
+		ExpectedThreadID: "ses_synthetic",
+	}}, Options{Now: func() time.Time { return time.Unix(7000, 0) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.SourceSnapshots != 1 {
+		t.Fatalf("recovered export was not imported: %+v", result)
+	}
+	acquisitionHash, err := adapterjsonl.HashSourcePath(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.VisitRecords(func(record ledger.Record) error {
+		if record.Event.Source.SourcePathHash != logicalHash ||
+			record.Event.Source.AcquisitionPathHash != acquisitionHash {
+			t.Fatalf("source relocation identity was lost: %+v", record.Event.Source)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImportSourcesRejectsEmptySourceSet(t *testing.T) {
+	store, err := ledger.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ImportSources(store, nil, Options{}); err == nil ||
+		!strings.Contains(err.Error(), "at least one source file") {
+		t.Fatalf("empty source set was accepted: %v", err)
 	}
 }

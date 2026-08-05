@@ -45,6 +45,7 @@ type RolloutReference struct {
 	IndexReferences           int              `json:"index_references"`
 	Status                    string           `json:"status"`
 	SnapshotEventIDs          []string         `json:"snapshot_event_ids,omitempty"`
+	MissingGapEventIDs        []string         `json:"missing_gap_event_ids,omitempty"`
 	SnapshotBlobs             []ledger.BlobRef `json:"snapshot_blobs,omitempty"`
 	CoveredRanges             []ByteRange      `json:"covered_ranges,omitempty"`
 	ProjectedEvents           int              `json:"projected_events"`
@@ -53,22 +54,24 @@ type RolloutReference struct {
 }
 
 type CorpusCounts struct {
-	IndexEntries              int   `json:"index_entries"`
-	Cards                     int   `json:"cards"`
-	IndexedCards              int   `json:"indexed_cards"`
-	UnindexedCards            int   `json:"unindexed_cards"`
-	MissingCards              int   `json:"missing_cards"`
-	UniqueSessions            int   `json:"unique_sessions"`
-	RolloutReferences         int   `json:"rollout_references"`
-	CapturedRollouts          int   `json:"captured_rollouts"`
-	PartialRollouts           int   `json:"partial_rollouts"`
-	MissingRollouts           int   `json:"missing_rollouts"`
-	CardBytes                 int64 `json:"card_bytes"`
-	RolloutSnapshotBytes      int64 `json:"rollout_snapshot_bytes"`
-	IncompleteProjectedEvents int   `json:"incomplete_projected_events"`
-	ProjectionGapEvents       int   `json:"projection_gap_events"`
-	CardsWithLatestUser       int   `json:"cards_with_latest_user"`
-	CardsWithLatestAssistant  int   `json:"cards_with_latest_assistant"`
+	IndexEntries               int   `json:"index_entries"`
+	Cards                      int   `json:"cards"`
+	IndexedCards               int   `json:"indexed_cards"`
+	UnindexedCards             int   `json:"unindexed_cards"`
+	MissingCards               int   `json:"missing_cards"`
+	UniqueSessions             int   `json:"unique_sessions"`
+	RolloutReferences          int   `json:"rollout_references"`
+	CapturedRollouts           int   `json:"captured_rollouts"`
+	PartialRollouts            int   `json:"partial_rollouts"`
+	MissingRollouts            int   `json:"missing_rollouts"`
+	AccountedMissingRollouts   int   `json:"accounted_missing_rollouts,omitempty"`
+	UnaccountedMissingRollouts int   `json:"unaccounted_missing_rollouts,omitempty"`
+	CardBytes                  int64 `json:"card_bytes"`
+	RolloutSnapshotBytes       int64 `json:"rollout_snapshot_bytes"`
+	IncompleteProjectedEvents  int   `json:"incomplete_projected_events"`
+	ProjectionGapEvents        int   `json:"projection_gap_events"`
+	CardsWithLatestUser        int   `json:"cards_with_latest_user"`
+	CardsWithLatestAssistant   int   `json:"cards_with_latest_assistant"`
 }
 
 type CorpusIssue struct {
@@ -121,13 +124,14 @@ type FreezeResult struct {
 }
 
 type CorpusVerificationReport struct {
-	SchemaVersion         string   `json:"schema_version"`
-	CorpusID              string   `json:"corpus_id"`
-	ArtifactsChecked      int      `json:"artifacts_checked"`
-	RolloutsChecked       int      `json:"rollouts_checked"`
-	SnapshotEventsChecked int      `json:"snapshot_events_checked"`
-	Issues                []string `json:"issues"`
-	Privacy               string   `json:"privacy"`
+	SchemaVersion           string   `json:"schema_version"`
+	CorpusID                string   `json:"corpus_id"`
+	ArtifactsChecked        int      `json:"artifacts_checked"`
+	RolloutsChecked         int      `json:"rollouts_checked"`
+	SnapshotEventsChecked   int      `json:"snapshot_events_checked"`
+	MissingGapEventsChecked int      `json:"missing_gap_events_checked,omitempty"`
+	Issues                  []string `json:"issues"`
+	Privacy                 string   `json:"privacy"`
 }
 
 type CaseCategory string
@@ -192,11 +196,12 @@ type AttestationResult struct {
 }
 
 type CaptureMeasurement struct {
-	Unit     CaptureUnit `json:"unit"`
-	Expected int         `json:"expected"`
-	Complete int         `json:"complete"`
-	Partial  int         `json:"partial"`
-	Missing  int         `json:"missing"`
+	Unit             CaptureUnit `json:"unit"`
+	Expected         int         `json:"expected"`
+	Complete         int         `json:"complete"`
+	Partial          int         `json:"partial"`
+	Missing          int         `json:"missing"`
+	AccountedMissing int         `json:"accounted_missing,omitempty"`
 }
 
 type CaptureUnit string
@@ -309,13 +314,15 @@ type RatioMetric struct {
 }
 
 type CaptureMetrics struct {
-	Unit             CaptureUnit `json:"unit"`
-	Expected         int         `json:"expected"`
-	Complete         int         `json:"complete"`
-	Partial          int         `json:"partial"`
-	Missing          int         `json:"missing"`
-	Coverage         RatioMetric `json:"coverage"`
-	ObservedCoverage RatioMetric `json:"observed_coverage"`
+	Unit              CaptureUnit  `json:"unit"`
+	Expected          int          `json:"expected"`
+	Complete          int          `json:"complete"`
+	Partial           int          `json:"partial"`
+	Missing           int          `json:"missing"`
+	AccountedMissing  int          `json:"accounted_missing,omitempty"`
+	Coverage          RatioMetric  `json:"coverage"`
+	ObservedCoverage  RatioMetric  `json:"observed_coverage"`
+	AccountedCoverage *RatioMetric `json:"accounted_coverage,omitempty"`
 }
 
 type FalseMemoryMetrics struct {

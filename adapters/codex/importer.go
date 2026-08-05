@@ -29,6 +29,7 @@ var threadIDPattern = regexp.MustCompile(
 
 type Options = adapterjsonl.Options
 type Result = adapterjsonl.Result
+type SourceFile = adapterjsonl.SourceFile
 
 type rawEnvelope struct {
 	Timestamp string          `json:"timestamp"`
@@ -37,7 +38,15 @@ type rawEnvelope struct {
 }
 
 func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result, error) {
-	return adapterjsonl.ImportPath(store, sourcePath, options, adapterjsonl.Spec{
+	return adapterjsonl.ImportPath(store, sourcePath, options, importerSpec())
+}
+
+func ImportSources(store *ledger.Store, sources []SourceFile, options Options) (Result, error) {
+	return adapterjsonl.ImportSources(store, sources, options, importerSpec())
+}
+
+func importerSpec() adapterjsonl.Spec {
+	return adapterjsonl.Spec{
 		Agent:            ledger.AgentCodex,
 		AdapterName:      AdapterName,
 		AdapterVersion:   AdapterVersion,
@@ -47,7 +56,7 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result
 		MatchFile:        matchRollout,
 		DiscoverThreadID: discoverThreadID,
 		Project:          projectEvent,
-	})
+	}
 }
 
 func matchRollout(_ string, entry fs.DirEntry) bool {

@@ -68,7 +68,8 @@ func BuildLegacyCaptureInput(store *ledger.Store, corpusID string,
 			Capture: &CaptureMeasurement{
 				Unit: CaptureUnitLegacyRollouts, Expected: manifest.Counts.RolloutReferences,
 				Complete: manifest.Counts.CapturedRollouts, Partial: manifest.Counts.PartialRollouts,
-				Missing: manifest.Counts.MissingRollouts,
+				Missing:          manifest.Counts.MissingRollouts,
+				AccountedMissing: manifest.Counts.AccountedMissingRollouts,
 			},
 		}},
 	}

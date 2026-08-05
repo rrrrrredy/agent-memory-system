@@ -489,6 +489,12 @@ func validateEvent(event Event) error {
 		event.Source.ThreadID == "" {
 		return errors.New("source agent, adapter, adapter_version, device_id, and thread_id are required")
 	}
+	if event.Source.SourcePathHash != "" && !validSHA256(event.Source.SourcePathHash) {
+		return errors.New("source_path_hash must be a lowercase sha256 digest")
+	}
+	if event.Source.AcquisitionPathHash != "" && !validSHA256(event.Source.AcquisitionPathHash) {
+		return errors.New("acquisition_path_hash must be a lowercase sha256 digest")
+	}
 	if event.Completeness.Status == "" {
 		return errors.New("completeness status is required")
 	}
@@ -775,13 +781,18 @@ func (s *Store) verifyBlob(reference BlobRef) string {
 }
 
 func expectedBlobRelativePath(digest string) string {
-	if len(digest) != sha256.Size*2 {
-		return ""
-	}
-	if _, err := hex.DecodeString(digest); err != nil {
+	if !validSHA256(digest) {
 		return ""
 	}
 	return filepath.ToSlash(filepath.Join(
 		"evidence", "blobs", "sha256", digest[:2], digest[2:],
 	))
+}
+
+func validSHA256(value string) bool {
+	if len(value) != sha256.Size*2 || value != strings.ToLower(value) {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }

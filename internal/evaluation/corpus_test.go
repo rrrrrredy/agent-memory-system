@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
+	"github.com/rrrrrredy/agent-memory-system/internal/adapterjsonl"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -138,6 +139,9 @@ func TestFreezeLegacyCorpusReportsUncapturedRolloutWithoutInventingEvidence(t *t
 	if result.Counts.MissingRollouts != 1 || result.Counts.CapturedRollouts != 0 {
 		t.Fatalf("missing rollout was not explicit: %+v", result.Counts)
 	}
+	if result.Counts.UnaccountedMissingRollouts != 1 || result.Counts.AccountedMissingRollouts != 0 {
+		t.Fatalf("silent and accounted missing sources were conflated: %+v", result.Counts)
+	}
 	found := false
 	for _, issue := range result.Issues {
 		if issue.Code == "rollout_not_captured" {
@@ -149,6 +153,85 @@ func TestFreezeLegacyCorpusReportsUncapturedRolloutWithoutInventingEvidence(t *t
 	}
 	if verification := VerifyCorpus(store, result.CorpusID); len(verification.Issues) != 0 {
 		t.Fatalf("honestly incomplete corpus failed integrity verification: %+v", verification)
+	}
+
+	pathHash, err := adapterjsonl.HashSourcePath(entry.TranscriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unrelatedGap := ledger.Event{
+		SchemaVersion: ledger.SchemaVersion, EventID: "unrelated-missing-gap-test", Kind: ledger.KindGap,
+		ObservedAt: time.Unix(400, 0).UTC(), RecordedAt: time.Unix(400, 0).UTC(),
+		Source: ledger.Source{
+			Agent: ledger.AgentCodex, Adapter: "codex-jsonl", AdapterVersion: "codex-jsonl/v1alpha1",
+			DeviceID: store.DeviceID(), ThreadID: entry.SessionID, SourcePathHash: pathHash,
+			SourceCursor: "recovery:missing",
+		},
+		Completeness: ledger.Completeness{
+			Status: ledger.CompletenessMissing, Reason: "unrelated_missing_projection",
+		},
+		Privacy: ledger.Privacy{Classification: "local_only"},
+	}
+	if _, err := store.Append(unrelatedGap); err != nil {
+		t.Fatal(err)
+	}
+	stillUnaccounted, err := FreezeLegacyCorpus(store, legacyRoot, FreezeOptions{
+		Name: "legacy-unrelated-gap", Now: func() time.Time { return time.Unix(401, 0).UTC() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stillUnaccounted.Counts.AccountedMissingRollouts != 0 ||
+		stillUnaccounted.Counts.UnaccountedMissingRollouts != 1 {
+		t.Fatalf("unrelated missing gap was treated as source recovery evidence: %+v", stillUnaccounted.Counts)
+	}
+	gap := ledger.Event{
+		SchemaVersion: ledger.SchemaVersion, EventID: "source-recovery-gap-test", Kind: ledger.KindGap,
+		ObservedAt: time.Unix(402, 0).UTC(), RecordedAt: time.Unix(402, 0).UTC(),
+		Source: ledger.Source{
+			Agent: ledger.AgentCodex, Adapter: "source-recovery", AdapterVersion: "source-recovery/v1alpha1",
+			DeviceID: store.DeviceID(), ThreadID: entry.SessionID, SourcePathHash: pathHash,
+			SourceCursor: "recovery:missing",
+		},
+		Completeness: ledger.Completeness{
+			Status: ledger.CompletenessMissing, Reason: "source_not_found_after_local_search",
+		},
+		Privacy: ledger.Privacy{Classification: "local_only"},
+	}
+	if _, err := store.Append(gap); err != nil {
+		t.Fatal(err)
+	}
+	accounted, err := FreezeLegacyCorpus(store, legacyRoot, FreezeOptions{
+		Name: "legacy-accounted-missing", Now: func() time.Time { return time.Unix(403, 0).UTC() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accounted.CorpusID == result.CorpusID || accounted.Counts.AccountedMissingRollouts != 1 ||
+		accounted.Counts.UnaccountedMissingRollouts != 0 || accounted.Counts.MissingRollouts != 1 {
+		t.Fatalf("explicit source gap was not separated from silent loss: %+v", accounted)
+	}
+	manifest, err := LoadCorpusManifest(store, accounted.CorpusID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Rollouts) != 1 || len(manifest.Rollouts[0].MissingGapEventIDs) != 1 ||
+		manifest.Rollouts[0].MissingGapEventIDs[0] != gap.EventID {
+		t.Fatalf("corpus did not bind the missing-source evidence: %+v", manifest.Rollouts)
+	}
+	verification := VerifyCorpus(store, accounted.CorpusID)
+	if len(verification.Issues) != 0 || verification.MissingGapEventsChecked != 1 {
+		t.Fatalf("accounted missing corpus failed verification: %+v", verification)
+	}
+	baseline, err := BuildLegacyCaptureInput(store, accounted.CorpusID, LegacyCaptureInputOptions{
+		SuiteID: "accounted-capture", RunID: "run-accounted", SystemVersion: "test-v1",
+		MinimumCoverage: 1, Now: func() time.Time { return time.Unix(404, 0).UTC() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(baseline.Cases) != 1 || baseline.Cases[0].Capture.AccountedMissing != 1 {
+		t.Fatalf("baseline omitted accounted missing evidence: %+v", baseline.Cases)
 	}
 }
 

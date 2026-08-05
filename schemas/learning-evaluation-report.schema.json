@@ -58,8 +58,10 @@
         "complete": {"type": "integer", "minimum": 0},
         "partial": {"type": "integer", "minimum": 0},
         "missing": {"type": "integer", "minimum": 0},
+        "accounted_missing": {"type": "integer", "minimum": 0},
         "coverage": {"$ref": "#/$defs/ratio"},
-        "observed_coverage": {"$ref": "#/$defs/ratio"}
+        "observed_coverage": {"$ref": "#/$defs/ratio"},
+        "accounted_coverage": {"$ref": "#/$defs/ratio"}
       }
     },
     "false_memory_metrics": {
