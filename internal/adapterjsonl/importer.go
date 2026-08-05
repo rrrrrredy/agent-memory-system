@@ -6,6 +6,7 @@ package adapterjsonl
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -19,14 +20,65 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
 type Options struct {
-	FullReconcile bool
-	Now           func() time.Time
+	FullReconcile   bool
+	Now             func() time.Time
+	Context         context.Context
+	ExpectedSources map[string]ExpectedSource
+	ExpectedTracker *ExpectedSourceTracker
+}
+
+type ExpectedSource struct {
+	ContentSHA256 string
+	Bytes         int64
+}
+
+// ExpectedSourceTracker records which pre-inventory identities were preserved.
+// One tracker may be shared by multiple adapters that partition a single source
+// tree, such as Claude Code transcripts, prompt history, and companion files.
+type ExpectedSourceTracker struct {
+	mu       sync.Mutex
+	observed map[string]struct{}
+}
+
+func NewExpectedSourceTracker() *ExpectedSourceTracker {
+	return &ExpectedSourceTracker{observed: map[string]struct{}{}}
+}
+
+func (tracker *ExpectedSourceTracker) Observe(identity string) {
+	if tracker == nil {
+		return
+	}
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	if tracker.observed == nil {
+		tracker.observed = map[string]struct{}{}
+	}
+	tracker.observed[identity] = struct{}{}
+}
+
+func (tracker *ExpectedSourceTracker) MissingCount(expected map[string]ExpectedSource) int {
+	if len(expected) == 0 {
+		return 0
+	}
+	if tracker == nil {
+		return len(expected)
+	}
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	missing := 0
+	for identity := range expected {
+		if _, observed := tracker.observed[identity]; !observed {
+			missing++
+		}
+	}
+	return missing
 }
 
 // SourceFile separates the logical source identity from the path at which the
@@ -93,7 +145,7 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options, spec Sp
 	if err := validateInputs(store, sourcePath, &options, spec); err != nil {
 		return Result{Kinds: map[string]int{}}, err
 	}
-	files, err := collectFiles(sourcePath, spec.MatchFile)
+	files, err := collectFiles(options.Context, sourcePath, spec.MatchFile)
 	if err != nil {
 		return Result{Kinds: map[string]int{}}, err
 	}
@@ -127,7 +179,30 @@ func ImportSources(store *ledger.Store, sources []SourceFile, options Options, s
 	if err != nil {
 		return result, err
 	}
-	state, appender, err := loadImportState(store, spec)
+	for index := range validated {
+		identity := validated[index].LogicalSourcePathSHA256
+		if identity == "" {
+			identity, err = HashSourcePath(validated[index].Path)
+			if err != nil {
+				return result, err
+			}
+		}
+		expected, exists := options.ExpectedSources[identity]
+		if !exists {
+			continue
+		}
+		if validated[index].ExpectedContentSHA256 != "" &&
+			validated[index].ExpectedContentSHA256 != expected.ContentSHA256 {
+			return result, errors.New("explicit and supervised source content expectations conflict")
+		}
+		validated[index].ExpectedContentSHA256 = expected.ContentSHA256
+		expectedBytes := expected.Bytes
+		if validated[index].ExpectedBytes != nil && *validated[index].ExpectedBytes != expectedBytes {
+			return result, errors.New("explicit and supervised source byte expectations conflict")
+		}
+		validated[index].ExpectedBytes = &expectedBytes
+	}
+	state, appender, err := loadImportState(options.Context, store, spec)
 	if err != nil {
 		return result, err
 	}
@@ -201,10 +276,18 @@ func validateInputs(store *ledger.Store, sourcePath string, options *Options, sp
 	if options.Now == nil {
 		options.Now = time.Now
 	}
+	if options.Context == nil {
+		options.Context = context.Background()
+	}
+	for identity, expected := range options.ExpectedSources {
+		if !validSHA256(identity) || !validSHA256(expected.ContentSHA256) || expected.Bytes < 0 {
+			return errors.New("supervised JSONL source expectation is invalid")
+		}
+	}
 	return nil
 }
 
-func collectFiles(sourcePath string, match func(string, fs.DirEntry) bool) ([]string, error) {
+func collectFiles(ctx context.Context, sourcePath string, match func(string, fs.DirEntry) bool) ([]string, error) {
 	absolute, err := filepath.Abs(sourcePath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve source path: %w", err)
@@ -222,6 +305,9 @@ func collectFiles(sourcePath string, match func(string, fs.DirEntry) bool) ([]st
 
 	var files []string
 	err = filepath.WalkDir(absolute, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if walkErr != nil {
 			return walkErr
 		}
@@ -243,12 +329,15 @@ func collectFiles(sourcePath string, match func(string, fs.DirEntry) bool) ([]st
 	return files, nil
 }
 
-func loadImportState(store *ledger.Store, spec Spec) (*importState, *ledger.Appender, error) {
+func loadImportState(ctx context.Context, store *ledger.Store, spec Spec) (*importState, *ledger.Appender, error) {
 	state := &importState{
 		knownIDs:        map[string]struct{}{},
 		committedOffset: map[string]int64{},
 	}
 	appender, err := store.NewAppenderAfterVisit(func(record ledger.Record) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		event := record.Event
 		state.knownIDs[event.EventID] = struct{}{}
 		if event.Source.Agent != spec.Agent || event.Source.Adapter != spec.AdapterName ||
@@ -287,6 +376,9 @@ func importFile(
 	state *importState,
 	result *Result,
 ) error {
+	if err := options.Context.Err(); err != nil {
+		return err
+	}
 	path := source.Path
 	info, err := os.Stat(path)
 	if err != nil {
@@ -303,7 +395,32 @@ func importFile(
 	if source.LogicalSourcePathSHA256 != "" {
 		sourcePathHash = source.LogicalSourcePathSHA256
 	}
-	threadID, err := spec.DiscoverThreadID(path, sourcePathHash)
+	readPath := path
+	sourceSize := info.Size()
+	if source.ExpectedContentSHA256 != "" {
+		snapshot, openErr := os.Open(path)
+		if openErr != nil {
+			return fmt.Errorf("open supervised source: %w", openErr)
+		}
+		fullBlob, preserveErr := store.PutBlob(&contextReader{ctx: options.Context, reader: snapshot})
+		closeErr := snapshot.Close()
+		if preserveErr != nil {
+			return fmt.Errorf("preserve supervised source: %w", preserveErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close supervised source: %w", closeErr)
+		}
+		if fullBlob.SHA256 != source.ExpectedContentSHA256 {
+			return errors.New("supervised source content digest does not match the pre-capture inventory")
+		}
+		if source.ExpectedBytes != nil && fullBlob.Bytes != *source.ExpectedBytes {
+			return errors.New("supervised source byte count does not match the pre-capture inventory")
+		}
+		options.ExpectedTracker.Observe(sourcePathHash)
+		readPath = filepath.Join(store.Root(), filepath.FromSlash(fullBlob.RelativePath))
+		sourceSize = fullBlob.Bytes
+	}
+	threadID, err := spec.DiscoverThreadID(readPath, sourcePathHash)
 	if err != nil {
 		return err
 	}
@@ -313,9 +430,9 @@ func importFile(
 
 	pending := make([]ledger.Event, 0, 256)
 	committed := state.committedOffset[sourcePathHash]
-	if committed > info.Size() {
+	if committed > sourceSize {
 		queueTruncationGap(store, state, &pending, spec, sourcePathHash, acquisitionPathHash, threadID,
-			committed, info.Size(), info.ModTime(), options.Now(), result)
+			committed, sourceSize, info.ModTime(), options.Now(), result)
 		committed = 0
 		state.committedOffset[sourcePathHash] = 0
 	}
@@ -324,7 +441,7 @@ func importFile(
 	if options.FullReconcile {
 		start = 0
 	}
-	if start == info.Size() {
+	if start == sourceSize {
 		if len(pending) > 0 {
 			result.FilesChanged++
 			if _, err := appender.AppendBatch(pending); err != nil {
@@ -333,18 +450,19 @@ func importFile(
 		}
 		return nil
 	}
-	if start > info.Size() {
-		return fmt.Errorf("invalid import offset %d for %d-byte source", start, info.Size())
+	if start > sourceSize {
+		return fmt.Errorf("invalid import offset %d for %d-byte source", start, sourceSize)
 	}
 
-	file, err := os.Open(path)
+	file, err := os.Open(readPath)
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)
 	}
 	defer file.Close()
 
-	segmentLength := info.Size() - start
-	blob, err := store.PutBlob(io.NewSectionReader(file, start, segmentLength))
+	segmentLength := sourceSize - start
+	blob, err := store.PutBlob(&contextReader{ctx: options.Context,
+		reader: io.NewSectionReader(file, start, segmentLength)})
 	if err != nil {
 		return fmt.Errorf("preserve source segment: %w", err)
 	}
@@ -402,6 +520,9 @@ func importFile(
 	reader := bufio.NewReader(preserved)
 	offset := start
 	for {
+		if err := options.Context.Err(); err != nil {
+			return err
+		}
 		line, readErr := reader.ReadBytes('\n')
 		if len(line) > 0 {
 			lineStart := offset
@@ -615,6 +736,18 @@ func DeterministicID(namespace string, parts ...string) string {
 		_, _ = io.WriteString(hasher, part)
 	}
 	return namespace + "-" + hex.EncodeToString(hasher.Sum(nil))
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (reader *contextReader) Read(buffer []byte) (int, error) {
+	if err := reader.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return reader.reader.Read(buffer)
 }
 
 func ParseObservedAt(value string) (time.Time, bool) {

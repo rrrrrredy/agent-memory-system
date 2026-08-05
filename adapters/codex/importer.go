@@ -64,6 +64,13 @@ func matchRollout(_ string, entry fs.DirEntry) bool {
 	return strings.HasPrefix(name, "rollout-") && strings.HasSuffix(name, ".jsonl")
 }
 
+// IsSourceFile reports whether a file is part of the Codex transcript surface.
+// It is shared with capture inventory so discovery and import cannot silently
+// use different filename rules.
+func IsSourceFile(path string, entry fs.DirEntry) bool {
+	return matchRollout(path, entry)
+}
+
 func projectEvent(raw json.RawMessage) []adapterjsonl.Projection {
 	var envelope rawEnvelope
 	if err := json.Unmarshal(raw, &envelope); err != nil {

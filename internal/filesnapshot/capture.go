@@ -4,10 +4,12 @@
 package filesnapshot
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"mime"
 	"os"
@@ -22,7 +24,10 @@ import (
 )
 
 type Options struct {
-	Now func() time.Time
+	Now             func() time.Time
+	Context         context.Context
+	ExpectedSources map[string]adapterjsonl.ExpectedSource
+	ExpectedTracker *adapterjsonl.ExpectedSourceTracker
 }
 
 type Result struct {
@@ -63,6 +68,20 @@ func CapturePath(store *ledger.Store, root string, options Options, spec Spec) (
 	if options.Now == nil {
 		options.Now = time.Now
 	}
+	if options.Context == nil {
+		options.Context = context.Background()
+	}
+	for identity, expected := range options.ExpectedSources {
+		if len(identity) != 64 || len(expected.ContentSHA256) != 64 || expected.Bytes < 0 {
+			return result, errors.New("supervised file snapshot expectation is invalid")
+		}
+		if _, err := hex.DecodeString(identity); err != nil {
+			return result, errors.New("supervised file snapshot identity is invalid")
+		}
+		if _, err := hex.DecodeString(expected.ContentSHA256); err != nil {
+			return result, errors.New("supervised file snapshot content digest is invalid")
+		}
+	}
 	absoluteRoot, err := filepath.Abs(root)
 	if err != nil {
 		return result, fmt.Errorf("resolve source root: %w", err)
@@ -75,9 +94,15 @@ func CapturePath(store *ledger.Store, root string, options Options, spec Spec) (
 		return result, errors.New("source root is not a directory")
 	}
 
-	files, issues := collect(absoluteRoot, spec.Include)
+	files, issues, err := collect(options.Context, absoluteRoot, spec.Include)
+	if err != nil {
+		return result, err
+	}
 	known := map[string]struct{}{}
 	appender, err := store.NewAppenderAfterVisit(func(record ledger.Record) error {
+		if err := options.Context.Err(); err != nil {
+			return err
+		}
 		known[record.Event.EventID] = struct{}{}
 		return nil
 	})
@@ -97,6 +122,9 @@ func CapturePath(store *ledger.Store, root string, options Options, spec Spec) (
 			options.Now(), &result)
 	}
 	for _, path := range files {
+		if err := options.Context.Err(); err != nil {
+			return result, err
+		}
 		result.FilesExamined++
 		pathHash, err := adapterjsonl.HashSourcePath(path)
 		if err != nil {
@@ -115,7 +143,7 @@ func CapturePath(store *ledger.Store, root string, options Options, spec Spec) (
 				"source_open_failed: "+errorClass(err), options.Now(), &result)
 			continue
 		}
-		blob, captureErr := store.PutBlob(file)
+		blob, captureErr := store.PutBlob(&contextReader{ctx: options.Context, reader: file})
 		closeErr := file.Close()
 		if captureErr != nil {
 			queueGap(store, spec, known, &pending, relative, pathHash,
@@ -127,6 +155,13 @@ func CapturePath(store *ledger.Store, root string, options Options, spec Spec) (
 				"source_close_failed: "+errorClass(closeErr), options.Now(), &result)
 		}
 		result.BytesRead += blob.Bytes
+		if expected, exists := options.ExpectedSources[pathHash]; exists &&
+			(blob.SHA256 != expected.ContentSHA256 || blob.Bytes != expected.Bytes) {
+			return result, errors.New("supervised file snapshot bytes do not match the pre-capture inventory")
+		}
+		if _, expected := options.ExpectedSources[pathHash]; expected {
+			options.ExpectedTracker.Observe(pathHash)
+		}
 		after, statErr := os.Stat(path)
 		completeness := ledger.Completeness{Status: ledger.CompletenessComplete}
 		if statErr != nil || before.Size() != blob.Bytes ||
@@ -179,10 +214,13 @@ func CapturePath(store *ledger.Store, root string, options Options, spec Spec) (
 	return result, nil
 }
 
-func collect(root string, include func(string, fs.DirEntry) bool) ([]string, []collectionIssue) {
+func collect(ctx context.Context, root string, include func(string, fs.DirEntry) bool) ([]string, []collectionIssue, error) {
 	var files []string
 	var issues []collectionIssue
-	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if walkErr != nil {
 			issues = append(issues, collectionIssue{path: path,
 				reason: "source_walk_failed: " + errorClass(walkErr)})
@@ -209,7 +247,19 @@ func collect(root string, include func(string, fs.DirEntry) bool) ([]string, []c
 		return nil
 	})
 	sort.Strings(files)
-	return files, issues
+	return files, issues, walkErr
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (reader *contextReader) Read(buffer []byte) (int, error) {
+	if err := reader.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return reader.reader.Read(buffer)
 }
 
 func queueGap(

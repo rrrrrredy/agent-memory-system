@@ -24,6 +24,12 @@ const (
 type EventOptions = adapterjsonl.Options
 type EventResult = adapterjsonl.Result
 
+// IsEventSourceFile reports whether a file belongs to the OpenCode event
+// spool imported by ImportEventPath.
+func IsEventSourceFile(_ string, entry fs.DirEntry) bool {
+	return strings.HasSuffix(strings.ToLower(entry.Name()), ".jsonl")
+}
+
 type capturedEvent struct {
 	CapturedAt string          `json:"captured_at"`
 	Event      json.RawMessage `json:"event"`
@@ -41,9 +47,7 @@ func ImportEventPath(store *ledger.Store, sourcePath string, options EventOption
 		Agent: ledger.AgentOpenCode, AdapterName: EventAdapterName,
 		AdapterVersion: EventAdapterVersion, IDNamespace: "opencode-event",
 		MediaType: "application/x-ndjson", NoFilesError: "no OpenCode event JSONL files found",
-		MatchFile: func(_ string, entry fs.DirEntry) bool {
-			return strings.HasSuffix(strings.ToLower(entry.Name()), ".jsonl")
-		},
+		MatchFile:        IsEventSourceFile,
 		DiscoverThreadID: discoverSpoolID,
 		Project:          projectBusEvent,
 	})

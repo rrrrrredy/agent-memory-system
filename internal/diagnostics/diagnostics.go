@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rrrrrredy/agent-memory-system/internal/capturesupervisor"
 	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
 	"github.com/rrrrrredy/agent-memory-system/internal/hookcapture"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
@@ -26,9 +27,12 @@ type Issue struct {
 }
 
 type Options struct {
-	Repository        string
-	RequireRepository bool
-	Now               func() time.Time
+	Repository            string
+	RequireRepository     bool
+	RequireCapture        bool
+	CaptureRequiredAgents []ledger.Agent
+	CaptureMaximumAge     time.Duration
+	Now                   func() time.Time
 }
 
 type Report struct {
@@ -41,6 +45,7 @@ type Report struct {
 	Promotions        promotion.VerificationReport        `json:"promotions"`
 	RuleApprovals     ruleapproval.VerificationReport     `json:"rule_approvals"`
 	Retrieval         retrieval.VerificationReport        `json:"retrieval"`
+	CaptureSupervisor *capturesupervisor.Status           `json:"capture_supervisor,omitempty"`
 	RepositoryChecked bool                                `json:"repository_checked"`
 	GitSync           *gitsync.VerificationReport         `json:"git_sync,omitempty"`
 	Ready             bool                                `json:"ready"`
@@ -75,6 +80,29 @@ func Run(ctx context.Context, store *ledger.Store, options Options) Report {
 	appendStrings(&report, "rule_approvals", "integrity_failed", report.RuleApprovals.Issues)
 	report.Retrieval = retrieval.Verify(store)
 	appendStrings(&report, "retrieval", "integrity_failed", report.Retrieval.Issues)
+	strictCapture := options.RequireCapture || len(options.CaptureRequiredAgents) > 0 ||
+		options.CaptureMaximumAge != 0
+	captureStatus, _ := capturesupervisor.GetStatus(store, capturesupervisor.StatusOptions{
+		RequireConfigured: options.RequireCapture, RequireHealthy: options.RequireCapture ||
+			len(options.CaptureRequiredAgents) > 0 || options.CaptureMaximumAge != 0,
+		RequiredAgents: options.CaptureRequiredAgents, MaximumAge: options.CaptureMaximumAge,
+		Now: options.Now,
+	})
+	if captureStatus.Configured || options.RequireCapture || len(captureStatus.Issues) > 0 {
+		report.CaptureSupervisor = &captureStatus
+		if strictCapture {
+			for _, issue := range captureStatus.Issues {
+				report.Issues = append(report.Issues, Issue{
+					Component: "capture_supervisor", Code: issue.Code, Message: issue.Message,
+				})
+			}
+		} else if !captureStatus.IntegrityReady {
+			report.Issues = append(report.Issues, Issue{
+				Component: "capture_supervisor", Code: "integrity_failed",
+				Message: "capture supervisor append-only state failed integrity verification",
+			})
+		}
+	}
 
 	if strings.TrimSpace(options.Repository) == "" {
 		if options.RequireRepository {

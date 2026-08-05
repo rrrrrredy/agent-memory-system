@@ -18,6 +18,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/autosync"
 	"github.com/rrrrrredy/agent-memory-system/internal/backup"
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
+	"github.com/rrrrrredy/agent-memory-system/internal/capturesupervisor"
 	"github.com/rrrrrredy/agent-memory-system/internal/diagnostics"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/evaluation"
@@ -82,6 +83,13 @@ func run(args []string) error {
 		repository := flags.String("repo", "", "optional portable memory Git repository")
 		requireRepository := flags.Bool("require-repo", false,
 			"require and verify a portable memory Git repository")
+		requireCapture := flags.Bool("require-capture-ready", false,
+			"require configured capture supervision and complete required sources")
+		captureMaximumAge := flags.Duration("capture-max-age", 0,
+			"maximum age of a complete required-agent capture")
+		var captureAgents repeatedStrings
+		flags.Var(&captureAgents, "require-capture-agent",
+			"required capture agent: codex, claude-code, or opencode (repeatable)")
 		clearWriterLock := flags.Bool("clear-stale-writer-lock", false,
 			"remove the writer lock after independently verifying no ledger writer is active")
 		if err := flags.Parse(args[1:]); err != nil {
@@ -89,6 +97,13 @@ func run(args []string) error {
 		}
 		if *root == "" {
 			return errors.New("doctor requires --root")
+		}
+		if *captureMaximumAge < 0 {
+			return errors.New("doctor capture-max-age cannot be negative")
+		}
+		requiredCaptureAgents, err := captureSupervisorAgents(captureAgents)
+		if err != nil {
+			return err
 		}
 		store, err := ledger.Open(*root)
 		if err != nil {
@@ -115,6 +130,8 @@ func run(args []string) error {
 		}
 		report := diagnostics.Run(context.Background(), store, diagnostics.Options{
 			Repository: *repository, RequireRepository: *requireRepository,
+			RequireCapture: *requireCapture, CaptureRequiredAgents: requiredCaptureAgents,
+			CaptureMaximumAge: *captureMaximumAge,
 		})
 		if err := encodeIndented(report); err != nil {
 			return err
@@ -1563,9 +1580,191 @@ func runCapture(args []string) error {
 		return runCaptureRecover(args[1:])
 	case "plan-recovery":
 		return runCapturePlanRecovery(args[1:])
+	case "supervisor":
+		return runCaptureSupervisor(args[1:])
 	default:
 		return captureUsageError()
 	}
+}
+
+func runCaptureSupervisor(args []string) error {
+	if len(args) == 0 {
+		return captureSupervisorUsageError()
+	}
+	switch args[0] {
+	case "configure":
+		flags := flag.NewFlagSet("capture supervisor configure", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		file := flags.String("file", "", "local capture source config outside Git (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *file == "" {
+			return errors.New("capture supervisor configure requires --root and --file")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		status, err := capturesupervisor.ConfigureFile(store, *file, time.Time{})
+		if err != nil {
+			return err
+		}
+		return encodeIndented(status)
+	case "run":
+		flags := flag.NewFlagSet("capture supervisor run", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" {
+			return errors.New("capture supervisor run requires --root")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		result, runErr := capturesupervisor.Run(ctx, store, capturesupervisor.RunOptions{})
+		if terminalCaptureRun(result) {
+			if err := encodeIndented(result); err != nil {
+				return err
+			}
+		}
+		return runErr
+	case "watch":
+		flags := flag.NewFlagSet("capture supervisor watch", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" {
+			return errors.New("capture supervisor watch requires --root")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return capturesupervisor.Watch(ctx, store, capturesupervisor.RunOptions{},
+			func(result capturesupervisor.RunResult) error { return encodeIndented(result) })
+	case "status":
+		flags := flag.NewFlagSet("capture supervisor status", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		maximumAge := flags.Duration("max-age", 0, "maximum age of a complete required-agent capture")
+		var agents repeatedStrings
+		flags.Var(&agents, "require-agent", "required agent: codex, claude-code, or opencode (repeatable)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" {
+			return errors.New("capture supervisor status requires --root")
+		}
+		if *maximumAge < 0 {
+			return errors.New("capture supervisor max-age cannot be negative")
+		}
+		required, err := captureSupervisorAgents(agents)
+		if err != nil {
+			return err
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		status, err := capturesupervisor.GetStatus(store, capturesupervisor.StatusOptions{
+			RequireConfigured: true, RequireHealthy: true,
+			RequiredAgents: required, MaximumAge: *maximumAge,
+		})
+		if err != nil {
+			return err
+		}
+		if err := encodeIndented(status); err != nil {
+			return err
+		}
+		if !status.Ready {
+			return errors.New("capture supervisor checks failed")
+		}
+		return nil
+	case "recover":
+		flags := flag.NewFlagSet("capture supervisor recover", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" {
+			return errors.New("capture supervisor recover requires --root")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		status, err := capturesupervisor.Recover(store, time.Time{})
+		if err != nil {
+			return err
+		}
+		return encodeIndented(status)
+	case "clear-stale-lock":
+		flags := flag.NewFlagSet("capture supervisor clear-stale-lock", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		confirm := flags.Bool("confirm-no-active-run", false,
+			"confirm independently that no capture supervisor process is active")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || !*confirm {
+			return errors.New("capture supervisor clear-stale-lock requires --root and --confirm-no-active-run")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		cleared, err := capturesupervisor.ClearStaleLock(store)
+		if err != nil {
+			return err
+		}
+		return encodeIndented(map[string]any{
+			"schema_version": "capture-supervisor-lock-recovery-result/v1alpha1",
+			"lock_cleared":   cleared,
+			"privacy":        "local_only",
+		})
+	default:
+		return captureSupervisorUsageError()
+	}
+}
+
+func captureSupervisorAgents(values []string) ([]ledger.Agent, error) {
+	result := []ledger.Agent{}
+	for _, value := range values {
+		var agent ledger.Agent
+		switch value {
+		case "codex":
+			agent = ledger.AgentCodex
+		case "claude-code":
+			agent = ledger.AgentClaudeCode
+		case "opencode":
+			agent = ledger.AgentOpenCode
+		default:
+			return nil, errors.New("capture supervisor require-agent must be codex, claude-code, or opencode")
+		}
+		duplicate := false
+		for _, existing := range result {
+			if existing == agent {
+				duplicate = true
+			}
+		}
+		if !duplicate {
+			result = append(result, agent)
+		}
+	}
+	return result, nil
+}
+
+func terminalCaptureRun(result capturesupervisor.RunResult) bool {
+	return result.RunID != "" && !result.FinishedAt.IsZero() && result.AuditSequence > 0 &&
+		(result.Outcome == "success" || result.Outcome == "partial" ||
+			result.Outcome == "failed" || result.Outcome == "canceled")
 }
 
 func runCaptureHook(args []string) error {
@@ -1791,7 +1990,11 @@ func evalUsageError() error {
 }
 
 func captureUsageError() error {
-	return errors.New("usage: agentmem capture <opencode --root <local-evidence-directory> --staging <non-Git-local-directory> [--binary opencode]|hook <codex|claude-code> --root <local-evidence-directory>|reconcile <codex|claude-code> --root <local-evidence-directory> --path <agent-source-path> [--full-reconcile]|plan-recovery legacy-codex --root <local-evidence-directory> --corpus <corpus-id> --source-root <search-directory> --output <new-manifest.json>|recover --root <local-evidence-directory> --source-root <recovered-source-directory> --manifest <source-recovery-manifest.json>>")
+	return errors.New("usage: agentmem capture <opencode|hook|reconcile|supervisor|plan-recovery legacy-codex|recover> [options]")
+}
+
+func captureSupervisorUsageError() error {
+	return errors.New("usage: agentmem capture supervisor <configure|run|watch|status|recover|clear-stale-lock> [options]")
 }
 
 func importUsageError() error {

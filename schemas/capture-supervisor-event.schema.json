@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/capture-supervisor-event.schema.json",
+  "title": "Append-only capture supervisor audit event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sequence", "event_id", "observed_at", "action", "outcome", "config_sha256", "event_sha256", "privacy"],
+  "properties": {
+    "schema_version": {"const": "capture-supervisor-event/v1alpha1"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "event_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "action": {"enum": ["configure", "run_started", "inventory_recorded", "source_succeeded", "source_failed", "source_skipped", "run_finished", "run_abandoned"]},
+    "outcome": {"type": "string", "minLength": 1},
+    "source_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "source": {"$ref": "capture-supervisor-source-result.schema.json"},
+    "inventory_sha256": {"$ref": "#/$defs/hash"},
+    "config_sha256": {"$ref": "#/$defs/hash"},
+    "full_reconcile": {"type": "boolean"},
+    "previous_event_sha256": {"$ref": "#/$defs/hash"},
+    "event_sha256": {"$ref": "#/$defs/hash"},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "configure"}}, "required": ["action"]},
+      "then": {
+        "properties": {"outcome": {"const": "configured"}},
+        "not": {"anyOf": [{"required": ["run_id"]}, {"required": ["source_id"]}, {"required": ["source"]}, {"required": ["inventory_sha256"]}]}
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "run_started"}}, "required": ["action"]},
+      "then": {"required": ["run_id"], "properties": {"outcome": {"const": "started"}}}
+    },
+    {
+      "if": {"properties": {"action": {"const": "inventory_recorded"}}, "required": ["action"]},
+      "then": {
+        "required": ["run_id", "source_id", "inventory_sha256"],
+        "properties": {"outcome": {"const": "recorded"}},
+        "not": {"required": ["source"]}
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "source_succeeded"}}, "required": ["action"]},
+      "then": {
+        "required": ["run_id", "source_id", "source", "inventory_sha256"],
+        "properties": {"outcome": {"const": "success"}, "source": {"properties": {"outcome": {"const": "success"}}}}
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "source_failed"}}, "required": ["action"]},
+      "then": {
+        "required": ["run_id", "source_id", "source"],
+        "properties": {"outcome": {"enum": ["partial", "failed"]}, "source": {"properties": {"outcome": {"enum": ["partial", "failed"]}}}}
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "source_skipped"}}, "required": ["action"]},
+      "then": {
+        "required": ["run_id", "source_id", "source"],
+        "properties": {"outcome": {"const": "skipped"}, "source": {"properties": {"outcome": {"const": "skipped"}}}}
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "run_finished"}}, "required": ["action"]},
+      "then": {"required": ["run_id"], "properties": {"outcome": {"enum": ["success", "partial", "failed", "canceled"]}}}
+    },
+    {
+      "if": {"properties": {"action": {"const": "run_abandoned"}}, "required": ["action"]},
+      "then": {"required": ["run_id"], "properties": {"outcome": {"const": "abandoned"}}}
+    }
+  ],
+  "$defs": {"hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+}

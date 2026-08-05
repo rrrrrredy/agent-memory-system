@@ -136,6 +136,16 @@ func (s *Store) DeviceID() string {
 	return s.deviceID
 }
 
+// ValidateLocation rechecks that an already opened evidence root has not moved
+// into a Git worktree. Long-running local processes must call it before writing
+// non-ledger state beneath the evidence root.
+func (s *Store) ValidateLocation() error {
+	if s == nil {
+		return errors.New("store is required")
+	}
+	return ensureEvidenceRootOutsideGit(s.root)
+}
+
 func (s *Store) validateManifest() error {
 	data, err := os.ReadFile(filepath.Join(s.root, "store.json"))
 	if err != nil {

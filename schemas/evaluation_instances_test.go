@@ -149,6 +149,33 @@ func validatePublishedInstance(t *testing.T, schemaName string, instance any) {
 	}
 }
 
+func rejectPublishedInstance(t *testing.T, schemaName string, instance any) {
+	t.Helper()
+	schema, err := readSchema(schemaName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := schema.Resolve(&jsonschema.ResolveOptions{
+		Loader: func(uri *url.URL) (*jsonschema.Schema, error) {
+			return readSchema(path.Base(uri.Path))
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolve %s: %v", schemaName, err)
+	}
+	data, err := json.Marshal(instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatal(err)
+	}
+	if err := resolved.Validate(value); err == nil {
+		t.Fatalf("%s accepted an invalid instance: %s", schemaName, data)
+	}
+}
+
 func readSchema(name string) (*jsonschema.Schema, error) {
 	if path.Base(name) != name || !strings.HasSuffix(name, ".schema.json") {
 		return nil, fmt.Errorf("unsupported schema reference %q", name)

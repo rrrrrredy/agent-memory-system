@@ -1,6 +1,7 @@
 package hookcapture
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -22,9 +23,12 @@ import (
 const ReconcileResultSchemaVersion = "capture-reconciliation/v1alpha1"
 
 type ReconcileOptions struct {
-	SourcePath    string
-	FullReconcile bool
-	Now           func() time.Time
+	SourcePath      string
+	FullReconcile   bool
+	Now             func() time.Time
+	Context         context.Context
+	ExpectedSources map[string]adapterjsonl.ExpectedSource
+	ExpectedTracker *adapterjsonl.ExpectedSourceTracker
 }
 
 type ReconcileResult struct {
@@ -64,6 +68,9 @@ func Reconcile(store *ledger.Store, agent ledger.Agent, options ReconcileOptions
 	if options.Now == nil {
 		options.Now = time.Now
 	}
+	if options.Context == nil {
+		options.Context = context.Background()
+	}
 	var failures []reconcileFailure
 	var operationErrors []error
 
@@ -71,7 +78,8 @@ func Reconcile(store *ledger.Store, agent ledger.Agent, options ReconcileOptions
 	if hasHookEnvelopes(spool) {
 		failures = append(failures, auditTranscriptHints(spool, options.SourcePath)...)
 		hookResult, err := ImportPath(store, agent, spool, ImportOptions{
-			FullReconcile: options.FullReconcile, Now: options.Now,
+			FullReconcile: options.FullReconcile, Now: options.Now, Context: options.Context,
+			ExpectedSources: options.ExpectedSources, ExpectedTracker: options.ExpectedTracker,
 		})
 		result.HookSpool = &hookResult
 		if err != nil {
@@ -83,7 +91,8 @@ func Reconcile(store *ledger.Store, agent ledger.Agent, options ReconcileOptions
 	switch agent {
 	case ledger.AgentCodex:
 		imported, err := codex.ImportPath(store, options.SourcePath, codex.Options{
-			FullReconcile: options.FullReconcile, Now: options.Now,
+			FullReconcile: options.FullReconcile, Now: options.Now, Context: options.Context,
+			ExpectedSources: options.ExpectedSources, ExpectedTracker: options.ExpectedTracker,
 		})
 		result.Codex = &imported
 		if err != nil {
@@ -93,7 +102,8 @@ func Reconcile(store *ledger.Store, agent ledger.Agent, options ReconcileOptions
 		}
 	case ledger.AgentClaudeCode:
 		imported, err := claudecode.ImportHome(store, options.SourcePath, claudecode.Options{
-			FullReconcile: options.FullReconcile, Now: options.Now,
+			FullReconcile: options.FullReconcile, Now: options.Now, Context: options.Context,
+			ExpectedSources: options.ExpectedSources, ExpectedTracker: options.ExpectedTracker,
 		})
 		result.ClaudeCode = &imported
 		if err != nil {
@@ -110,7 +120,7 @@ func Reconcile(store *ledger.Store, agent ledger.Agent, options ReconcileOptions
 	}
 
 	if len(failures) > 0 {
-		appended, err := appendReconcileGaps(store, agent, failures, options.Now())
+		appended, err := appendReconcileGaps(options.Context, store, agent, failures, options.Now())
 		result.GapsAppended = appended
 		for _, failure := range failures {
 			result.Issues = append(result.Issues, failure.Operation+":"+failure.Reason)
@@ -269,7 +279,7 @@ func hashPath(path string) string {
 	return hex.EncodeToString(fallback[:])
 }
 
-func appendReconcileGaps(store *ledger.Store, agent ledger.Agent, failures []reconcileFailure, now time.Time) (
+func appendReconcileGaps(ctx context.Context, store *ledger.Store, agent ledger.Agent, failures []reconcileFailure, now time.Time) (
 	appended int, returnedErr error,
 ) {
 	eventsByID := make(map[string]ledger.Event, len(failures))
@@ -299,6 +309,9 @@ func appendReconcileGaps(store *ledger.Store, agent ledger.Agent, failures []rec
 	pending := make([]ledger.Event, 0, len(eventsByID))
 	var collision error
 	appender, err := store.NewAppenderAfterVisit(func(record ledger.Record) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		expected, wanted := eventsByID[record.Event.EventID]
 		if !wanted {
 			return nil

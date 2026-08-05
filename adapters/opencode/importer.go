@@ -2,6 +2,7 @@ package opencode
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -26,7 +27,8 @@ const (
 )
 
 type Options struct {
-	Now func() time.Time
+	Now     func() time.Time
+	Context context.Context
 }
 
 type SourceFile = adapterjsonl.SourceFile
@@ -122,7 +124,10 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result
 	if options.Now == nil {
 		options.Now = time.Now
 	}
-	files, err := collectExports(sourcePath)
+	if options.Context == nil {
+		options.Context = context.Background()
+	}
+	files, err := collectExports(options.Context, sourcePath)
 	if err != nil {
 		return result, err
 	}
@@ -147,6 +152,9 @@ func ImportSources(store *ledger.Store, sources []SourceFile, options Options) (
 	if options.Now == nil {
 		options.Now = time.Now
 	}
+	if options.Context == nil {
+		options.Context = context.Background()
+	}
 	validated, err := adapterjsonl.ValidateSources(sources)
 	if err != nil {
 		return result, err
@@ -154,6 +162,9 @@ func ImportSources(store *ledger.Store, sources []SourceFile, options Options) (
 
 	known := map[string]struct{}{}
 	appender, err := store.NewAppenderAfterVisit(func(record ledger.Record) error {
+		if err := options.Context.Err(); err != nil {
+			return err
+		}
 		known[record.Event.EventID] = struct{}{}
 		return nil
 	})
@@ -173,7 +184,7 @@ func ImportSources(store *ledger.Store, sources []SourceFile, options Options) (
 	return result, nil
 }
 
-func collectExports(sourcePath string) ([]string, error) {
+func collectExports(ctx context.Context, sourcePath string) ([]string, error) {
 	absolute, err := filepath.Abs(sourcePath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve source path: %w", err)
@@ -190,6 +201,9 @@ func collectExports(sourcePath string) ([]string, error) {
 	}
 	var files []string
 	err = filepath.WalkDir(absolute, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if walkErr != nil {
 			return walkErr
 		}
@@ -219,6 +233,9 @@ func importFile(
 	known map[string]struct{},
 	result *Result,
 ) error {
+	if err := options.Context.Err(); err != nil {
+		return err
+	}
 	path := source.Path
 	before, err := os.Stat(path)
 	if err != nil {
@@ -236,7 +253,7 @@ func importFile(
 	if err != nil {
 		return fmt.Errorf("open export: %w", err)
 	}
-	blob, captureErr := store.PutBlob(file)
+	blob, captureErr := store.PutBlob(&contextReader{ctx: options.Context, reader: file})
 	closeErr := file.Close()
 	if captureErr != nil {
 		return fmt.Errorf("preserve export: %w", captureErr)
@@ -255,7 +272,7 @@ func importFile(
 	if err != nil {
 		return err
 	}
-	data, readErr := io.ReadAll(preserved)
+	data, readErr := io.ReadAll(&contextReader{ctx: options.Context, reader: preserved})
 	closeErr = preserved.Close()
 	if readErr != nil {
 		return fmt.Errorf("read preserved export: %w", readErr)
@@ -585,4 +602,16 @@ func joinReason(existing, added string) string {
 		return existing
 	}
 	return existing + "; " + added
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (reader *contextReader) Read(buffer []byte) (int, error) {
+	if err := reader.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return reader.reader.Read(buffer)
 }

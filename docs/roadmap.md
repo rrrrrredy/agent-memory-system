@@ -34,6 +34,8 @@ does not exit until all three pass the same contract.
 - Deduplication, conflict quarantine, review, promotion, supersession, and
   revocation.
 - Protection against self-confirming model evidence.
+- Local capture supervision with content-hashed source inventory, explicit
+  missing-source evidence, foreground watch, and opt-in freshness gates.
 
 ## M3: Portable memory and Git synchronization
 

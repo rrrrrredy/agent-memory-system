@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -34,14 +35,33 @@ type CaptureOptions struct {
 }
 
 type CaptureResult struct {
-	SessionsListed   int                 `json:"sessions_listed"`
-	ExportsWritten   int                 `json:"exports_written"`
-	ExportsSucceeded int                 `json:"exports_succeeded"`
-	ExportsPartial   int                 `json:"exports_partial"`
-	ExportsFailed    int                 `json:"exports_failed"`
-	GapsAppended     int                 `json:"gaps_appended"`
-	Import           Result              `json:"import"`
-	Metadata         filesnapshot.Result `json:"metadata"`
+	SessionsListed        int                 `json:"sessions_listed"`
+	SessionIdentitySHA256 []string            `json:"session_identity_sha256"`
+	ExportsWritten        int                 `json:"exports_written"`
+	ExportsSucceeded      int                 `json:"exports_succeeded"`
+	ExportsPartial        int                 `json:"exports_partial"`
+	ExportsFailed         int                 `json:"exports_failed"`
+	GapsAppended          int                 `json:"gaps_appended"`
+	Import                Result              `json:"import"`
+	Metadata              filesnapshot.Result `json:"metadata"`
+}
+
+// PreparedCapture is an in-memory binding between one persisted native session
+// listing and the exact sessions that CapturePrepared will export. Raw session
+// IDs remain private to this package; callers receive only their hashes.
+type PreparedCapture struct {
+	sessions              []sessionListEntry
+	sessionsListed        int
+	sessionIdentityHashes []string
+	sessionListPath       string
+	sessionListSHA256     string
+	storeRoot             string
+	deviceID              string
+	options               CaptureOptions
+	staging               string
+	exportsRoot           string
+	metadataRoot          string
+	logsRoot              string
 }
 
 type commandRunner interface {
@@ -87,12 +107,26 @@ type captureExport struct {
 }
 
 func CaptureAll(ctx context.Context, store *ledger.Store, options CaptureOptions) (CaptureResult, error) {
+	prepared, result, err := PrepareCapture(ctx, store, options)
+	if err != nil {
+		return result, err
+	}
+	return CapturePrepared(ctx, store, prepared)
+}
+
+// PrepareCapture persists and validates the native session listing without
+// exporting any session. This lets a supervisor commit its hashed inventory
+// before long-running export operations begin.
+func PrepareCapture(
+	ctx context.Context, store *ledger.Store, options CaptureOptions,
+) (PreparedCapture, CaptureResult, error) {
+	prepared := PreparedCapture{}
 	result := CaptureResult{}
 	if store == nil {
-		return result, errors.New("store is required")
+		return prepared, result, errors.New("store is required")
 	}
 	if strings.TrimSpace(options.StagingRoot) == "" {
-		return result, errors.New("staging root is required")
+		return prepared, result, errors.New("staging root is required")
 	}
 	if options.Now == nil {
 		options.Now = time.Now
@@ -105,28 +139,28 @@ func CaptureAll(ctx context.Context, store *ledger.Store, options CaptureOptions
 	}
 	staging, err := filepath.Abs(options.StagingRoot)
 	if err != nil {
-		return result, fmt.Errorf("resolve staging root: %w", err)
+		return prepared, result, fmt.Errorf("resolve staging root: %w", err)
 	}
 	staging, err = resolveProjectedPath(staging)
 	if err != nil {
-		return result, fmt.Errorf("resolve staging root links: %w", err)
+		return prepared, result, fmt.Errorf("resolve staging root links: %w", err)
 	}
 	storeRoot, err := resolveProjectedPath(store.Root())
 	if err != nil {
-		return result, fmt.Errorf("resolve evidence root links: %w", err)
+		return prepared, result, fmt.Errorf("resolve evidence root links: %w", err)
 	}
 	if pathsOverlap(staging, storeRoot) {
-		return result, errors.New("OpenCode raw staging and the evidence root must be separate directories")
+		return prepared, result, errors.New("OpenCode raw staging and the evidence root must be separate directories")
 	}
 	if err := rejectGitPath(staging); err != nil {
-		return result, err
+		return prepared, result, err
 	}
 	exportsRoot := filepath.Join(staging, "exports")
 	metadataRoot := filepath.Join(staging, "metadata")
 	logsRoot := filepath.Join(staging, "logs")
 	for _, directory := range []string{exportsRoot, metadataRoot, logsRoot} {
 		if err := os.MkdirAll(directory, 0o700); err != nil {
-			return result, fmt.Errorf("create staging directory: %w", err)
+			return prepared, result, fmt.Errorf("create staging directory: %w", err)
 		}
 	}
 
@@ -138,11 +172,11 @@ func CaptureAll(ctx context.Context, store *ledger.Store, options CaptureOptions
 	}
 	listRef, err := writeArtifact(metadataRoot, "session-list", ".json", listOut.Bytes())
 	if err != nil {
-		return result, err
+		return prepared, result, err
 	}
 	listErrRef, err := writeArtifact(logsRoot, "session-list", ".stderr.log", listErr.Bytes())
 	if err != nil {
-		return result, err
+		return prepared, result, err
 	}
 	if listRunErr != nil {
 		failures := []captureFailure{{
@@ -150,8 +184,9 @@ func CaptureAll(ctx context.Context, store *ledger.Store, options CaptureOptions
 			Reason:       "session_list_" + commandErrorClass(listRunErr),
 			StdoutSHA256: listRef.SHA256, StderrSHA256: listErrRef.SHA256,
 		}}
-		return finishFailedCapture(store, staging, options.Now(), result, nil, failures,
+		failed, finishErr := finishFailedCapture(ctx, store, staging, options.Now(), result, nil, failures,
 			fmt.Errorf("OpenCode session list failed: %w", listRunErr))
+		return prepared, failed, finishErr
 	}
 
 	sessions, err := decodeSessionList(listOut.Bytes())
@@ -161,9 +196,45 @@ func CaptureAll(ctx context.Context, store *ledger.Store, options CaptureOptions
 			Reason:       "session_list_invalid_json",
 			StdoutSHA256: listRef.SHA256, StderrSHA256: listErrRef.SHA256,
 		}}
-		return finishFailedCapture(store, staging, options.Now(), result, nil, failures, err)
+		failed, finishErr := finishFailedCapture(ctx, store, staging, options.Now(), result, nil, failures, err)
+		return prepared, failed, finishErr
 	}
 	result.SessionsListed = len(sessions)
+	result.SessionIdentitySHA256 = make([]string, 0, len(sessions))
+	for _, session := range sessions {
+		digest := sha256.Sum256([]byte(session.ID))
+		result.SessionIdentitySHA256 = append(result.SessionIdentitySHA256,
+			hex.EncodeToString(digest[:]))
+	}
+	sort.Strings(result.SessionIdentitySHA256)
+	prepared = PreparedCapture{
+		sessions: sessions, sessionsListed: result.SessionsListed,
+		sessionIdentityHashes: append([]string(nil), result.SessionIdentitySHA256...),
+		sessionListPath:       listRef.Path, sessionListSHA256: listRef.SHA256,
+		storeRoot: storeRoot, deviceID: store.DeviceID(), options: options,
+		staging: staging, exportsRoot: exportsRoot, metadataRoot: metadataRoot, logsRoot: logsRoot,
+	}
+	return prepared, result, nil
+}
+
+// CapturePrepared exports and imports exactly the sessions bound by a prior
+// successful PrepareCapture call.
+func CapturePrepared(
+	ctx context.Context, store *ledger.Store, prepared PreparedCapture,
+) (CaptureResult, error) {
+	result := CaptureResult{}
+	if store == nil {
+		return result, errors.New("store is required")
+	}
+	if err := validatePreparedCapture(ctx, store, prepared); err != nil {
+		return result, err
+	}
+	result.SessionsListed = prepared.sessionsListed
+	result.SessionIdentitySHA256 = append([]string(nil), prepared.sessionIdentityHashes...)
+	options := prepared.options
+	staging, exportsRoot := prepared.staging, prepared.exportsRoot
+	metadataRoot, logsRoot := prepared.metadataRoot, prepared.logsRoot
+	sessions := prepared.sessions
 	manifest := captureManifest{
 		SchemaVersion: "opencode-capture-manifest/v1alpha1", CapturedAt: options.Now().UTC(),
 		Sessions: len(sessions), Exports: []captureExport{}, Failures: []captureFailure{},
@@ -195,7 +266,8 @@ func CaptureAll(ctx context.Context, store *ledger.Store, options CaptureOptions
 		if failure != nil {
 			manifest.Failures = append(manifest.Failures, *failure)
 		}
-		if captureErr != nil && errors.Is(captureErr, context.Canceled) {
+		if captureErr != nil &&
+			(errors.Is(captureErr, context.Canceled) || errors.Is(captureErr, context.DeadlineExceeded)) {
 			for _, remaining := range sessions[index+1:] {
 				manifest.Exports = append(manifest.Exports, captureExport{
 					SessionID: remaining.ID, Status: "not_attempted",
@@ -212,7 +284,7 @@ func CaptureAll(ctx context.Context, store *ledger.Store, options CaptureOptions
 
 	var importErr error
 	if result.ExportsWritten > 0 {
-		result.Import, importErr = ImportPath(store, exportsRoot, Options{Now: options.Now})
+		result.Import, importErr = ImportPath(store, exportsRoot, Options{Now: options.Now, Context: ctx})
 		if importErr != nil {
 			importErrorRef, artifactErr := writeArtifact(logsRoot, "import", ".stderr.log",
 				[]byte(importErr.Error()+"\n"))
@@ -228,11 +300,12 @@ func CaptureAll(ctx context.Context, store *ledger.Store, options CaptureOptions
 	if _, err := writeManifest(metadataRoot, manifest); err != nil {
 		return result, errors.Join(importErr, err)
 	}
-	result.GapsAppended, err = appendCaptureGaps(store, manifest.Failures, options.Now())
+	var err error
+	result.GapsAppended, err = appendCaptureGaps(ctx, store, manifest.Failures, options.Now())
 	if err != nil {
 		return result, errors.Join(importErr, err)
 	}
-	result.Metadata, err = captureStagingMetadata(store, staging, options.Now)
+	result.Metadata, err = captureStagingMetadata(ctx, store, staging, options.Now)
 	if err != nil {
 		return result, errors.Join(importErr, err)
 	}
@@ -243,6 +316,101 @@ func CaptureAll(ctx context.Context, store *ledger.Store, options CaptureOptions
 		return result, fmt.Errorf("OpenCode capture completed with %d incomplete operations", len(manifest.Failures))
 	}
 	return result, nil
+}
+
+func validatePreparedCapture(ctx context.Context, store *ledger.Store, prepared PreparedCapture) error {
+	if prepared.options.Now == nil || prepared.options.Runner == nil || prepared.staging == "" ||
+		prepared.exportsRoot == "" || prepared.metadataRoot == "" || prepared.logsRoot == "" ||
+		prepared.sessionListPath == "" || !validArtifactHash(prepared.sessionListSHA256) ||
+		prepared.sessionsListed != len(prepared.sessions) ||
+		prepared.sessionsListed != len(prepared.sessionIdentityHashes) || prepared.deviceID == "" {
+		return errors.New("OpenCode prepared capture is invalid")
+	}
+	if err := store.ValidateLocation(); err != nil {
+		return err
+	}
+	storeRoot, err := resolveProjectedPath(store.Root())
+	if err != nil || !samePath(storeRoot, prepared.storeRoot) || store.DeviceID() != prepared.deviceID {
+		return errors.New("OpenCode prepared capture belongs to a different evidence store")
+	}
+	staging, err := resolveProjectedPath(prepared.staging)
+	if err != nil || !samePath(staging, prepared.staging) || pathsOverlap(staging, storeRoot) {
+		return errors.New("OpenCode prepared staging boundary changed")
+	}
+	if err := rejectGitPath(staging); err != nil {
+		return err
+	}
+	for _, boundary := range []string{prepared.exportsRoot, prepared.metadataRoot, prepared.logsRoot} {
+		resolved, resolveErr := resolveProjectedPath(boundary)
+		if resolveErr != nil || !samePath(resolved, boundary) || !pathWithin(resolved, staging) {
+			return errors.New("OpenCode prepared staging child boundary changed")
+		}
+	}
+	hashes := make([]string, 0, len(prepared.sessions))
+	for _, session := range prepared.sessions {
+		digest := sha256.Sum256([]byte(session.ID))
+		hashes = append(hashes, hex.EncodeToString(digest[:]))
+	}
+	sort.Strings(hashes)
+	for index := range hashes {
+		if hashes[index] != prepared.sessionIdentityHashes[index] {
+			return errors.New("OpenCode prepared session identity binding changed")
+		}
+	}
+	listPath, err := resolveProjectedPath(prepared.sessionListPath)
+	if err != nil || !samePath(listPath, prepared.sessionListPath) ||
+		!pathWithin(listPath, prepared.metadataRoot) {
+		return errors.New("OpenCode prepared session list boundary changed")
+	}
+	actualHash, err := hashFileContext(ctx, listPath)
+	if err != nil {
+		return err
+	}
+	if actualHash != prepared.sessionListSHA256 {
+		return errors.New("OpenCode prepared session list content changed")
+	}
+	return nil
+}
+
+func hashFileContext(ctx context.Context, path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hasher := sha256.New()
+	buffer := make([]byte, 256*1024)
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		count, readErr := file.Read(buffer)
+		if count > 0 {
+			_, _ = hasher.Write(buffer[:count])
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			return "", readErr
+		}
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func validArtifactHash(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
+func samePath(left, right string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(filepath.Clean(left), filepath.Clean(right))
+	}
+	return filepath.Clean(left) == filepath.Clean(right)
 }
 
 func captureSession(
@@ -401,15 +569,20 @@ func commitTempArtifact(tempPath, directory, prefix, extension string) (artifact
 	}
 	digest := hex.EncodeToString(hasher.Sum(nil))
 	target := filepath.Join(directory, prefix+"-"+digest+extension)
-	if _, err := os.Stat(target); err == nil {
-		_ = os.Remove(tempPath)
-		return artifactRef{Path: target, SHA256: digest}, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return artifactRef{}, err
+	if err := os.Link(tempPath, target); err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return artifactRef{}, fmt.Errorf("commit artifact: %w", err)
+		}
+		info, inspectErr := os.Lstat(target)
+		if inspectErr != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return artifactRef{}, errors.New("existing content-addressed artifact is not a regular file")
+		}
+		existingHash, hashErr := hashFileContext(context.Background(), target)
+		if hashErr != nil || existingHash != digest {
+			return artifactRef{}, errors.New("existing content-addressed artifact failed hash verification")
+		}
 	}
-	if err := os.Rename(tempPath, target); err != nil {
-		return artifactRef{}, fmt.Errorf("commit artifact: %w", err)
-	}
+	_ = os.Remove(tempPath)
 	return artifactRef{Path: target, SHA256: digest}, nil
 }
 
@@ -423,9 +596,9 @@ func writeManifest(directory string, manifest captureManifest) (artifactRef, err
 }
 
 func captureStagingMetadata(
-	store *ledger.Store, staging string, now func() time.Time,
+	ctx context.Context, store *ledger.Store, staging string, now func() time.Time,
 ) (filesnapshot.Result, error) {
-	return filesnapshot.CapturePath(store, staging, filesnapshot.Options{Now: now}, filesnapshot.Spec{
+	return filesnapshot.CapturePath(store, staging, filesnapshot.Options{Now: now, Context: ctx}, filesnapshot.Spec{
 		Agent: ledger.AgentOpenCode, AdapterName: CaptureAdapterName,
 		AdapterVersion: CaptureAdapterVersion, IDNamespace: "opencode-cli-capture",
 		Include: func(relativePath string, _ os.DirEntry) bool {
@@ -436,12 +609,17 @@ func captureStagingMetadata(
 	})
 }
 
-func appendCaptureGaps(store *ledger.Store, failures []captureFailure, now time.Time) (int, error) {
+func appendCaptureGaps(
+	ctx context.Context, store *ledger.Store, failures []captureFailure, now time.Time,
+) (int, error) {
 	if len(failures) == 0 {
 		return 0, nil
 	}
 	known := map[string]struct{}{}
 	appender, err := store.NewAppenderAfterVisit(func(record ledger.Record) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		known[record.Event.EventID] = struct{}{}
 		return nil
 	})
@@ -451,6 +629,9 @@ func appendCaptureGaps(store *ledger.Store, failures []captureFailure, now time.
 	defer appender.Close()
 	pending := make([]ledger.Event, 0, len(failures))
 	for _, failure := range failures {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
 		payloadJSON, err := json.Marshal(failure)
 		if err != nil {
 			return 0, err
@@ -496,7 +677,7 @@ func appendCaptureGaps(store *ledger.Store, failures []captureFailure, now time.
 }
 
 func finishFailedCapture(
-	store *ledger.Store, staging string, now time.Time, result CaptureResult,
+	ctx context.Context, store *ledger.Store, staging string, now time.Time, result CaptureResult,
 	exports []captureExport, failures []captureFailure, captureErr error,
 ) (CaptureResult, error) {
 	manifest := captureManifest{
@@ -507,11 +688,11 @@ func finishFailedCapture(
 		return result, err
 	}
 	var err error
-	result.Metadata, err = captureStagingMetadata(store, staging, func() time.Time { return now })
+	result.Metadata, err = captureStagingMetadata(ctx, store, staging, func() time.Time { return now })
 	if err != nil {
 		return result, err
 	}
-	result.GapsAppended, err = appendCaptureGaps(store, failures, now)
+	result.GapsAppended, err = appendCaptureGaps(ctx, store, failures, now)
 	if err != nil {
 		return result, err
 	}

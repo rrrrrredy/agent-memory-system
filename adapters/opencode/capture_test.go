@@ -102,6 +102,35 @@ func TestCaptureAllPreservesCommandArtifactsAndReportsPerSessionGaps(t *testing.
 	}
 }
 
+func TestPreparedCaptureBindsStoreSessionListAndStaging(t *testing.T) {
+	root := t.TempDir()
+	store, err := ledger.Init(filepath.Join(root, "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, _, err := PrepareCapture(context.Background(), store, CaptureOptions{
+		Binary: "opencode-synthetic", StagingRoot: filepath.Join(root, "staging"),
+		Now:    func() time.Time { return time.Date(2026, 8, 4, 6, 0, 0, 0, time.UTC) },
+		Runner: &fakeCommandRunner{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(prepared.sessionListPath, []byte("tampered"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CapturePrepared(context.Background(), store, prepared); err == nil {
+		t.Fatal("prepared capture accepted a modified persisted session list")
+	}
+	otherStore, err := ledger.Init(filepath.Join(root, "other-store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CapturePrepared(context.Background(), otherStore, prepared); err == nil {
+		t.Fatal("prepared capture was reusable against a different evidence store")
+	}
+}
+
 func TestCaptureRejectsStagingInsideGitWorktree(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {

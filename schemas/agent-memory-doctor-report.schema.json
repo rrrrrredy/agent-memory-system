@@ -15,6 +15,7 @@
     "promotions": {"$ref": "#/$defs/promotions"},
     "rule_approvals": {"$ref": "#/$defs/ruleApprovals"},
     "retrieval": {"$ref": "#/$defs/retrieval"},
+    "capture_supervisor": {"$ref": "capture-supervisor-status.schema.json"},
     "repository_checked": {"type": "boolean"},
     "git_sync": {"$ref": "git-sync-verification.schema.json"},
     "ready": {"type": "boolean"},

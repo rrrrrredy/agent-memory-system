@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/capture-supervisor-source-result.schema.json",
+  "title": "Capture supervisor source result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_id", "agent", "kind", "required", "source_config_sha256", "outcome", "files_examined", "files_changed", "events_appended", "gaps_appended", "bytes_captured"],
+  "properties": {
+    "source_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "kind": {"enum": ["codex_rollouts", "claude_home", "opencode_native", "opencode_events"]},
+    "required": {"type": "boolean"},
+    "source_config_sha256": {"$ref": "#/$defs/hash"},
+    "inventory_sha256": {"$ref": "#/$defs/hash"},
+    "outcome": {"enum": ["success", "partial", "failed", "skipped"]},
+    "files_examined": {"type": "integer", "minimum": 0},
+    "files_changed": {"type": "integer", "minimum": 0},
+    "events_appended": {"type": "integer", "minimum": 0},
+    "gaps_appended": {"type": "integer", "minimum": 0},
+    "bytes_captured": {"type": "integer", "minimum": 0},
+    "error_code": {"type": "string", "minLength": 1},
+    "error_detail_sha256": {"$ref": "#/$defs/hash"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "codex_rollouts"}}, "required": ["kind"]},
+      "then": {"properties": {"agent": {"const": "codex"}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "claude_home"}}, "required": ["kind"]},
+      "then": {"properties": {"agent": {"const": "claude_code"}}}
+    },
+    {
+      "if": {"properties": {"kind": {"enum": ["opencode_native", "opencode_events"]}}, "required": ["kind"]},
+      "then": {"properties": {"agent": {"const": "opencode"}}}
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "success"}}, "required": ["outcome"]},
+      "then": {
+        "required": ["inventory_sha256"],
+        "not": {"anyOf": [{"required": ["error_code"]}, {"required": ["error_detail_sha256"]}]}
+      }
+    },
+    {
+      "if": {"properties": {"outcome": {"enum": ["partial", "failed", "skipped"]}}, "required": ["outcome"]},
+      "then": {"required": ["error_code"]}
+    }
+  ],
+  "$defs": {"hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+}

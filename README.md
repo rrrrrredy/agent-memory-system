@@ -138,6 +138,10 @@ go run ./cmd/agentmem capture reconcile claude-code --root <local-data-directory
 go run ./cmd/agentmem capture opencode --root <local-data-directory> --staging <non-Git-local-directory>
 go run ./cmd/agentmem capture plan-recovery legacy-codex --root <local-data-directory> --corpus <corpus-id> --source-root <search-directory> --output <new-manifest.json>
 go run ./cmd/agentmem capture recover --root <local-data-directory> --source-root <recovered-source-directory> --manifest <source-recovery-manifest.json>
+go run ./cmd/agentmem capture supervisor configure --root <local-data-directory> --file <local-config-outside-git.json>
+go run ./cmd/agentmem capture supervisor run --root <local-data-directory>
+go run ./cmd/agentmem capture supervisor watch --root <local-data-directory>
+go run ./cmd/agentmem capture supervisor status --root <local-data-directory> --require-agent codex --max-age 30m
 go run ./cmd/agentmem derive episodes --root <local-data-directory>
 go run ./cmd/agentmem derive candidates --root <local-data-directory> --episodes <episode-generation>
 go run ./cmd/agentmem review apply --root <local-data-directory> --candidates <candidate-generation> --file <review-request.json>
@@ -215,6 +219,15 @@ events. The OpenCode SQLite database is never treated as cross-device data.
 `capture opencode` enumerates every native session, writes immutable exports and
 command diagnostics to staging, imports them, and returns a non-zero status if
 any session is incomplete. It refuses staging inside a Git worktree.
+
+`capture supervisor` coordinates all configured Agent sources without editing
+their configuration. It keeps immutable, hash-chained local audit records and
+hashed source inventories, detects previously observed deletions and in-place
+replacement, distinguishes missing from temporarily unverified sources, binds
+file capture to matching pre/post inventories, and can run once or as a
+foreground watcher. It does not install a system schedule. Inventory is limited
+to locally observable sources and cannot prove that an unexposed source never
+existed. See [capture supervision](docs/capture-supervisor.md).
 
 Keep runtime evidence and raw staging directories outside every Git worktree.
 
@@ -300,7 +313,9 @@ store. See [encrypted evidence backup and recovery](docs/backup-recovery.md).
 `doctor` verifies the integrity of every present local learning record. With
 `--repo` it also checks the portable repository and reachable Git history;
 `--require-repo` makes that repository mandatory for a recovery-integrity
-check. `ready` does not assert that an unobserved Agent session was captured or
+check. Optional `--require-capture-ready`, `--require-capture-agent`, and
+`--capture-max-age` flags add an explicit capture freshness gate. `ready` does
+not assert that an unobserved Agent session was captured or
 that continuous-learning efficacy has been established. Capture coverage and
 quality evaluation remain separate evidence-bound gates.
 
@@ -308,6 +323,9 @@ Tagged releases publish checksum-listed Windows, macOS, and Linux binaries plus
 the versioned documentation, schemas, and optional Agent integration assets.
 The installers under `scripts` replace only the Windows or macOS executable and
 never edit evidence, Agent configuration, hooks, or synchronization schedules.
+The CI matrix runs protocol, build, and installer checks on GitHub-hosted
+Ubuntu, Windows, and macOS runners. Physical-device and long-running sleep,
+resume, and filesystem behavior remain a separate acceptance stage.
 
 ## Safety
 

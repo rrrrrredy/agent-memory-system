@@ -81,7 +81,8 @@ func ImportHome(store *ledger.Store, claudeHome string, options Options) (HomeRe
 	}
 
 	result.Companion, err = filesnapshot.CapturePath(store, absolute,
-		filesnapshot.Options{Now: options.Now}, companionSpec())
+		filesnapshot.Options{Now: options.Now, Context: options.Context,
+			ExpectedSources: options.ExpectedSources, ExpectedTracker: options.ExpectedTracker}, companionSpec())
 	if err != nil {
 		return result, err
 	}
@@ -193,6 +194,21 @@ func includeCompanion(relativePath string, _ fs.DirEntry) bool {
 	default:
 		return false
 	}
+}
+
+// IsHomeEvidenceFile reports whether a regular file is part of the Claude Code
+// task-evidence surface captured by ImportHome. Authentication, settings,
+// plugins, configuration backups, and generic caches remain excluded.
+func IsHomeEvidenceFile(relativePath string, entry fs.DirEntry) bool {
+	relativePath = filepath.ToSlash(relativePath)
+	if strings.EqualFold(relativePath, "history.jsonl") {
+		return true
+	}
+	parts := strings.Split(relativePath, "/")
+	if len(parts) > 0 && parts[0] == "projects" && matchTranscript(relativePath, entry) {
+		return true
+	}
+	return includeCompanion(relativePath, entry)
 }
 
 func companionKind(relativePath string) ledger.EventKind {
