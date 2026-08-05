@@ -17,7 +17,9 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/adapters/claudecode"
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
 	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
+	"github.com/rrrrrredy/agent-memory-system/internal/backup"
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
+	"github.com/rrrrrredy/agent-memory-system/internal/diagnostics"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
@@ -29,7 +31,7 @@ import (
 
 const rememberedText = "Please remember that generated reports must stay local"
 
-func TestPromotedMemoryTravelsFromRawAgentEvidenceToThreeAgentRetrieval(t *testing.T) {
+func TestPromotedMemorySurvivesEncryptedRecoveryAndTravelsToThreeAgents(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is unavailable")
 	}
@@ -139,10 +141,53 @@ func TestPromotedMemoryTravelsFromRawAgentEvidenceToThreeAgentRetrieval(t *testi
 		t.Fatalf("second device did not verify the synchronized memory: %+v", report)
 	}
 	assertNoRawEvidenceInPortableRepository(t, deviceBRepository)
+	if err := os.Rename(remote, remote+".offline"); err != nil {
+		t.Fatalf("disconnect portable memory remote: %v", err)
+	}
 
-	deviceBStore, err := ledger.Init(filepath.Join(base, "device-b-evidence"))
+	key, err := backup.GenerateIdentity(filepath.Join(base, "recovery-key", "identity.txt"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	archive := filepath.Join(base, "backup", "evidence.age")
+	created, err := backup.Create(sourceStore, backup.CreateOptions{
+		Output: archive, Recipients: []string{key.Recipient},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := backup.Verify(backup.VerifyOptions{
+		Archive: archive, IdentityPaths: []string{key.IdentityPath},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !verified.LedgerVerified || len(verified.Issues) != 0 ||
+		verified.ArchiveSHA256 != created.ArchiveSHA256 ||
+		verified.SourceLastRecordHash != created.SourceLastRecordHash {
+		t.Fatalf("encrypted evidence backup did not verify: %+v", verified)
+	}
+	restoredPath := filepath.Join(base, "device-b-evidence")
+	restored, err := backup.Restore(backup.RestoreOptions{
+		Archive: archive, IdentityPaths: []string{key.IdentityPath}, Target: restoredPath,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(restored.Issues) != 0 || restored.DeviceIDRotated ||
+		restored.SourceDeviceID != restored.RestoredDeviceID {
+		t.Fatalf("encrypted evidence did not restore as one logical store: %+v", restored)
+	}
+	deviceBStore, err := ledger.Open(restoredPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recoveryReport := diagnostics.Run(context.Background(), deviceBStore, diagnostics.Options{
+		Repository: deviceBRepository, RequireRepository: true,
+	})
+	if !recoveryReport.Ready || recoveryReport.Evidence.RecordsChecked != restored.RestoredRecords ||
+		!recoveryReport.RepositoryChecked {
+		t.Fatalf("replacement device was not ready after restore and clone: %+v", recoveryReport)
 	}
 	channels := map[ledger.Agent]retrieval.DeliveryChannel{
 		ledger.AgentCodex:      retrieval.ChannelCodexHook,
@@ -201,6 +246,22 @@ func TestPromotedMemoryTravelsFromRawAgentEvidenceToThreeAgentRetrieval(t *testi
 	}
 	if report := deviceBStore.Verify(); len(report.Issues) != 0 {
 		t.Fatalf("second-device evidence did not verify: %+v", report)
+	}
+	finalReport := diagnostics.Run(context.Background(), deviceBStore, diagnostics.Options{
+		Repository: deviceBRepository, RequireRepository: true,
+	})
+	if !finalReport.Ready || finalReport.Retrieval.RetrievalsChecked != 3 ||
+		finalReport.Retrieval.InjectionsChecked != 3 || finalReport.Retrieval.AdoptionsChecked != 3 {
+		t.Fatalf("replacement device did not remain ready after cross-Agent retrieval: %+v", finalReport)
+	}
+	reexported, err := portable.Export(deviceBStore, deviceBRepository, portable.ExportOptions{
+		MemoryIDs: []string{promoted.Revision.MemoryID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reexported.RevisionsUnchanged != 1 || reexported.RevisionsWritten != 0 {
+		t.Fatalf("later recovery and retrieval receipts broke idempotent export: %+v", reexported)
 	}
 }
 

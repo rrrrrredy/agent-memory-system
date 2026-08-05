@@ -38,8 +38,11 @@ itself.
 - A later review rejection or quarantine makes an active revision ineligible
   for portability until it is superseded or revoked.
 - A candidate generation that no longer covers the current evidence-ledger
-  prefix cannot create a new promotion; active revisions from it fail closed
-  until re-derived, re-reviewed, and superseded or revoked.
+  prefix cannot create a new promotion. Existing revisions remain bound to
+  their verified historical evidence and explicit review state; ordinary later
+  evidence and operational receipts do not invalidate them retroactively.
+- Newly derived semantic conflicts are quarantined for explicit resolution
+  instead of silently replacing an active revision.
 - Superseded and revoked revisions remain auditable.
 - Promotion metadata and final text must themselves pass the deterministic
   sensitive-content scan.

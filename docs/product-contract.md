@@ -94,9 +94,12 @@ candidate content and semantic identity, confirmed scope, deterministic scan,
 reviewed redacted-text hash, and expected parent revision. Redaction may remove
 detected sensitive ranges but may not serve as an unreviewed semantic rewrite.
 The candidate generation MUST cover the current verified evidence-ledger
-prefix at promotion time. If new evidence arrives or the source validation
-later ceases to be current, the active memory MUST fail closed for export and
-retrieval until it is re-derived, re-reviewed, and superseded or revoked.
+prefix at promotion time. Later evidence MUST prevent any new promotion from
+reusing that stale generation, but it MUST NOT retroactively erase an existing
+human-approved revision. An active memory MUST fail closed for export and
+retrieval if its bound source validation later ceases to be current, its proof
+fails verification, or the revision is superseded or revoked. Newly derived
+semantic conflicts remain quarantined until explicit review resolves them.
 
 Compaction continuity analysis MUST distinguish confirmed correction evidence
 from lexical omission risk and unavailable compacted representations. A missing

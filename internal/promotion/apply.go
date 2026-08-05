@@ -140,13 +140,11 @@ func GetStatus(store *ledger.Store, memoryID string) (StatusResult, error) {
 	}
 	current := false
 	if revision.Status == StatusActive && revision.Source != nil {
-		if err := requireCurrentSource(store, revision); err == nil {
-			_, err = review.ResolveCurrentValidation(
-				store, revision.Source.CandidateGeneration, revision.Source.CandidateID,
-				revision.Source.CandidateContentSHA256, revision.Source.ReviewRecordSHA256,
-			)
-			current = err == nil
-		}
+		_, err = review.ResolveCurrentValidation(
+			store, revision.Source.CandidateGeneration, revision.Source.CandidateID,
+			revision.Source.CandidateContentSHA256, revision.Source.ReviewRecordSHA256,
+		)
+		current = err == nil
 	}
 	return StatusResult{
 		SchemaVersion: StatusSchemaVersion, MemoryID: memoryID,

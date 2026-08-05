@@ -19,7 +19,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/review"
 )
 
-func TestExportFromVerifiedPromotionIsIdempotentAndRevocableAfterNewEvidence(t *testing.T) {
+func TestExportFromVerifiedPromotionStaysIdempotentUntilExplicitRevocation(t *testing.T) {
 	store, promoted := newExportFixture(t)
 	repository := filepath.Join(t.TempDir(), "private-memory")
 	if err := InitRepository(repository); err != nil {
@@ -66,9 +66,12 @@ func TestExportFromVerifiedPromotionIsIdempotentAndRevocableAfterNewEvidence(t *
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Export(store, repository, ExportOptions{}); err == nil ||
-		!strings.Contains(err.Error(), "not eligible") {
-		t.Fatalf("stale active promotion was exported: %v", err)
+	third, err := Export(store, repository, ExportOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.RevisionsWritten != 0 || third.RevisionsUnchanged != 1 {
+		t.Fatalf("unrelated later evidence changed the promoted revision: %+v", third)
 	}
 	revoked, err := promotion.Apply(store, promotion.Request{
 		SchemaVersion: promotion.RequestSchemaVersion,
@@ -80,13 +83,13 @@ func TestExportFromVerifiedPromotionIsIdempotentAndRevocableAfterNewEvidence(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	third, err := Export(store, repository, ExportOptions{})
+	fourth, err := Export(store, repository, ExportOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if third.RevisionsWritten != 1 || third.RevisionsUnchanged != 1 ||
-		third.RevisionsProjected != 2 {
-		t.Fatalf("revocation did not close the portable chain: %+v", third)
+	if fourth.RevisionsWritten != 1 || fourth.RevisionsUnchanged != 1 ||
+		fourth.RevisionsProjected != 2 {
+		t.Fatalf("revocation did not close the portable chain: %+v", fourth)
 	}
 	report := VerifyRepository(repository)
 	if len(report.Issues) != 0 || report.RevokedMemories != 1 || report.ActiveMemories != 0 {

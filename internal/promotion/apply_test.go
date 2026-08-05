@@ -232,7 +232,7 @@ func TestPromotionKeepsRuleAuthorizationSeparate(t *testing.T) {
 	}
 }
 
-func TestNewEvidenceInvalidatesOldGenerationForPortability(t *testing.T) {
+func TestNewEvidenceRequiresFreshGenerationForNewPromotion(t *testing.T) {
 	fixture := newPromotionFixture(t)
 	candidate := fixture.byText["Please remember that reports stay local"]
 	promoted, err := Apply(fixture.store, promotionRequest(
@@ -260,12 +260,12 @@ func TestNewEvidenceInvalidatesOldGenerationForPortability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.SourceReviewCurrent || status.ExportEligible {
-		t.Fatalf("old generation stayed eligible after new evidence: %+v", status)
+	if !status.SourceReviewCurrent || !status.ExportEligible {
+		t.Fatalf("later evidence erased an already validated promotion: %+v", status)
 	}
 	verification := Verify(fixture.store)
-	if len(verification.Issues) != 1 || !strings.Contains(verification.Issues[0], "current evidence") {
-		t.Fatalf("old generation was not reported: %+v", verification)
+	if len(verification.Issues) != 0 {
+		t.Fatalf("later evidence made the promotion ledger invalid: %+v", verification)
 	}
 	other := fixture.byText["Please remember that Skills changes require approval"]
 	if _, err := Apply(fixture.store, promotionRequest(
@@ -273,6 +273,29 @@ func TestNewEvidenceInvalidatesOldGenerationForPortability(t *testing.T) {
 		fixture.reviewRecords[other.CandidateID], nil, other.Text,
 	)); err == nil || !strings.Contains(err.Error(), "current evidence ledger prefix") {
 		t.Fatalf("old candidate generation was accepted for a new promotion: %v", err)
+	}
+	if _, err := review.Apply(fixture.store, fixture.generation, review.Request{
+		SchemaVersion: review.RequestSchemaVersion,
+		Reviewer:      review.Reviewer{Kind: "human", ID: "owner"},
+		Transitions: []review.TransitionRequest{{
+			CandidateID: candidate.CandidateID, CandidateContentSHA256: candidate.ContentSHA256,
+			ExpectedStatus: review.StatusValidated, Action: review.ActionReject,
+			Reason: "The reviewed memory is no longer applicable.",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	status, err = GetStatus(fixture.store, promoted.Revision.MemoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.SourceReviewCurrent || status.ExportEligible {
+		t.Fatalf("explicit review invalidation did not block export: %+v", status)
+	}
+	verification = Verify(fixture.store)
+	if len(verification.Issues) != 1 ||
+		!strings.Contains(verification.Issues[0], "no longer has its bound current validation") {
+		t.Fatalf("explicit review invalidation was not reported: %+v", verification)
 	}
 	if _, err := Apply(fixture.store, Request{
 		SchemaVersion: RequestSchemaVersion, Approver: humanApprover(), Action: ActionRevoke,

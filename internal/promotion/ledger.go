@@ -61,11 +61,6 @@ func Verify(store *ledger.Store) VerificationReport {
 		if revision.Status != StatusActive || revision.Source == nil {
 			continue
 		}
-		if err := requireCurrentSource(store, revision); err != nil {
-			report.Issues = append(report.Issues,
-				fmt.Sprintf("active memory %s is not based on current evidence: %v", memoryID, err))
-			continue
-		}
 		if _, err := review.ResolveCurrentValidation(
 			store, revision.Source.CandidateGeneration, revision.Source.CandidateID,
 			revision.Source.CandidateContentSHA256, revision.Source.ReviewRecordSHA256,
@@ -76,17 +71,6 @@ func Verify(store *ledger.Store) VerificationReport {
 	}
 	sort.Strings(report.Issues)
 	return report
-}
-
-func requireCurrentSource(store *ledger.Store, revision Revision) error {
-	if revision.Source == nil {
-		return errors.New("active memory source is missing")
-	}
-	generation, err := candidates.OpenGeneration(store, revision.Source.CandidateGeneration)
-	if err != nil {
-		return err
-	}
-	return generation.RequireCurrentEvidence(store)
 }
 
 func replayVerified(store *ledger.Store) (*replayState, error) {
