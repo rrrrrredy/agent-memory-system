@@ -303,7 +303,15 @@ func rejectGitPath(path, label string) error {
 	if err != nil {
 		return fmt.Errorf("resolve %s: %w", label, err)
 	}
-	for current := filepath.Clean(projected); ; current = filepath.Dir(current) {
+	start := filepath.Clean(projected)
+	if info, statErr := os.Lstat(start); statErr == nil {
+		if !info.IsDir() {
+			start = filepath.Dir(start)
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect %s: %w", label, statErr)
+	}
+	for current := start; ; current = filepath.Dir(current) {
 		if _, err := os.Lstat(filepath.Join(current, ".git")); err == nil {
 			return fmt.Errorf("%s must be outside every Git worktree", label)
 		} else if !errors.Is(err, os.ErrNotExist) {

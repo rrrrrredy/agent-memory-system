@@ -516,6 +516,29 @@ func TestConfigInputInsideGitIsRejected(t *testing.T) {
 	}
 }
 
+func TestGitBoundaryInspectionHandlesRegularFiles(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "capture-config.json")
+	if err := os.WriteFile(outside, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectGitPath(outside, "capture config"); err != nil {
+		t.Fatalf("regular file outside Git was rejected: %v", err)
+	}
+
+	gitRoot := t.TempDir()
+	if err := os.Mkdir(filepath.Join(gitRoot, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	inside := filepath.Join(gitRoot, "capture-config.json")
+	if err := os.WriteFile(inside, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectGitPath(inside, "capture config"); err == nil ||
+		!strings.Contains(err.Error(), "outside every Git worktree") {
+		t.Fatalf("regular file inside Git was accepted: %v", err)
+	}
+}
+
 type testFixture struct {
 	base  string
 	store *ledger.Store
