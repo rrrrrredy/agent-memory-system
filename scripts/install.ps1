@@ -7,6 +7,41 @@ param(
 $ErrorActionPreference = "Stop"
 $repository = "rrrrrredy/agent-memory-system"
 
+function Move-AgentmemFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        try {
+            Move-Item -Force -LiteralPath $Source -Destination $Destination
+            return
+        }
+        catch {
+            if ($attempt -eq 30) {
+                throw
+            }
+            Start-Sleep -Milliseconds 100
+        }
+    }
+}
+
+function Remove-AgentmemFile {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        try {
+            Remove-Item -Force -LiteralPath $Path
+            return
+        }
+        catch {
+            if ($attempt -eq 30) {
+                throw
+            }
+            Start-Sleep -Milliseconds 100
+        }
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($InstallDir)) {
     if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
         $InstallDir = Join-Path $env:USERPROFILE ".local\bin"
@@ -65,15 +100,15 @@ try {
 
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     $target = Join-Path $InstallDir "agentmem.exe"
-    $staged = Join-Path $InstallDir (".agentmem-" + [guid]::NewGuid().ToString("N") + ".tmp")
+    $staged = Join-Path $InstallDir (".agentmem-" + [guid]::NewGuid().ToString("N") + ".tmp.exe")
     Copy-Item -LiteralPath $binaries[0].FullName -Destination $staged
     try {
         & $staged version | Out-Null
-        Move-Item -Force -LiteralPath $staged -Destination $target
+        Move-AgentmemFile -Source $staged -Destination $target
     }
     finally {
         if (Test-Path -LiteralPath $staged) {
-            Remove-Item -Force -LiteralPath $staged
+            Remove-AgentmemFile -Path $staged
         }
     }
     Write-Output "Installed $Version to $target"

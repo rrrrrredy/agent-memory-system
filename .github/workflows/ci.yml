@@ -36,6 +36,14 @@ jobs:
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./cmd/agentmem
+      - name: Test Windows install and upgrade
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-install.ps1
+      - name: Test macOS install and upgrade
+        if: runner.os == 'macOS'
+        shell: bash
+        run: sh ./scripts/test-install.sh
       - run: pnpm test
         working-directory: integrations/opencode
       - run: pnpm typecheck
