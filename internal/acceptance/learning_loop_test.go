@@ -21,6 +21,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/diagnostics"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
+	"github.com/rrrrrredy/agent-memory-system/internal/evaluation"
 	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 	"github.com/rrrrrredy/agent-memory-system/internal/portable"
@@ -194,6 +195,9 @@ func TestPromotedMemorySurvivesEncryptedRecoveryAndTravelsToThreeAgents(t *testi
 		ledger.AgentClaudeCode: retrieval.ChannelClaudeHook,
 		ledger.AgentOpenCode:   retrieval.ChannelOpenCodePlugin,
 	}
+	var measuredDelivery retrieval.ContextResult
+	var measuredAdoption retrieval.AdoptionReceipt
+	var measuredOutcomeEventID string
 	for _, agent := range []ledger.Agent{ledger.AgentCodex, ledger.AgentClaudeCode, ledger.AgentOpenCode} {
 		contextValue := retrieval.Context{
 			Agent: agent, ThreadID: "acceptance-" + string(agent), Channel: channels[agent],
@@ -224,7 +228,7 @@ func TestPromotedMemorySurvivesEncryptedRecoveryAndTravelsToThreeAgents(t *testi
 		}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := retrieval.RecordAdoption(deviceBStore, contextValue, retrieval.AdoptionRequest{
+		adoption, err := retrieval.RecordAdoption(deviceBStore, contextValue, retrieval.AdoptionRequest{
 			SchemaVersion:      retrieval.AdoptionRequestSchemaVersion,
 			Reporter:           retrieval.Reporter{Kind: "harness", ID: "cross-agent-acceptance"},
 			RetrievalReceiptID: delivered.Retrieval.ReceiptID,
@@ -234,8 +238,14 @@ func TestPromotedMemorySurvivesEncryptedRecoveryAndTravelsToThreeAgents(t *testi
 				Outcome: retrieval.OutcomeHelpful, Reason: "The delivered constraint was followed.",
 			}},
 			OutcomeEvidenceEventIDs: []string{outcomeEventID},
-		}); err != nil {
+		})
+		if err != nil {
 			t.Fatal(err)
+		}
+		if agent == ledger.AgentCodex {
+			measuredDelivery = delivered
+			measuredAdoption = adoption
+			measuredOutcomeEventID = outcomeEventID
 		}
 	}
 
@@ -262,6 +272,223 @@ func TestPromotedMemorySurvivesEncryptedRecoveryAndTravelsToThreeAgents(t *testi
 	}
 	if reexported.RevisionsUnchanged != 1 || reexported.RevisionsWritten != 0 {
 		t.Fatalf("later recovery and retrieval receipts broke idempotent export: %+v", reexported)
+	}
+	assertSixCategoryQualityGate(t, deviceBStore, deviceBRepository, candidate,
+		promoted.Revision.MemoryID, measuredDelivery.Memories[0].RevisionID, promoted.Revision.TextSHA256,
+		measuredDelivery, measuredAdoption, measuredOutcomeEventID)
+}
+
+func assertSixCategoryQualityGate(
+	t *testing.T, store *ledger.Store, repository string, candidate candidates.Candidate,
+	memoryID, revisionID, textSHA256 string, delivered retrieval.ContextResult,
+	adoption retrieval.AdoptionReceipt, outcomeEventID string,
+) {
+	t.Helper()
+	now := time.Date(2026, 8, 5, 4, 0, 0, 0, time.UTC)
+	events := []ledger.Event{
+		qualityEvidenceEvent(store, "quality-source-snapshot", ledger.KindSourceSnapshot,
+			"complete source capture", now),
+		qualityEvidenceEvent(store, "quality-user-followup", ledger.KindUserMessage,
+			"The remembered constraint remained satisfied without another correction.", now.Add(time.Second)),
+		qualityEvidenceEvent(store, "quality-compaction", ledger.KindCompaction,
+			`{"summary":"The expected constraint was omitted and independently corrected."}`, now.Add(2*time.Second)),
+		qualityEvidenceEvent(store, "quality-paired-outcome", ledger.KindToolResult,
+			"The treatment completed with fewer errors and corrections.", now.Add(3*time.Second)),
+	}
+	records, err := store.AppendBatch(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]ledger.Record{}
+	for _, record := range records {
+		byID[record.Event.EventID] = record
+	}
+	if err := store.VisitRecords(func(record ledger.Record) error {
+		if record.Event.EventID == delivered.Retrieval.ReceiptID ||
+			record.Event.EventID == adoption.AdoptionID || record.Event.EventID == outcomeEventID {
+			byID[record.Event.EventID] = record
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, eventID := range []string{delivered.Retrieval.ReceiptID, adoption.AdoptionID, outcomeEventID} {
+		if _, exists := byID[eventID]; !exists {
+			t.Fatalf("quality evidence %q is unavailable", eventID)
+		}
+	}
+
+	memoryMeasurement := evaluation.MemoryMeasurement{
+		MemoryID: memoryID, Label: evaluation.MemorySupported, Active: true, Retrieved: true,
+	}
+	correctionMeasurement := evaluation.CorrectionMeasurement{
+		SemanticKeySHA256:             candidate.SemanticKeySHA256,
+		EligibleFollowupOpportunities: 2, RepeatedCorrections: 0, RepeatedCorrectionsAfterMemory: 0,
+	}
+	driftMeasurement := evaluation.CompactionMeasurement{
+		CheckpointID: "quality-checkpoint-1", Expected: evaluation.DriftDetected,
+		Observed: evaluation.DriftDetected,
+	}
+	pairedMeasurement := evaluation.PairedOutcomeMeasurement{
+		PairID: "quality-pair-1",
+		Baseline: evaluation.TrialMeasurement{
+			Success: false, Score: 0.4, Errors: 2, UserCorrections: 1, TotalTokens: 500,
+		},
+		Treatment: evaluation.TrialMeasurement{
+			Success: true, Score: 0.9, Errors: 0, UserCorrections: 0, TotalTokens: 400,
+		},
+	}
+	attestationRecords := map[string]evaluation.AttestationResult{}
+	for _, attestation := range []evaluation.EvaluationAttestation{
+		{
+			SchemaVersion: evaluation.EvaluationAttestationSchema, AttestationID: "quality-memory-label",
+			CaseID: "false-memory", Category: evaluation.CategoryFalseMemory, Agent: ledger.AgentCodex,
+			Attestor: evaluation.Attestor{Kind: "human", ID: "owner"}, AttestedAt: now.Add(4 * time.Second),
+			Reason: "The promoted memory was checked against its supporting evidence.", Memory: &memoryMeasurement,
+		},
+		{
+			SchemaVersion: evaluation.EvaluationAttestationSchema, AttestationID: "quality-correction-label",
+			CaseID: "repeated-correction", Category: evaluation.CategoryRepeatedCorrection, Agent: ledger.AgentCodex,
+			Attestor: evaluation.Attestor{Kind: "human", ID: "owner"}, AttestedAt: now.Add(5 * time.Second),
+			Reason:     "The follow-up opportunities were reviewed for repeated user correction.",
+			Correction: &correctionMeasurement,
+		},
+		{
+			SchemaVersion: evaluation.EvaluationAttestationSchema, AttestationID: "quality-drift-label",
+			CaseID: "compaction-drift", Category: evaluation.CategoryCompactionDrift, Agent: ledger.AgentCodex,
+			Attestor: evaluation.Attestor{Kind: "human", ID: "owner"}, AttestedAt: now.Add(6 * time.Second),
+			Reason:     "The expected and observed continuity labels were independently reviewed.",
+			Compaction: &driftMeasurement,
+		},
+		{
+			SchemaVersion: evaluation.EvaluationAttestationSchema, AttestationID: "quality-paired-label",
+			CaseID: "paired-outcome", Category: evaluation.CategoryPairedOutcome, Agent: ledger.AgentCodex,
+			Attestor: evaluation.Attestor{Kind: "harness", ID: "paired-runner"}, AttestedAt: now.Add(7 * time.Second),
+			Reason:        "The deterministic baseline and treatment outcomes were recorded by the harness.",
+			PairedOutcome: &pairedMeasurement,
+		},
+	} {
+		attested, err := evaluation.RecordAttestation(store, attestation,
+			func() time.Time { return now.Add(8 * time.Second) })
+		if err != nil {
+			t.Fatal(err)
+		}
+		attestationRecords[attestation.CaseID] = attested
+	}
+	ledgerReference := func(id string) evaluation.EvidenceReference {
+		if record, exists := byID[id]; exists {
+			return evaluation.EvidenceReference{Kind: "ledger_event", ID: id, SHA256: record.RecordHash}
+		}
+		attested, exists := attestationRecords[id]
+		if !exists {
+			t.Fatalf("quality evidence reference %q is unavailable", id)
+		}
+		return evaluation.EvidenceReference{
+			Kind: "ledger_event", ID: attested.EventID, SHA256: attested.RecordHash,
+		}
+	}
+	one, zero, maximumTokens, minimumDelta := 1.0, 0.0, 4096.0, 0.1
+	input := evaluation.EvaluationInput{
+		SchemaVersion: evaluation.EvaluationInputSchemaVersion,
+		SuiteID:       "six-category-quality", RunID: "quality-run-1", CreatedAt: now.Add(9 * time.Second),
+		SystemVersion: "acceptance-v1", Privacy: "local_only",
+		Thresholds: evaluation.EvaluationThresholds{
+			MinimumCaptureCoverage: &one, MaximumFalseMemoryRate: &zero,
+			MaximumUnknownMemoryRate: &zero, MaximumRepeatedCorrectionRate: &zero,
+			MinimumDriftPrecision: &one, MinimumDriftRecall: &one,
+			MaximumMeanRetrievalTokens: &maximumTokens, MinimumMeanOutcomeScoreDelta: &minimumDelta,
+			MaximumHarmfulOutcomes: &zero,
+		},
+		Cases: []evaluation.EvaluationCase{
+			{
+				CaseID: "capture", Category: evaluation.CategoryCaptureCoverage, Agent: ledger.AgentCodex,
+				Evidence: []evaluation.EvidenceReference{ledgerReference("quality-source-snapshot")},
+				Capture: &evaluation.CaptureMeasurement{
+					Unit: evaluation.CaptureUnitEvidenceEvents, Expected: 1, Complete: 1,
+				},
+			},
+			{
+				CaseID: "false-memory", Category: evaluation.CategoryFalseMemory, Agent: ledger.AgentCodex,
+				Evidence: []evaluation.EvidenceReference{
+					{Kind: "portable_revision", ID: revisionID, SHA256: textSHA256},
+					ledgerReference("false-memory"),
+				},
+				Memory: &memoryMeasurement,
+			},
+			{
+				CaseID: "repeated-correction", Category: evaluation.CategoryRepeatedCorrection,
+				Agent: ledger.AgentCodex,
+				Evidence: []evaluation.EvidenceReference{
+					ledgerReference("quality-user-followup"), ledgerReference("repeated-correction"),
+				},
+				Correction: &correctionMeasurement,
+			},
+			{
+				CaseID: "compaction-drift", Category: evaluation.CategoryCompactionDrift,
+				Agent: ledger.AgentCodex,
+				Evidence: []evaluation.EvidenceReference{
+					ledgerReference("quality-compaction"), ledgerReference("compaction-drift"),
+				},
+				Compaction: &driftMeasurement,
+			},
+			{
+				CaseID: "retrieval-cost", Category: evaluation.CategoryRetrievalCost,
+				Agent: ledger.AgentCodex,
+				Evidence: []evaluation.EvidenceReference{
+					ledgerReference(delivered.Retrieval.ReceiptID), ledgerReference(adoption.AdoptionID),
+					ledgerReference(outcomeEventID),
+				},
+				Retrieval: &evaluation.RetrievalMeasurement{
+					RetrievalID:     delivered.Retrieval.ReceiptID,
+					EstimatedTokens: delivered.Retrieval.SelectedEstimatedTokens,
+					UTF8Bytes:       delivered.Retrieval.SelectedBytes,
+					SelectedItems:   len(delivered.Retrieval.Selected), Adopted: true,
+					Outcome: evaluation.OutcomeHelpful,
+				},
+			},
+			{
+				CaseID: "paired-outcome", Category: evaluation.CategoryPairedOutcome, Agent: ledger.AgentCodex,
+				Evidence: []evaluation.EvidenceReference{
+					ledgerReference("quality-paired-outcome"), ledgerReference("paired-outcome"),
+				},
+				PairedOutcome: &pairedMeasurement,
+			},
+		},
+	}
+	result, err := evaluation.Run(store, input, evaluation.RunOptions{
+		PortableRoot: repository, Now: func() time.Time { return now.Add(10 * time.Second) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Report.ReleaseReady || len(result.Report.Issues) != 0 ||
+		result.Report.CasesChecked != 6 || result.Report.AttestedReferences != 4 ||
+		len(result.Report.Gates) != 9 {
+		t.Fatalf("six-category evidence gate did not pass: %+v", result.Report)
+	}
+	for _, gate := range result.Report.Gates {
+		if gate.Status != "pass" {
+			t.Fatalf("quality gate %q did not pass: %+v", gate.Name, gate)
+		}
+	}
+	if verification := evaluation.VerifyRun(store, input.SuiteID, input.RunID); len(verification.Issues) != 0 {
+		t.Fatalf("quality evaluation did not verify: %+v", verification)
+	}
+}
+
+func qualityEvidenceEvent(
+	store *ledger.Store, id string, kind ledger.EventKind, content string, observed time.Time,
+) ledger.Event {
+	payload := ledger.InlinePayload("utf-8", "text/plain", content)
+	return ledger.Event{
+		SchemaVersion: ledger.SchemaVersion, EventID: id, Kind: kind,
+		ObservedAt: observed, RecordedAt: observed,
+		Source: ledger.Source{
+			Agent: ledger.AgentCodex, Adapter: "quality-acceptance", AdapterVersion: "quality-acceptance/v1",
+			DeviceID: store.DeviceID(), ThreadID: "quality-acceptance",
+		},
+		Payload: &payload, Completeness: ledger.Completeness{Status: ledger.CompletenessComplete},
+		Privacy: ledger.Privacy{Classification: "local_only"},
 	}
 }
 
