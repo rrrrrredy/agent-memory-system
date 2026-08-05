@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-regression-review-queue-result.schema.json",
+  "title": "Local legacy regression review queue result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "queue_id", "queue_path", "markdown_path",
+    "candidate_items", "compaction_items", "reused", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-regression-review-queue-result/v1alpha1"},
+    "queue_id": {"type": "string", "pattern": "^review-queue-[a-f0-9]{64}$"},
+    "queue_path": {"type": "string", "minLength": 1},
+    "markdown_path": {"type": "string", "minLength": 1},
+    "candidate_items": {"type": "integer", "minimum": 0},
+    "compaction_items": {"type": "integer", "minimum": 0},
+    "reused": {"type": "boolean"},
+    "privacy": {"const": "local_only"}
+  }
+}

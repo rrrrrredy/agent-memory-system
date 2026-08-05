@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-regression-review-pack-result.schema.json",
+  "title": "Local legacy regression review pack result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "pack_id", "pack_path", "pack_sha256", "candidate_samples",
+    "unique_candidates", "compaction_samples", "candidate_population",
+    "compaction_population", "reused", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-regression-review-pack-result/v1alpha2"},
+    "pack_id": {"type": "string", "pattern": "^review-pack-[a-f0-9]{64}$"},
+    "pack_path": {"type": "string", "minLength": 1},
+    "pack_sha256": {"$ref": "legacy-regression-review-pack.schema.json#/$defs/sha256"},
+    "candidate_samples": {"type": "integer", "minimum": 0},
+    "unique_candidates": {"type": "integer", "minimum": 0},
+    "compaction_samples": {"type": "integer", "minimum": 0},
+    "candidate_population": {"$ref": "legacy-regression-review-pack.schema.json#/$defs/candidate_population"},
+    "compaction_population": {"$ref": "legacy-regression-review-pack.schema.json#/$defs/compaction_population"},
+    "reused": {"type": "boolean"},
+    "privacy": {"const": "local_only"}
+  }
+}

@@ -168,6 +168,7 @@ go run ./cmd/agentmem eval corpus freeze --root <local-data-directory> --legacy-
 go run ./cmd/agentmem eval corpus verify --root <local-data-directory> --corpus <corpus-id>
 go run ./cmd/agentmem eval corpus baseline --root <local-data-directory> --corpus <corpus-id> --run <run-id> --system-version <version>
 go run ./cmd/agentmem eval corpus review-pack --root <local-data-directory> --corpus <corpus-id> --candidates <candidate-generation>
+go run ./cmd/agentmem eval corpus review-queue --root <local-data-directory> --pack <review-pack-id> --candidate-limit 20 --compaction-limit 20
 go run ./cmd/agentmem eval attest --root <local-data-directory> --file <evaluation-attestation.json>
 go run ./cmd/agentmem eval run --root <local-data-directory> --file <evaluation-input.json> --repo <private-memory-directory> --enforce
 go run ./cmd/agentmem eval verify --root <local-data-directory> --suite <suite-id> --run <run-id>
@@ -300,6 +301,12 @@ on empty samples or unresolved evidence. See
 candidates and compaction checkpoints for human review. The pack stays under
 the local evidence root, binds the exact corpus and current derivation hashes,
 and never labels or promotes a candidate.
+
+`eval corpus review-queue` verifies a review pack and creates a deterministic,
+balanced, immutable local audit queue. Evidence text is rendered as untrusted
+material; no judgment is inferred or applied. A future isolated Agent-review
+harness must emit a separate provisional assessment and cannot create human
+truth or promotion authority.
 
 `backup create` produces one authenticated age archive outside every Git
 worktree. It verifies the ledger before capture, rejects active writers and

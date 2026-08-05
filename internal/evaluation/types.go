@@ -9,16 +9,18 @@ import (
 )
 
 const (
-	CorpusManifestSchemaVersion  = "legacy-corpus-manifest/v1alpha1"
-	CorpusFreezeResultSchema     = "legacy-corpus-freeze-result/v1alpha1"
-	CorpusVerifySchemaVersion    = "legacy-corpus-verification/v1alpha1"
-	EvaluationInputSchemaVersion = "learning-evaluation-input/v1alpha1"
-	EvaluationReportSchema       = "learning-evaluation-report/v1alpha1"
-	EvaluationVersion            = "learning-evaluation/v1alpha1"
-	EvaluationAttestationSchema  = "learning-evaluation-attestation/v1alpha1"
-	AttestationResultSchema      = "learning-evaluation-attestation-result/v1alpha1"
-	LegacyReviewPackSchema       = "legacy-regression-review-pack/v1alpha2"
-	LegacyReviewPackResultSchema = "legacy-regression-review-pack-result/v1alpha2"
+	CorpusManifestSchemaVersion   = "legacy-corpus-manifest/v1alpha1"
+	CorpusFreezeResultSchema      = "legacy-corpus-freeze-result/v1alpha1"
+	CorpusVerifySchemaVersion     = "legacy-corpus-verification/v1alpha1"
+	EvaluationInputSchemaVersion  = "learning-evaluation-input/v1alpha1"
+	EvaluationReportSchema        = "learning-evaluation-report/v1alpha1"
+	EvaluationVersion             = "learning-evaluation/v1alpha1"
+	EvaluationAttestationSchema   = "learning-evaluation-attestation/v1alpha1"
+	AttestationResultSchema       = "learning-evaluation-attestation-result/v1alpha1"
+	LegacyReviewPackSchema        = "legacy-regression-review-pack/v1alpha2"
+	LegacyReviewPackResultSchema  = "legacy-regression-review-pack-result/v1alpha2"
+	LegacyReviewQueueSchema       = "legacy-regression-review-queue/v1alpha1"
+	LegacyReviewQueueResultSchema = "legacy-regression-review-queue-result/v1alpha1"
 )
 
 type ArtifactRole string
@@ -196,6 +198,49 @@ type LegacyReviewPackResult struct {
 	CompactionPopulation map[string]int `json:"compaction_population"`
 	Reused               bool           `json:"reused"`
 	Privacy              string         `json:"privacy"`
+}
+
+type LegacyReviewQueueOptions struct {
+	CandidateLimit  int
+	CompactionLimit int
+}
+
+type LegacyReviewQueue struct {
+	SchemaVersion       string                      `json:"schema_version"`
+	QueueID             string                      `json:"queue_id"`
+	PackID              string                      `json:"pack_id"`
+	PackSHA256          string                      `json:"pack_sha256"`
+	CorpusID            string                      `json:"corpus_id"`
+	CandidateGeneration string                      `json:"candidate_generation"`
+	EpisodeGeneration   string                      `json:"episode_generation"`
+	CandidateLimit      int                         `json:"candidate_limit"`
+	CompactionLimit     int                         `json:"compaction_limit"`
+	CandidateItems      []CandidateReviewQueueItem  `json:"candidate_items"`
+	CompactionItems     []CompactionReviewQueueItem `json:"compaction_items"`
+	Privacy             string                      `json:"privacy"`
+}
+
+type CandidateReviewQueueItem struct {
+	ItemID  string                `json:"item_id"`
+	Stratum string                `json:"stratum"`
+	Sample  CandidateReviewSample `json:"sample"`
+}
+
+type CompactionReviewQueueItem struct {
+	ItemID  string                 `json:"item_id"`
+	Stratum string                 `json:"stratum"`
+	Sample  CompactionReviewSample `json:"sample"`
+}
+
+type LegacyReviewQueueResult struct {
+	SchemaVersion   string `json:"schema_version"`
+	QueueID         string `json:"queue_id"`
+	QueuePath       string `json:"queue_path"`
+	MarkdownPath    string `json:"markdown_path"`
+	CandidateItems  int    `json:"candidate_items"`
+	CompactionItems int    `json:"compaction_items"`
+	Reused          bool   `json:"reused"`
+	Privacy         string `json:"privacy"`
 }
 
 type FreezeResult struct {

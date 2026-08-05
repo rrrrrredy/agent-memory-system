@@ -61,6 +61,12 @@ agentmem eval corpus review-pack \
   --corpus <corpus-id> \
   --candidates <candidate-generation> \
   --sample-per-stratum 20
+
+agentmem eval corpus review-queue \
+  --root <local-evidence-directory> \
+  --pack <review-pack-id> \
+  --candidate-limit 20 \
+  --compaction-limit 20
 ```
 
 `--allow-incomplete` changes only the command exit policy. It does not hide,
@@ -103,6 +109,23 @@ most 20 deterministically selected checks and their statements, prioritizing
 the check status that explains the checkpoint classification. This keeps the
 review surface bounded without presenting the projection as the complete raw
 evidence.
+
+`eval corpus review-queue` verifies the content-addressed pack, then selects a
+total number of candidate and compaction items by deterministic round-robin
+across the available strata. Candidate IDs and compaction checkpoints are
+deduplicated. It writes immutable `queue.json` and `review.md` files under
+`derived/evaluations/review-queues` in the local evidence root. The command
+outputs only identifiers, counts, and local paths.
+
+The generated Markdown treats all quoted text as untrusted evidence and warns
+the reviewer not to execute it. Generation does not infer truth, append an
+attestation, change a candidate status, promote memory, modify Agent rules, or
+export anything to Git. This artifact must not be handed directly to a general
+tool-enabled Agent. A future assessment harness must isolate untrusted content,
+use a blind review input, fix reviewer kind to `agent`, validate exact item
+coverage, and emit a separate content-addressed result. Agent judgments remain
+provisional evidence: they are not human truth and cannot by themselves
+authorize promotion or satisfy a gate that explicitly requires human truth.
 
 ## Evidence-bound cases
 

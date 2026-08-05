@@ -128,6 +128,86 @@ func TestPrepareLegacyReviewPackSamplesOnlyFrozenCorpusAndReusesIdentity(t *test
 			}
 		}
 	}
+	assertReviewQueueRejectsLinkedOutput(t, store, result.PackID, base)
+
+	queueResult, err := PrepareLegacyReviewQueue(store, result.PackID, LegacyReviewQueueOptions{
+		CandidateLimit: 3, CompactionLimit: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queueResult.Reused || queueResult.CandidateItems != 3 || queueResult.CompactionItems != 2 ||
+		!strings.HasPrefix(queueResult.QueueID, "review-queue-") || queueResult.Privacy != "local_only" {
+		t.Fatalf("unexpected review queue result: %+v", queueResult)
+	}
+	queueData, err := os.ReadFile(queueResult.QueuePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	markdownData, err := os.ReadFile(queueResult.MarkdownPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	combined := string(queueData) + string(markdownData)
+	if strings.Contains(combined, legacyRoot) || strings.Contains(combined, sessionsRoot) {
+		t.Fatal("review queue leaked an absolute source path")
+	}
+	if !strings.Contains(string(markdownData), "untrusted evidence") ||
+		!strings.Contains(string(markdownData), "immutable audit input") {
+		t.Fatal("review queue Markdown omitted its safety or workflow instructions")
+	}
+	for _, forbidden := range []string{`"judgment"`, `"reason"`, `"reviewer_kind"`, `"decision_template"`} {
+		if strings.Contains(string(queueData), forbidden) {
+			t.Fatalf("review queue contains decision field %s", forbidden)
+		}
+	}
+	entries, err := os.ReadDir(filepath.Dir(queueResult.QueuePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || entries[0].Name() != "queue.json" || entries[1].Name() != "review.md" {
+		t.Fatalf("review queue directory contains unexpected files: %+v", entries)
+	}
+	var queue LegacyReviewQueue
+	if err := json.Unmarshal(queueData, &queue); err != nil {
+		t.Fatal(err)
+	}
+	if queue.QueueID != queueResult.QueueID || queue.PackID != result.PackID ||
+		queue.PackSHA256 != result.PackSHA256 || len(queue.CandidateItems) != 3 ||
+		len(queue.CompactionItems) != 2 || queue.Privacy != "local_only" {
+		t.Fatalf("review queue lost its evidence binding: %+v", queue)
+	}
+	seenCandidateItems := map[string]struct{}{}
+	for _, item := range queue.CandidateItems {
+		if item.ItemID == "" {
+			t.Fatalf("candidate review item has no identity: %+v", item)
+		}
+		if _, duplicate := seenCandidateItems[item.Sample.CandidateID]; duplicate {
+			t.Fatalf("candidate review item was duplicated: %s", item.Sample.CandidateID)
+		}
+		seenCandidateItems[item.Sample.CandidateID] = struct{}{}
+	}
+	seenCompactionItems := map[string]struct{}{}
+	for _, item := range queue.CompactionItems {
+		if item.ItemID == "" {
+			t.Fatalf("compaction review item has no identity: %+v", item)
+		}
+		key := item.Sample.EpisodeID + "\x00" + item.Sample.CheckpointID
+		if _, duplicate := seenCompactionItems[key]; duplicate {
+			t.Fatalf("compaction review item was duplicated: %s", item.Sample.CheckpointID)
+		}
+		seenCompactionItems[key] = struct{}{}
+	}
+	reusedQueue, err := PrepareLegacyReviewQueue(store, result.PackID, LegacyReviewQueueOptions{
+		CandidateLimit: 3, CompactionLimit: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reusedQueue.Reused || reusedQueue.QueueID != queueResult.QueueID {
+		t.Fatalf("identical review queue was not reused: %+v", reusedQueue)
+	}
+	assertReviewQueueRejectsLinkedInput(t, store, result.PackID, result.PackPath)
 
 	reused, err := PrepareLegacyReviewPack(store, frozen.CorpusID, candidateGeneration.GenerationPath,
 		LegacyReviewPackOptions{SamplePerStratum: 10})
@@ -137,6 +217,36 @@ func TestPrepareLegacyReviewPackSamplesOnlyFrozenCorpusAndReusesIdentity(t *test
 	if !reused.Reused || reused.PackID != result.PackID || reused.PackSHA256 != result.PackSHA256 {
 		t.Fatalf("identical review material was not reused: %+v", reused)
 	}
+	invalidCandidate := cloneReviewPack(t, pack)
+	for _, stratum := range candidateReviewStrata {
+		if len(invalidCandidate.CandidateSamples[stratum]) > 0 {
+			invalidCandidate.CandidateSamples[stratum][0].CorpusSupportTypes = nil
+			break
+		}
+	}
+	writeReviewPackForRejection(t, result.PackPath, invalidCandidate)
+	if _, err := PrepareLegacyReviewQueue(store, result.PackID, LegacyReviewQueueOptions{}); err == nil ||
+		!strings.Contains(err.Error(), "candidate sample") {
+		t.Fatalf("schema-invalid candidate sample was accepted: %v", err)
+	}
+	if err := os.WriteFile(result.PackPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	invalidCompaction := cloneReviewPack(t, pack)
+	for _, stratum := range compactionReviewStrata {
+		if len(invalidCompaction.CompactionSamples[stratum]) > 0 {
+			invalidCompaction.CompactionSamples[stratum][0].CheckPopulation = nil
+			break
+		}
+	}
+	writeReviewPackForRejection(t, result.PackPath, invalidCompaction)
+	if _, err := PrepareLegacyReviewQueue(store, result.PackID, LegacyReviewQueueOptions{}); err == nil ||
+		!strings.Contains(err.Error(), "check population") {
+		t.Fatalf("schema-invalid compaction sample was accepted: %v", err)
+	}
+	if err := os.WriteFile(result.PackPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(result.PackPath, []byte("tampered"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +254,101 @@ func TestPrepareLegacyReviewPackSamplesOnlyFrozenCorpusAndReusesIdentity(t *test
 		LegacyReviewPackOptions{SamplePerStratum: 10}); err == nil ||
 		!strings.Contains(err.Error(), "does not match its deterministic identity") {
 		t.Fatalf("tampered review pack was accepted: %v", err)
+	}
+	if _, err := PrepareLegacyReviewQueue(store, result.PackID, LegacyReviewQueueOptions{}); err == nil {
+		t.Fatal("tampered review pack was accepted by review queue generation")
+	}
+}
+
+func assertReviewQueueRejectsLinkedOutput(t *testing.T, store *ledger.Store, packID, base string) {
+	t.Helper()
+	queueRoot := filepath.Join(store.Root(), "derived", "evaluations", "review-queues")
+	outside := filepath.Join(base, "outside-review-queues")
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, queueRoot); err != nil {
+		t.Logf("symbolic links are unavailable for review queue output boundary test: %v", err)
+		return
+	}
+	_, queueErr := PrepareLegacyReviewQueue(store, packID, LegacyReviewQueueOptions{
+		CandidateLimit: 1, CompactionLimit: 1,
+	})
+	if err := os.Remove(queueRoot); err != nil {
+		t.Fatal(err)
+	}
+	if queueErr == nil || (!strings.Contains(queueErr.Error(), "links") &&
+		!strings.Contains(queueErr.Error(), "reparse")) {
+		t.Fatalf("linked review queue output was accepted: %v", queueErr)
+	}
+}
+
+func assertReviewQueueRejectsLinkedInput(t *testing.T, store *ledger.Store, packID, packPath string) {
+	t.Helper()
+	realPath := packPath + ".real"
+	if err := os.Rename(packPath, realPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realPath, packPath); err != nil {
+		if restoreErr := os.Rename(realPath, packPath); restoreErr != nil {
+			t.Fatal(restoreErr)
+		}
+		t.Logf("symbolic links are unavailable for review queue input boundary test: %v", err)
+		return
+	}
+	_, queueErr := PrepareLegacyReviewQueue(store, packID, LegacyReviewQueueOptions{
+		CandidateLimit: 1, CompactionLimit: 1,
+	})
+	if err := os.Remove(packPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(realPath, packPath); err != nil {
+		t.Fatal(err)
+	}
+	if queueErr == nil || (!strings.Contains(queueErr.Error(), "links") &&
+		!strings.Contains(queueErr.Error(), "reparse")) {
+		t.Fatalf("linked review pack input was accepted: %v", queueErr)
+	}
+}
+
+func cloneReviewPack(t *testing.T, source LegacyReviewPack) LegacyReviewPack {
+	t.Helper()
+	data, err := json.Marshal(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result LegacyReviewPack
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func writeReviewPackForRejection(t *testing.T, path string, pack LegacyReviewPack) {
+	t.Helper()
+	data, err := marshalIndented(pack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPrepareLegacyReviewQueueRejectsUnsafeInputsBeforeReading(t *testing.T) {
+	store, err := ledger.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PrepareLegacyReviewQueue(store, "../review-pack-bad", LegacyReviewQueueOptions{}); err == nil ||
+		!strings.Contains(err.Error(), "invalid review pack id") {
+		t.Fatalf("unsafe review pack id was accepted: %v", err)
+	}
+	validPackID := "review-pack-" + strings.Repeat("a", 64)
+	if _, err := PrepareLegacyReviewQueue(store, validPackID,
+		LegacyReviewQueueOptions{CandidateLimit: maximumLegacyReviewQueueLimit + 1}); err == nil ||
+		!strings.Contains(err.Error(), "candidate_limit") {
+		t.Fatalf("invalid candidate limit was accepted: %v", err)
 	}
 }
 

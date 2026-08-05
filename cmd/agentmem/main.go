@@ -754,6 +754,30 @@ func runEvaluationCorpus(args []string) error {
 			return err
 		}
 		return encodeIndented(result)
+	case "review-queue":
+		flags := flag.NewFlagSet("eval corpus review-queue", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		packID := flags.String("pack", "", "verified local review pack id (required)")
+		candidateLimit := flags.Int("candidate-limit", 20, "total candidate items in the local audit queue")
+		compactionLimit := flags.Int("compaction-limit", 20, "total compaction items in the local audit queue")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *packID == "" {
+			return errors.New("eval corpus review-queue requires --root and --pack")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, err := evaluation.PrepareLegacyReviewQueue(store, *packID,
+			evaluation.LegacyReviewQueueOptions{
+				CandidateLimit: *candidateLimit, CompactionLimit: *compactionLimit,
+			})
+		if err != nil {
+			return err
+		}
+		return encodeIndented(result)
 	default:
 		return evalUsageError()
 	}
@@ -1986,7 +2010,7 @@ func deriveUsageError() error {
 }
 
 func evalUsageError() error {
-	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|attest|run|verify> [options]")
+	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|attest|run|verify> [options]")
 }
 
 func captureUsageError() error {
