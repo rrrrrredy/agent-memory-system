@@ -71,6 +71,12 @@ agentmem eval corpus review-queue \
 agentmem eval corpus agent-assessment prepare \
   --root <local-evidence-directory> \
   --queue <review-queue-id>
+
+agentmem eval corpus agent-assessment run-openai \
+  --root <local-evidence-directory> \
+  --projection <agent-projection-id> \
+  --model <openai-responses-model> \
+  --confirm-remote-disclosure <exact-agent-payload-id>
 ```
 
 `--allow-incomplete` changes only the command exit policy. It does not hide,
@@ -147,9 +153,9 @@ checkpoint, and unit ordering is deterministically permuted using local binding
 material that is absent from the payload, so queue strata cannot be recovered
 from array position.
 
-The CLI deliberately does not run a general Agent, arbitrary subprocess, or
-model API. If the blind payload is assessed elsewhere, that disclosure is a
-separate explicit action. The canonical rubric is
+The prepare and external-import commands deliberately do not run a general
+Agent, arbitrary subprocess, or model API. The controlled `run-openai` command
+is the separate disclosure action described below. The canonical rubric is
 `evals/prompts/agent-assessment-v1.md`; the response must follow
 `legacy-agent-assessment-submission/v1alpha1`. An imported file cannot prove
 which provider or model produced it, whether tools were registered, or where
@@ -183,6 +189,51 @@ marks isolation `unverified_external`, leaves tools registered unknown, records
 provider, model, and disclosure values only as claims, and fixes authority to
 `provisional_only`. It does not append to the evidence ledger, create a human
 review, attest an evaluation, promote memory, or authorize a rule change.
+
+Run the controlled OpenAI Responses path with `OPENAI_API_KEY` in the process
+environment and an exact payload-ID confirmation:
+
+```text
+agentmem eval corpus agent-assessment run-openai \
+  --root <local-evidence-directory> \
+  --projection <agent-projection-id> \
+  --model <openai-responses-model> \
+  --confirm-remote-disclosure <exact-agent-payload-id>
+```
+
+This command sends the complete canonical blind payload, classified as
+`selected_unredacted_evidence`, to `https://api.openai.com/v1/responses`. The
+payload may still contain names, paths, secrets, or other sensitive text. A
+local sensitive-content scan checks every text-bearing field and blocks the
+request if a recognized pattern is found, but a clean scan is not proof that
+the text is nonsensitive. The confirmation must equal the payload ID; a yes/no
+flag is not accepted. A conservative feasibility check also blocks a queue when
+its smallest exact-coverage result cannot fit the fixed output budget.
+
+The request fixes `store:false`, `tools:[]`, `tool_choice:none`,
+`reasoning.effort:none`, strict JSON schema output, disabled truncation, no background mode, no conversation state,
+no streaming, no environment proxy, no redirects, and no automatic retry.
+`store:false` is not Zero Data Retention and does not prove that OpenAI retains
+no abuse-monitoring or application state. The API key is never included in an
+artifact. Before network access, the command stores `attempt.json` and the exact
+`request.json` under `derived/evaluations/agent-openai-attempts`. It then stores
+`observation.json` and either the exact `response.json` or an explicitly marked
+`response-prefix.bin` under `derived/evaluations/agent-openai-observations`.
+
+Only one completed assistant message containing one structured output can
+produce an assessment. Provider errors, transport failures, refusals,
+incomplete output, tool-call output, malformed JSON, or incomplete item
+coverage remain immutable observations and produce no assessment. A successful
+assessment is still `provisional_only`, stays local, does not append to the
+evidence ledger, and cannot create review, attestation, promotion, or rule-change
+authority. Controlled attempt, observation, and assessment bindings can be
+replayed locally without another provider request.
+
+The selected model must belong to a locally allowlisted model family that
+supports `reasoning.effort:none` (`gpt-5.1` through `gpt-5.6`, excluding Pro
+variants). Unknown and Pro model identifiers are blocked before an attempt or
+network request. The harness does not silently fall back to a reasoning budget
+that competes with the exact-coverage output.
 
 ## Evidence-bound cases
 

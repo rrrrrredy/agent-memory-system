@@ -62,6 +62,18 @@ func ImportExternalAssessment(
 	if err != nil {
 		return result, err
 	}
+	return storeAssessment(store, projection, projectionBytes, payload, payloadBytes,
+		submission, assessor, harness, assessedAt)
+}
+
+func storeAssessment(
+	store *ledger.Store, projection Projection, projectionBytes []byte,
+	payload BlindPayload, payloadBytes []byte, submission Submission,
+	assessor Assessor, harness HarnessProvenance, assessedAt string,
+) (AssessmentResult, error) {
+	result := AssessmentResult{
+		SchemaVersion: AssessmentResultSchema, Authority: "provisional_only", ArtifactStorage: "local_only",
+	}
 	assessment := Assessment{
 		SchemaVersion: AssessmentSchema,
 		ProjectionID:  projection.ProjectionID, ProjectionContentSHA256: projection.ProjectionContentSHA256,
@@ -170,6 +182,9 @@ func decodeSubmission(reader io.Reader) (Submission, []byte, error) {
 	}
 	if len(data) == 0 || len(data) > maximumSubmissionBytes {
 		return Submission{}, nil, errors.New("Agent assessment submission size is invalid")
+	}
+	if err := validateJSONLexicalForm(data); err != nil {
+		return Submission{}, nil, fmt.Errorf("decode Agent assessment submission: %w", err)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -301,8 +316,9 @@ func validateAssessmentOptions(
 		return assessor, harness, "", errors.New("assessed_at must be RFC3339")
 	}
 	assessor = Assessor{
-		Kind: "agent", ID: options.AssessorID, ClaimedProvider: options.ClaimedProvider,
-		ClaimedModel: options.ClaimedModel,
+		Kind: "agent", ID: options.AssessorID, Provenance: "external_claim",
+		ClaimedProvider: options.ClaimedProvider,
+		ClaimedModel:    options.ClaimedModel,
 	}
 	harness = HarnessProvenance{
 		Version: options.HarnessVersion, PromptSHA256: options.PromptSHA256,

@@ -18,7 +18,7 @@ func TestAssessmentCannotDecodeAsAuthorityBearingRequest(t *testing.T) {
 		AssessmentContentSHA256: hash, ProjectionID: "agent-projection-" + hash,
 		ProjectionContentSHA256: hash, ProjectionFileSHA256: hash,
 		PayloadID: "agent-payload-" + hash, PayloadContentSHA256: hash, PayloadFileSHA256: hash,
-		Assessor: Assessor{Kind: "agent", ID: "ranker", ClaimedProvider: "provider",
+		Assessor: Assessor{Kind: "agent", ID: "ranker", Provenance: "external_claim", ClaimedProvider: "provider",
 			ClaimedModel: "model"},
 		Harness: HarnessProvenance{Version: "v1", PromptSHA256: hash,
 			Source: "external_submission", IsolationStatus: "unverified_external",

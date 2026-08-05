@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-agent-assessment-openai-attempt.schema.json",
+  "title": "Controlled OpenAI assessment request attempt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "attempt_id", "attempt_content_sha256", "projection_id",
+    "payload_id", "payload_content_sha256", "payload_file_sha256", "requested_model",
+    "endpoint_origin", "endpoint_path", "prompt_sha256", "output_schema_sha256",
+    "request_sha256", "request_bytes", "disclosure", "secret_scan", "request_policy",
+    "started_at", "authority", "artifact_storage"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-agent-assessment-openai-attempt/v1alpha1"},
+    "attempt_id": {"type": "string", "pattern": "^agent-openai-attempt-[a-f0-9]{64}$"},
+    "attempt_content_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "projection_id": {"type": "string", "pattern": "^agent-projection-[a-f0-9]{64}$"},
+    "payload_id": {"type": "string", "pattern": "^agent-payload-[a-f0-9]{64}$"},
+    "payload_content_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "payload_file_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "requested_model": {"$ref": "#/$defs/metadata"},
+    "endpoint_origin": {"const": "https://api.openai.com"},
+    "endpoint_path": {"const": "/v1/responses"},
+    "prompt_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "output_schema_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "request_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "request_bytes": {"type": "integer", "minimum": 1, "maximum": 4194304},
+    "disclosure": {"$ref": "#/$defs/disclosure"},
+    "secret_scan": {"$ref": "#/$defs/secret_scan"},
+    "request_policy": {"$ref": "#/$defs/request_policy"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "authority": {"const": "provisional_only"},
+    "artifact_storage": {"const": "local_only"}
+  },
+  "$defs": {
+    "metadata": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\r\\n]+$"},
+    "disclosure": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "confirmed", "confirmation_payload_id", "data_classification", "destination", "confirmed_at"
+      ],
+      "properties": {
+        "confirmed": {"const": true},
+        "confirmation_payload_id": {"type": "string", "pattern": "^agent-payload-[a-f0-9]{64}$"},
+        "data_classification": {"const": "selected_unredacted_evidence"},
+        "destination": {"const": "https://api.openai.com"},
+        "confirmed_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "secret_scan": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "scanner_version", "fields_scanned", "unique_texts", "bytes_scanned",
+        "content_set_sha256", "findings", "categories"
+      ],
+      "properties": {
+        "scanner_version": {"$ref": "#/$defs/metadata"},
+        "fields_scanned": {"type": "integer", "minimum": 1},
+        "unique_texts": {"type": "integer", "minimum": 1},
+        "bytes_scanned": {"type": "integer", "minimum": 1},
+        "content_set_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+        "findings": {"const": 0},
+        "categories": {"type": "array", "maxItems": 0}
+      }
+    },
+    "request_policy": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "store", "tools_registered", "tool_choice", "reasoning_effort", "response_format", "strict_output",
+        "background", "conversation_state", "streaming", "truncation", "automatic_retries",
+        "environment_proxy", "redirects"
+      ],
+      "properties": {
+        "store": {"const": false},
+        "tools_registered": {"const": false},
+        "tool_choice": {"const": "none"},
+        "reasoning_effort": {"const": "none"},
+        "response_format": {"const": "json_schema"},
+        "strict_output": {"const": true},
+        "background": {"const": false},
+        "conversation_state": {"const": false},
+        "streaming": {"const": false},
+        "truncation": {"const": "disabled"},
+        "automatic_retries": {"const": 0},
+        "environment_proxy": {"const": false},
+        "redirects": {"const": false}
+      }
+    }
+  }
+}

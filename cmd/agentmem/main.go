@@ -798,7 +798,7 @@ func runAgentAssessment(args []string) error {
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *root == "" || *queueID == "" {
+		if *root == "" || *queueID == "" || flags.NArg() != 0 {
 			return errors.New("eval corpus agent-assessment prepare requires --root and --queue")
 		}
 		store, err := ledger.Open(*root)
@@ -827,7 +827,7 @@ func runAgentAssessment(args []string) error {
 		}
 		if *root == "" || *projectionID == "" || *filePath == "" || *assessorID == "" ||
 			*provider == "" || *model == "" || *harnessVersion == "" ||
-			*promptSHA256 == "" || *assessedAt == "" {
+			*promptSHA256 == "" || *assessedAt == "" || flags.NArg() != 0 {
 			return errors.New("eval corpus agent-assessment import-external requires projection, submission, assessor, claimed model, harness, prompt, and time metadata")
 		}
 		reader := os.Stdin
@@ -855,6 +855,34 @@ func runAgentAssessment(args []string) error {
 			return err
 		}
 		return encodeIndented(result)
+	case "run-openai":
+		flags := flag.NewFlagSet("eval corpus agent-assessment run-openai", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		projectionID := flags.String("projection", "", "verified local binding manifest id (required)")
+		model := flags.String("model", "", "OpenAI Responses model id (required)")
+		confirmation := flags.String("confirm-remote-disclosure", "",
+			"exact selected-unredacted payload id authorized for remote disclosure (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *projectionID == "" || *model == "" || *confirmation == "" || flags.NArg() != 0 {
+			return errors.New("eval corpus agent-assessment run-openai requires --root, --projection, --model, and --confirm-remote-disclosure")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, runErr := agentassessment.RunOpenAIAssessment(context.Background(), store,
+			agentassessment.OpenAIRunOptions{
+				ProjectionID: *projectionID, Model: *model,
+				ConfirmRemoteDisclosureID: *confirmation, APIKey: os.Getenv("OPENAI_API_KEY"),
+			})
+		if result.AttemptID != "" {
+			if err := encodeIndented(result); err != nil {
+				return err
+			}
+		}
+		return runErr
 	default:
 		return evalUsageError()
 	}
@@ -2087,7 +2115,7 @@ func deriveUsageError() error {
 }
 
 func evalUsageError() error {
-	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|attest|run|verify> [options]")
+	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attest|run|verify> [options]")
 }
 
 func captureUsageError() error {

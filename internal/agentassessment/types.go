@@ -172,8 +172,12 @@ type CompactionAssessment struct {
 type Assessor struct {
 	Kind            string `json:"kind"`
 	ID              string `json:"id"`
-	ClaimedProvider string `json:"claimed_provider"`
-	ClaimedModel    string `json:"claimed_model"`
+	Provenance      string `json:"provenance"`
+	ClaimedProvider string `json:"claimed_provider,omitempty"`
+	ClaimedModel    string `json:"claimed_model,omitempty"`
+	Provider        string `json:"provider,omitempty"`
+	RequestedModel  string `json:"requested_model,omitempty"`
+	ObservedModel   string `json:"observed_model,omitempty"`
 }
 
 type HarnessProvenance struct {
@@ -182,8 +186,13 @@ type HarnessProvenance struct {
 	Source                    string `json:"source"`
 	IsolationStatus           string `json:"isolation_status"`
 	ToolsRegistered           *bool  `json:"tools_registered"`
-	DataDisclosureClaim       string `json:"data_disclosure_claim"`
+	DataDisclosureClaim       string `json:"data_disclosure_claim,omitempty"`
+	DataDisclosure            string `json:"data_disclosure,omitempty"`
 	ExtractedSubmissionSHA256 string `json:"extracted_submission_sha256"`
+	AttemptID                 string `json:"attempt_id,omitempty"`
+	AttemptContentSHA256      string `json:"attempt_content_sha256,omitempty"`
+	ObservationID             string `json:"observation_id,omitempty"`
+	ObservationContentSHA256  string `json:"observation_content_sha256,omitempty"`
 }
 
 type Assessment struct {

@@ -22,12 +22,25 @@ local binding material absent from the payload. Every included text field is
 marked as untrusted content. This structural blindness does not imply that the
 unredacted text is free of identifiers, secrets, or label-like words.
 
-The CLI does not launch an arbitrary subprocess, call a model, or send the blind
-payload anywhere. Remote disclosure therefore requires a separate explicit
-decision. A future controlled execution harness may call a model API without
-registering tools, MCP servers, web search, file search, code execution, or
-resumable conversation state, but it must record mechanically observed request
-provenance. An external JSON file cannot prove those properties about itself.
+The prepare and external-import commands do not launch a subprocess, call a
+model, or transmit the blind payload. A separate controlled OpenAI Responses
+command is allowed to send that payload only when the operator supplies the
+exact payload ID as a remote-disclosure confirmation. It uses a fixed OpenAI
+endpoint, disables environment proxies and redirects, makes one non-streaming
+request without automatic retries, and registers no tools or conversation
+state. It also fixes reasoning effort to `none`; models that do not support that
+setting fail rather than silently consuming the structured-output budget. The exact request is persisted before transmission and the exact
+response, refusal, provider error, or incomplete response is persisted after
+the attempt. This proves the locally constructed request policy and observed
+exchange; it does not prove provider-side isolation. An external JSON file
+cannot prove those properties about itself.
+
+The controlled request uses `store:false`. That is not a claim that the account
+has Zero Data Retention or that the provider retains no abuse-monitoring or
+application state. Before the request is written or sent, every text-bearing
+payload field is scanned for known sensitive-content patterns. Any finding
+blocks the request. This scan is a fail-closed preflight for recognized patterns,
+not proof that unredacted evidence contains no sensitive information.
 
 The importer regenerates the local binding manifest and blind payload before
 accepting a submission. It requires exactly one result for every candidate and
@@ -60,11 +73,14 @@ an evidence event or changing review state.
 
 - The public repository defines local-binding, blind-payload, submission,
   assessment, and result schemas plus deterministic local validation.
-- External imports remain explicitly unverified. A controlled execution harness
-  must prove its own API-request contract; the CLI does not infer tool isolation,
-  provider identity, model identity, or disclosure behavior from a claim.
+- External imports remain explicitly unverified. Controlled runs separately
+  bind the requested model, provider-observed model, immutable request attempt,
+  and immutable response observation. They are described as
+  `request_policy_observed`, not isolated or Zero Data Retention.
 - Selected evidence may leave the device only after explicit disclosure. Raw
   transcripts, attachments, paths, session identifiers, and unrelated ledger
   events remain local.
+- Request and response artifacts stay under the local evidence root. They are
+  not portable memory and are not exported to the Git-backed memory repository.
 - Agent assessments may prioritize what a human or later outcome-based harness
   examines, but cannot satisfy false-memory or compaction-drift ground truth.

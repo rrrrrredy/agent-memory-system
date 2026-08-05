@@ -171,6 +171,7 @@ go run ./cmd/agentmem eval corpus review-pack --root <local-data-directory> --co
 go run ./cmd/agentmem eval corpus review-queue --root <local-data-directory> --pack <review-pack-id> --candidate-limit 20 --compaction-limit 20
 go run ./cmd/agentmem eval corpus agent-assessment prepare --root <local-data-directory> --queue <review-queue-id>
 go run ./cmd/agentmem eval corpus agent-assessment import-external --root <local-data-directory> --projection <agent-projection-id> --file <submission.json> --assessor-id <id> --claimed-provider <provider> --claimed-model <model> --harness-version <version> --prompt-sha256 <sha256> --data-disclosure-claim <remote|local|unknown> --assessed-at <rfc3339>
+go run ./cmd/agentmem eval corpus agent-assessment run-openai --root <local-data-directory> --projection <agent-projection-id> --model <openai-responses-model> --confirm-remote-disclosure <exact-agent-payload-id>
 go run ./cmd/agentmem eval attest --root <local-data-directory> --file <evaluation-attestation.json>
 go run ./cmd/agentmem eval run --root <local-data-directory> --file <evaluation-input.json> --repo <private-memory-directory> --enforce
 go run ./cmd/agentmem eval verify --root <local-data-directory> --suite <suite-id> --run <run-id>
@@ -306,9 +307,14 @@ and never labels or promotes a candidate.
 
 `eval corpus review-queue` verifies a review pack and creates a deterministic,
 balanced, immutable local audit queue. Evidence text is rendered as untrusted
-material; no judgment is inferred or applied. A future isolated Agent-review
-harness must emit a separate provisional assessment and cannot create human
-truth or promotion authority.
+material; no judgment is inferred or applied. Agent assessment emits a separate
+provisional artifact and cannot create human truth or promotion authority.
+External submissions remain unverified claims. The optional controlled OpenAI
+Responses path requires the exact payload ID as a disclosure confirmation,
+scans every text-bearing field before network access, preserves the exact
+request and response locally, and registers no tools or conversation state.
+It sends selected unredacted evidence off-device; `store:false` is not a Zero
+Data Retention guarantee. See [continuous-learning evaluation](docs/evaluation.md).
 
 `backup create` produces one authenticated age archive outside every Git
 worktree. It verifies the ledger before capture, rejects active writers and

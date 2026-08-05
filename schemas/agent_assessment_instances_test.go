@@ -91,7 +91,7 @@ func TestAgentAssessmentProjectionInstancesMatchPublishedSchemas(t *testing.T) {
 		ProjectionID: projection.ProjectionID, ProjectionContentSHA256: hash,
 		ProjectionFileSHA256: hash,
 		PayloadID:            projection.PayloadID, PayloadContentSHA256: hash, PayloadFileSHA256: hash,
-		Assessor: agentassessment.Assessor{Kind: "agent", ID: "ranker",
+		Assessor: agentassessment.Assessor{Kind: "agent", ID: "ranker", Provenance: "external_claim",
 			ClaimedProvider: "provider", ClaimedModel: "model"},
 		Harness: agentassessment.HarnessProvenance{
 			Version: "v1", PromptSHA256: hash, Source: "external_submission",
@@ -109,10 +109,29 @@ func TestAgentAssessmentProjectionInstancesMatchPublishedSchemas(t *testing.T) {
 		CandidateItems: 1, CompactionUnits: 1, Authority: "provisional_only",
 		ArtifactStorage: "local_only",
 	}
+	controlledAssessment := assessment
+	controlledAssessment.Assessor = agentassessment.Assessor{
+		Kind: "agent", ID: "openai-responses", Provenance: "controlled_observation",
+		Provider: "openai", RequestedModel: "gpt-5.4-mini", ObservedModel: "gpt-5.4-mini-2026-08-01",
+	}
+	toolsRegistered := false
+	controlledAssessment.Harness = agentassessment.HarnessProvenance{
+		Version: agentassessment.OpenAIHarnessVersion, PromptSHA256: hash,
+		Source: "controlled_openai_responses", IsolationStatus: "request_policy_observed",
+		ToolsRegistered: &toolsRegistered, DataDisclosure: "remote",
+		ExtractedSubmissionSHA256: hash,
+		AttemptID:                 "agent-openai-attempt-" + hash, AttemptContentSHA256: hash,
+		ObservationID: "agent-openai-observation-" + hash, ObservationContentSHA256: hash,
+	}
 	validatePublishedInstance(t, "legacy-agent-assessment-projection.schema.json", projection)
 	validatePublishedInstance(t, "legacy-agent-assessment-payload.schema.json", payload)
 	validatePublishedInstance(t, "legacy-agent-assessment-projection-result.schema.json", result)
 	validatePublishedInstance(t, "legacy-agent-assessment-submission.schema.json", submission)
 	validatePublishedInstance(t, "legacy-agent-assessment.schema.json", assessment)
+	validatePublishedInstance(t, "legacy-agent-assessment.schema.json", controlledAssessment)
 	validatePublishedInstance(t, "legacy-agent-assessment-result.schema.json", assessmentResult)
+
+	mismatched := controlledAssessment
+	mismatched.Harness = assessment.Harness
+	rejectPublishedInstance(t, "legacy-agent-assessment.schema.json", mismatched)
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
@@ -15,86 +16,123 @@ import (
 func writeImmutableArtifact(
 	store *ledger.Store, category, identity, name string, data []byte, maximum int64,
 ) (string, bool, error) {
-	if store == nil {
-		return "", false, errors.New("store is required")
-	}
-	if filepath.Base(category) != category || filepath.Base(identity) != identity ||
-		filepath.Base(name) != name || category == "" || identity == "" || name == "" {
-		return "", false, errors.New("Agent assessment artifact path is unsafe")
-	}
-	if int64(len(data)) > maximum {
-		return "", false, errors.New("Agent assessment artifact exceeds the safety limit")
-	}
-	root, err := secureStoreRoot(store)
+	paths, reused, err := writeImmutableArtifactSet(store, category, identity,
+		map[string][]byte{name: data}, maximum)
 	if err != nil {
 		return "", false, err
+	}
+	return paths[name], reused, nil
+}
+
+func writeImmutableArtifactSet(
+	store *ledger.Store, category, identity string, files map[string][]byte, maximum int64,
+) (map[string]string, bool, error) {
+	if store == nil {
+		return nil, false, errors.New("store is required")
+	}
+	if filepath.Base(category) != category || filepath.Base(identity) != identity ||
+		category == "" || identity == "" || len(files) == 0 {
+		return nil, false, errors.New("Agent assessment artifact path is unsafe")
+	}
+	names := make([]string, 0, len(files))
+	total := int64(0)
+	for name, data := range files {
+		if filepath.Base(name) != name || name == "" {
+			return nil, false, errors.New("Agent assessment artifact path is unsafe")
+		}
+		total += int64(len(data))
+		if total < 0 || total > maximum {
+			return nil, false, errors.New("Agent assessment artifact exceeds the safety limit")
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	root, err := secureStoreRoot(store)
+	if err != nil {
+		return nil, false, err
 	}
 	base, err := ensureSecureDirectory(root,
 		filepath.Join("derived", "evaluations", category))
 	if err != nil {
-		return "", false, err
+		return nil, false, err
 	}
 	destination := filepath.Join(base, identity)
-	path := filepath.Join(destination, name)
-	if _, err := os.Lstat(path); err == nil {
-		existing, readErr := readSecureFile(root, path, maximum)
-		if readErr != nil {
-			return "", false, readErr
-		}
-		if !bytes.Equal(existing, data) {
-			return "", false, errors.New("existing Agent assessment artifact does not match its identity")
-		}
-		return path, true, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", false, err
+	paths := make(map[string]string, len(files))
+	for _, name := range names {
+		paths[name] = filepath.Join(destination, name)
 	}
-	if _, err := os.Lstat(destination); err == nil {
-		return "", false, errors.New("existing Agent assessment artifact directory is incomplete")
+	if info, err := os.Lstat(destination); err == nil {
+		if unsafePathInfo(info) || !info.IsDir() {
+			return nil, false, errors.New("existing Agent assessment artifact destination is unsafe")
+		}
+		entries, readErr := os.ReadDir(destination)
+		if readErr != nil || len(entries) != len(files) {
+			return nil, false, errors.New("existing Agent assessment artifact directory is incomplete")
+		}
+		for _, entry := range entries {
+			expected, exists := files[entry.Name()]
+			if !exists || entry.IsDir() {
+				return nil, false, errors.New("existing Agent assessment artifact directory is incomplete")
+			}
+			existing, readErr := readSecureFile(root, paths[entry.Name()], maximum)
+			if readErr != nil {
+				return nil, false, readErr
+			}
+			if !bytes.Equal(existing, expected) {
+				return nil, false, errors.New("existing Agent assessment artifact does not match its identity")
+			}
+		}
+		return paths, true, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", false, err
+		return nil, false, err
 	}
 	temporary, err := os.MkdirTemp(base, ".agent-assessment-tmp-")
 	if err != nil {
-		return "", false, err
+		return nil, false, err
 	}
 	defer os.RemoveAll(temporary)
 	if err := validateExistingPath(root, temporary, true); err != nil {
-		return "", false, err
+		return nil, false, err
 	}
-	temporaryPath := filepath.Join(temporary, name)
-	file, err := os.OpenFile(temporaryPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return "", false, err
-	}
-	if _, err := file.Write(data); err != nil {
-		_ = file.Close()
-		return "", false, err
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return "", false, err
-	}
-	if err := file.Close(); err != nil {
-		return "", false, err
+	for _, name := range names {
+		temporaryPath := filepath.Join(temporary, name)
+		file, err := os.OpenFile(temporaryPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return nil, false, err
+		}
+		if _, err := file.Write(files[name]); err != nil {
+			_ = file.Close()
+			return nil, false, err
+		}
+		if err := file.Sync(); err != nil {
+			_ = file.Close()
+			return nil, false, err
+		}
+		if err := file.Close(); err != nil {
+			return nil, false, err
+		}
 	}
 	baseAgain, err := ensureSecureDirectory(root,
 		filepath.Join("derived", "evaluations", category))
 	if err != nil || baseAgain != base {
-		return "", false, errors.New("Agent assessment artifact directory changed before commit")
+		return nil, false, errors.New("Agent assessment artifact directory changed before commit")
 	}
 	if _, err := os.Lstat(destination); !errors.Is(err, os.ErrNotExist) {
 		if err == nil {
-			return "", false, errors.New("Agent assessment artifact destination appeared before commit")
+			return nil, false, errors.New("Agent assessment artifact destination appeared before commit")
 		}
-		return "", false, err
+		return nil, false, err
 	}
 	if err := os.Rename(temporary, destination); err != nil {
-		return "", false, err
+		return nil, false, err
 	}
-	if _, err := readSecureFile(root, path, maximum); err != nil {
-		return "", false, err
+	for _, name := range names {
+		data, err := readSecureFile(root, paths[name], maximum)
+		if err != nil || !bytes.Equal(data, files[name]) {
+			return nil, false, errors.New("committed Agent assessment artifact is invalid")
+		}
 	}
-	return path, false, nil
+	return paths, false, nil
 }
 
 func secureStoreRoot(store *ledger.Store) (string, error) {

@@ -301,6 +301,34 @@ func TestImmutableProjectionStorageReusesAndRejectsTampering(t *testing.T) {
 	}
 }
 
+func TestImmutableArtifactSetCommitsAndVerifiesTheCompleteDirectory(t *testing.T) {
+	store, err := ledger.Init(filepath.Join(t.TempDir(), "evidence"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := "agent-openai-attempt-" + strings.Repeat("e", 64)
+	files := map[string][]byte{
+		"attempt.json": []byte("{\"attempt\":true}\n"),
+		"request.json": []byte("{\"store\":false}\n"),
+	}
+	paths, reused, err := writeImmutableArtifactSet(store, "agent-openai-attempts", identity, files, 1<<20)
+	if err != nil || reused || len(paths) != 2 {
+		t.Fatalf("first artifact set write failed: paths=%v reused=%t err=%v", paths, reused, err)
+	}
+	_, reused, err = writeImmutableArtifactSet(store, "agent-openai-attempts", identity, files, 1<<20)
+	if err != nil || !reused {
+		t.Fatalf("identical artifact set was not reused: reused=%t err=%v", reused, err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(paths["attempt.json"]), "unexpected.json"),
+		[]byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := writeImmutableArtifactSet(store, "agent-openai-attempts", identity,
+		files, 1<<20); err == nil {
+		t.Fatal("artifact set with an unexpected file was accepted")
+	}
+}
+
 func projectionTestStore(t *testing.T) (*ledger.Store, []ledger.Record) {
 	t.Helper()
 	store, err := ledger.Init(filepath.Join(t.TempDir(), "evidence"))

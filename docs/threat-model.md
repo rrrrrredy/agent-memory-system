@@ -21,9 +21,13 @@ Status: baseline for implementation and review, 2026-08-04.
 5. Promoted memory crosses devices through a private Git repository.
 6. Retrieval output enters an Agent's prompt or tool context.
 7. Optional encrypted evidence leaves the device for a separate backup backend.
+8. An explicitly selected blind assessment payload may cross the network to the
+   fixed OpenAI Responses endpoint after an exact payload-ID confirmation.
 
 Private Git hosting is an access-control layer, not permission to upload raw
-evidence.
+evidence. A local artifact marked `local_only` describes its canonical storage;
+it does not mean that explicitly disclosed request content was never received
+or retained by an API provider.
 
 ## Threats and required controls
 
@@ -69,13 +73,23 @@ regular expressions are insufficient.
 
 Controls:
 
-- evidence is always classified `local_only`;
+- canonical evidence and assessment artifacts remain classified `local_only`;
+- only an explicitly selected blind payload may be disclosed remotely, after
+  exact-ID confirmation and a fail-closed scan of every text-bearing field;
 - promoted memory is generated into a separate staging area;
 - deterministic high-entropy, credential-format, private-key, and path scans;
 - allowlisted schemas and explicit review;
 - pre-commit and pre-push blocking;
 - synthetic public fixtures only;
 - backup encryption keys stored separately from backup data.
+
+The controlled OpenAI path uses a fixed endpoint, no environment proxy,
+redirect, retry, tool, background mode, conversation state, or stream. It saves
+the exact request before transmission and records complete, partial, failed, and
+absent responses distinctly. `store:false` is not Zero Data Retention, and the
+sensitive-content scan only detects known patterns. Provider retention,
+provider-side compromise, and unrecognized sensitive text therefore remain
+explicit residual risks.
 
 ### Poisoned or false memory
 

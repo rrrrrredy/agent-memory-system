@@ -76,7 +76,8 @@ func TestExternalAssessmentProvenanceKeepsIsolationUnverified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if assessor.Kind != "agent" || harness.ToolsRegistered != nil ||
+	if assessor.Kind != "agent" || assessor.Provenance != "external_claim" ||
+		harness.ToolsRegistered != nil ||
 		harness.IsolationStatus != "unverified_external" || harness.Source != "external_submission" ||
 		harness.DataDisclosureClaim != "remote" ||
 		harness.ExtractedSubmissionSHA256 != hashBytes(data) || assessedAt != "2026-08-05T04:00:00Z" {
