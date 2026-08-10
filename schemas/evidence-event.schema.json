@@ -16,7 +16,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "evidence-event/v1alpha1"
+      "enum": ["evidence-event/v1alpha1", "evidence-event/v1alpha2"]
     },
     "event_id": {
       "type": "string",
@@ -71,6 +71,29 @@
       "then": {
         "required": ["reasoning"]
       }
+    },
+    {
+      "if": {
+        "properties": {"schema_version": {"const": "evidence-event/v1alpha1"}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "not": {
+              "enum": [
+                "compaction_ground_truth",
+                "evaluation_trial_plan",
+                "task_execution_started",
+                "task_execution_receipt",
+                "episode_generation_attempt",
+                "episode_generation",
+                "task_attempt_contract"
+              ]
+            }
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -93,7 +116,14 @@
         "memory_adoption",
         "evaluation_corpus",
         "evaluation_attestation",
+        "task_attempt_contract",
         "task_attempt",
+        "compaction_ground_truth",
+        "evaluation_trial_plan",
+        "task_execution_started",
+        "task_execution_receipt",
+        "episode_generation_attempt",
+        "episode_generation",
         "evaluation_run",
         "gap",
         "unknown"

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/evaluation-trial-plan.schema.json",
+  "title": "Sealed paired evaluation trial plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "plan_id", "suite_id", "corpus_id", "corpus_content_sha256",
+    "seed_sha256", "system_artifact_sha256", "oracle_registry_sha256", "created_at", "pairs", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "evaluation-trial-plan/v1alpha1"},
+    "plan_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "suite_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+    "corpus_content_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "seed_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "system_artifact_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "oracle_registry_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "pairs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/pair"}},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "pair": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pair_id", "corpus_artifact_id", "corpus_artifact_sha256", "execution_order", "baseline", "treatment"],
+      "properties": {
+        "pair_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+        "corpus_artifact_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+        "corpus_artifact_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+        "execution_order": {
+          "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true,
+          "items": {"enum": ["baseline", "memory"]}
+        },
+        "baseline": {"$ref": "#/$defs/baseline_arm"},
+        "treatment": {"$ref": "#/$defs/treatment_arm"}
+      }
+    },
+    "baseline_arm": {
+      "allOf": [
+        {"$ref": "#/$defs/arm"},
+        {"properties": {
+          "condition": {"const": "baseline"},
+          "contract": {"properties": {"condition": {"const": "baseline"}}}
+        }}
+      ]
+    },
+    "treatment_arm": {
+      "allOf": [
+        {"$ref": "#/$defs/arm"},
+        {"properties": {
+          "condition": {"const": "memory"},
+          "contract": {"properties": {"condition": {"const": "memory"}}}
+        }}
+      ]
+    },
+    "arm": {
+      "type": "object", "additionalProperties": false,
+      "required": ["condition", "thread_id", "session_id", "contract"],
+      "properties": {
+        "condition": {"enum": ["baseline", "memory"]},
+        "thread_id": {"type": "string", "minLength": 1},
+        "session_id": {"type": "string", "minLength": 1},
+        "contract": {
+          "allOf": [
+            {"$ref": "task-attempt-contract.schema.json"},
+            {"required": ["trial_plan_id", "trial_pair_id"]}
+          ]
+        }
+      }
+    }
+  }
+}

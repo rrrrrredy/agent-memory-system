@@ -32,17 +32,23 @@ of checks, while exact event IDs continue to point to the local evidence source.
 Each evaluation case references immutable evidence. Directly measurable values
 are checked against source-snapshot, retrieval, injection, adoption, tool-result,
 or file-change events. Interpretive measurements require a separate local
-append-only attestation whose payload repeats the exact measurement. The event
-binds case, Agent, attestor, time, and reason. False-memory and compaction-drift
-ground truth requires a human attestor; deterministic harnesses may attest
-counting and paired-result cases.
+append-only human source. False-memory cases use a per-case attestation whose
+payload repeats the exact measurement and binds case, Agent, attestor, time, and
+reason. Compaction drift instead uses one complete human-reviewed pack over the
+frozen subject universe, sealed before any retained detector generation covers
+those subjects. Counting and paired-result cases are derived from replayable
+receipts rather than aggregate attestations.
 
 Metric calculation is pure and never certifies a release. A persisted component
 run may be release-ready only for its bounded diagnostic after every reference
 resolves, the optional corpus and portable repository verify, at least one
-threshold is configured, and every gate passes. A continuous-learning run
-remains measurement-only until a later policy binds fixed thresholds, a
-deterministically complete population, and independently runnable oracles.
+threshold is configured, and every gate passes. Continuous-learning release
+readiness additionally requires the fixed policy, independent capture inventory,
+complete sealed paired-trial population, supervised execution receipts, prior
+compaction ground truth, and blind built-in oracle controls
+adopted in ADR 0016. Both profiles remain
+measurement-only; release readiness describes the exact evaluated population,
+not general product efficacy.
 Missing denominators are `not_evaluable`. Inputs, reports, and attestations
 remain local-only and are anchored in the evidence ledger.
 

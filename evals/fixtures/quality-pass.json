@@ -1,10 +1,10 @@
 {
-  "schema_version": "learning-evaluation-input/v1alpha1",
+  "schema_version": "learning-evaluation-input/v1alpha2",
   "suite_id": "synthetic-quality",
   "run_id": "quality-pass",
   "created_at": "2026-01-01T00:00:00Z",
   "system_version": "synthetic-v1",
-  "quality_profile": "continuous_learning",
+  "quality_profile": "component",
   "cases": [
     {
       "case_id": "capture",
@@ -27,15 +27,13 @@
       "evidence": [{"kind": "ledger_event", "id": "user-correction", "sha256": "3333333333333333333333333333333333333333333333333333333333333333"}],
       "correction": {
         "semantic_key_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "initial_correction_attempt_id": "task-attempt-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "attempt_ids": [
-          "task-attempt-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "task-attempt-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "task-attempt-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-          "task-attempt-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          "task-attempt-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         ],
-        "eligible_followup_opportunities": 4,
-        "repeated_corrections": 1,
-        "repeated_corrections_after_memory": 1
+        "eligible_followup_opportunities": 1,
+        "repeated_corrections": 0,
+        "repeated_corrections_after_memory": 0
       }
     },
     {
@@ -75,8 +73,8 @@
         "pair_id": "pair-synthetic",
         "baseline_attempt_id": "task-attempt-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "treatment_attempt_id": "task-attempt-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-        "baseline": {"success": true, "score": 0.5, "errors": 2, "user_corrections": 1, "total_tokens": 200},
-        "treatment": {"success": true, "score": 0.7, "errors": 1, "user_corrections": 0, "total_tokens": 180}
+        "baseline": {"success": true, "score": 0.5, "errors": 2, "user_corrections": 1, "token_count_evaluated": true, "total_tokens": 200},
+        "treatment": {"success": true, "score": 0.7, "errors": 1, "user_corrections": 0, "token_count_evaluated": true, "total_tokens": 180}
       }
     }
   ],
@@ -91,7 +89,7 @@
     "minimum_mean_outcome_score_delta": 0.1,
     "maximum_mean_correction_delta": 0,
     "maximum_harmful_outcomes": 0,
-    "minimum_correction_opportunities": 4,
+    "minimum_correction_opportunities": 1,
     "minimum_paired_outcome_pairs": 1
   },
   "privacy": "local_only"

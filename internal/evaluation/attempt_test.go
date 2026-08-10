@@ -24,7 +24,7 @@ func TestTaskAttemptDerivesMeasurementFromCompleteCausalWindow(t *testing.T) {
 		"checker failed", now.Add(2*time.Second), []string{"attempt-start"})
 	verdict := TaskAttemptVerdict{
 		SchemaVersion: TaskAttemptVerdictSchema, TaskID: request.TaskID, AttemptID: request.AttemptID,
-		Verdict: TaskVerdictFail, Score: 0.25, TotalTokens: 300,
+		Verdict: TaskVerdictFail, Score: 0.25, TokenCountEvaluated: true, TotalTokens: 300,
 		ResultEvents:   []LabeledResultEvent{{EventID: "attempt-result", Label: ResultLabelError}},
 		UserMessages:   []LabeledUserMessage{{EventID: "attempt-user", Label: UserMessageCorrection}},
 		TaskSpecSHA256: request.TaskSpecSHA256, CriteriaSHA256: request.AcceptanceCriteriaSHA256,
@@ -37,7 +37,7 @@ func TestTaskAttemptDerivesMeasurementFromCompleteCausalWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	if result.Receipt.Measurement != (TrialMeasurement{Success: false, Score: 0.25,
-		Errors: 1, UserCorrections: 1, TotalTokens: 300}) ||
+		Errors: 1, UserCorrections: 1, TokenCountEvaluated: true, TotalTokens: 300}) ||
 		result.Receipt.BindingStatus != "causal_complete" || result.Receipt.Authority != "measurement_only" {
 		t.Fatalf("task attempt measurement was not replay-derived: %+v", result.Receipt)
 	}
@@ -65,7 +65,7 @@ func TestTaskAttemptRejectsCherryPickedOrNoncausalEvidence(t *testing.T) {
 		now.Add(2*time.Second), nil)
 	verdict := TaskAttemptVerdict{
 		SchemaVersion: TaskAttemptVerdictSchema, TaskID: request.TaskID, AttemptID: request.AttemptID,
-		Verdict: TaskVerdictPass, Score: 1, TotalTokens: 1,
+		Verdict: TaskVerdictPass, Score: 1, TokenCountEvaluated: true, TotalTokens: 1,
 		ResultEvents:   []LabeledResultEvent{{EventID: "attempt-result", Label: ResultLabelSuccess}},
 		UserMessages:   []LabeledUserMessage{},
 		TaskSpecSHA256: request.TaskSpecSHA256, CriteriaSHA256: request.AcceptanceCriteriaSHA256,
@@ -93,7 +93,7 @@ func TestTaskAttemptRejectsNoncausalUserCorrection(t *testing.T) {
 		now.Add(2*time.Second), []string{"attempt-start"})
 	verdict := TaskAttemptVerdict{
 		SchemaVersion: TaskAttemptVerdictSchema, TaskID: request.TaskID, AttemptID: request.AttemptID,
-		Verdict: TaskVerdictFail, Score: 0, TotalTokens: 1,
+		Verdict: TaskVerdictFail, Score: 0, TokenCountEvaluated: true, TotalTokens: 1,
 		ResultEvents:   []LabeledResultEvent{{EventID: "attempt-result", Label: ResultLabelError}},
 		UserMessages:   []LabeledUserMessage{{EventID: "attempt-user", Label: UserMessageCorrection}},
 		TaskSpecSHA256: request.TaskSpecSHA256, CriteriaSHA256: request.AcceptanceCriteriaSHA256,
@@ -122,7 +122,7 @@ func TestTaskAttemptRejectsPriorMemoryExposureInBaseline(t *testing.T) {
 		now.Add(3*time.Second), []string{"attempt-start"})
 	verdict := TaskAttemptVerdict{
 		SchemaVersion: TaskAttemptVerdictSchema, TaskID: request.TaskID, AttemptID: request.AttemptID,
-		Verdict: TaskVerdictPass, Score: 1, TotalTokens: 1,
+		Verdict: TaskVerdictPass, Score: 1, TokenCountEvaluated: true, TotalTokens: 1,
 		ResultEvents: []LabeledResultEvent{{EventID: "attempt-result", Label: ResultLabelSuccess}},
 		UserMessages: []LabeledUserMessage{}, TaskSpecSHA256: request.TaskSpecSHA256,
 		CriteriaSHA256: request.AcceptanceCriteriaSHA256, ConfigSHA256: request.ExecutionConfigSHA256,
@@ -165,7 +165,7 @@ func TestTaskAttemptDecodersRejectMissingCanonicalArrays(t *testing.T) {
 	}
 	verdict := TaskAttemptVerdict{
 		SchemaVersion: TaskAttemptVerdictSchema, TaskID: request.TaskID, AttemptID: request.AttemptID,
-		Verdict: TaskVerdictPass, Score: 1, TotalTokens: 1,
+		Verdict: TaskVerdictPass, Score: 1, TokenCountEvaluated: true, TotalTokens: 1,
 		ResultEvents:   []LabeledResultEvent{{EventID: "attempt-result", Label: ResultLabelSuccess}},
 		TaskSpecSHA256: request.TaskSpecSHA256, CriteriaSHA256: request.AcceptanceCriteriaSHA256,
 		ConfigSHA256: request.ExecutionConfigSHA256, Privacy: "local_only",
@@ -189,7 +189,7 @@ func TestTaskAttemptRejectsContractAndOracleSourceMismatch(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		appendAttemptEvent(t, store, request.WindowStartEventID, ledger.KindSystemEvent,
+		appendAttemptEvent(t, store, request.WindowStartEventID, ledger.KindTaskAttemptContract,
 			string(data), now, nil)
 		appendAttemptEvent(t, store, request.WindowEndEventID, ledger.KindToolResult, "passed",
 			now.Add(time.Second), []string{request.WindowStartEventID})
@@ -227,7 +227,7 @@ func TestTaskAttemptRejectsContractAndOracleSourceMismatch(t *testing.T) {
 func passingAttemptVerdict(request TaskAttemptRequest) TaskAttemptVerdict {
 	return TaskAttemptVerdict{
 		SchemaVersion: TaskAttemptVerdictSchema, TaskID: request.TaskID, AttemptID: request.AttemptID,
-		Verdict: TaskVerdictPass, Score: 1, TotalTokens: 1,
+		Verdict: TaskVerdictPass, Score: 1, TokenCountEvaluated: true, TotalTokens: 1,
 		ResultEvents: []LabeledResultEvent{{EventID: request.WindowEndEventID, Label: ResultLabelSuccess}},
 		UserMessages: []LabeledUserMessage{}, TaskSpecSHA256: request.TaskSpecSHA256,
 		CriteriaSHA256: request.AcceptanceCriteriaSHA256, ConfigSHA256: request.ExecutionConfigSHA256,
@@ -256,7 +256,7 @@ func appendAttemptContract(t *testing.T, store *ledger.Store, request TaskAttemp
 	if err != nil {
 		t.Fatal(err)
 	}
-	appendAttemptEvent(t, store, request.WindowStartEventID, ledger.KindSystemEvent,
+	appendAttemptEvent(t, store, request.WindowStartEventID, ledger.KindTaskAttemptContract,
 		string(data), now, parents)
 }
 

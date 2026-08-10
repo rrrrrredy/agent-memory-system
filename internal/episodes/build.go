@@ -43,12 +43,21 @@ func Build(store *ledger.Store, options BuildOptions) (BuildResult, error) {
 	if store == nil {
 		return result, errors.New("store is required")
 	}
+	if audited, ok, err := loadLastAuditedGeneration(store); err != nil {
+		return result, err
+	} else if ok {
+		audited.Reused = true
+		return audited, nil
+	}
 	shardCount := options.ShardCount
 	if shardCount == 0 {
 		shardCount = defaultShardCount
 	}
 	if shardCount < 1 || shardCount > 256 || shardCount&(shardCount-1) != 0 {
 		return result, errors.New("episode shard count must be a power of two between 1 and 256")
+	}
+	if _, err := recordGenerationAttempt(store); err != nil {
+		return result, err
 	}
 	workRoot := filepath.Join(store.Root(), "state")
 	if err := os.MkdirAll(workRoot, 0o700); err != nil {
@@ -83,6 +92,10 @@ func Build(store *ledger.Store, options BuildOptions) (BuildResult, error) {
 	visitErr := store.VisitRecords(func(record ledger.Record) error {
 		result.SourceRecords++
 		result.SourceLastRecordHash = record.RecordHash
+		if record.Event.Source.Agent == ledger.AgentUnknown ||
+			strings.TrimSpace(record.Event.Source.ThreadID) == "" {
+			return nil
+		}
 		if record.Event.Kind == ledger.KindSourceSnapshot {
 			sourceSnapshots[record.Event.EventID] = record.Event
 			if !episodeRelevantSnapshot(record.Event) {
@@ -131,6 +144,9 @@ func Build(store *ledger.Store, options BuildOptions) (BuildResult, error) {
 	} else if ok {
 		existing.GenerationPath = finalPath
 		existing.Reused = true
+		if err := recordGenerationAudit(store, existing); err != nil {
+			return result, err
+		}
 		return existing, nil
 	}
 
@@ -251,6 +267,9 @@ func Build(store *ledger.Store, options BuildOptions) (BuildResult, error) {
 			if ok {
 				existing.GenerationPath = finalPath
 				existing.Reused = true
+				if err := recordGenerationAudit(store, existing); err != nil {
+					return result, err
+				}
 				return existing, nil
 			}
 		}
@@ -258,6 +277,9 @@ func Build(store *ledger.Store, options BuildOptions) (BuildResult, error) {
 	}
 	keepTemporary = true
 	result.GenerationPath = finalPath
+	if err := recordGenerationAudit(store, result); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 

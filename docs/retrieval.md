@@ -187,10 +187,18 @@ outcome evidence set cannot be attributed to more than one memory.
 
 Reporter kinds are `human`, `agent`, and `harness`, but those identities are
 self-declared rather than authenticated. An adoption outcome therefore remains
-an attributed observation. Replayable task-attempt receipts and comparable
-baseline/memory runs provide measurement inputs, but do not establish product
-efficacy without fixed policy, complete-population reconstruction, and an
-independently runnable oracle.
+an attributed observation. The continuous-learning evaluator does not conflate
+delivery and use: the execution supervisor records
+the delivered treatment set with `adoption: unknown`, and only a separate
+evidence-bound observation may claim `adopted` or `rejected`.
+
+It strengthens comparable task outcomes by applying a fixed policy to the complete sealed paired-trial
+population, requiring supervised execution for every arm, and replaying the
+blind built-in `evidence-score/v1` oracle over payload-hash-bound result and
+correction labels. Native checker executables remain diagnostic. A passing
+bounded population still does not cover
+ordinary tasks without evaluation contracts or establish broad real-world or
+longitudinal efficacy.
 
 `recall verify` checks receipt integrity, event ordering, content hashes,
 causal ancestry, budgets, and reference relationships. A retrieval without a

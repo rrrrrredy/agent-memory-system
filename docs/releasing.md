@@ -17,11 +17,12 @@ Before creating a tag:
    the platform installer tests;
 5. verify the separate private memory repository independently and keep every
    raw-evidence location outside both repositories;
-6. do not make a continuous-learning efficacy claim in the current version.
-   Evidence-bound runs remain measurement-only until fixed versioned policy,
-   deterministic complete-population reconstruction, and independently
-   runnable oracles are implemented together. Synthetic fixtures prove metric
-   and gate behavior only.
+6. do not turn a passing synthetic or bounded evaluation into a general
+   continuous-learning efficacy claim. The fixed-policy gate reconstructs and
+   replays one exact local population, but its authority remains measurement-only.
+   Public fixtures prove protocol and gate behavior only; broader claims require
+   real-runtime, cross-device, and longitudinal evidence reviewed for the
+   release.
 
 The release workflow accepts SemVer tags without build metadata, such as
 `v0.1.0` or `v0.2.0-alpha.1`, and rejects a tag whose commit is not reachable

@@ -107,17 +107,44 @@ Controls:
 - non-unknown adoption outcomes require causally bound result evidence;
 - replayable task-attempt receipts bind comparable baseline and memory runs.
 
-Reporter and oracle identities are currently self-declared. These controls
-make claims attributable and replayable, but do not cryptographically
-authenticate a person or harness and do not turn a judgment into objective
-truth.
+Human attestor and adoption-reporter identities are self-declared. The built-in
+`evidence-score/v1` oracle is blind to task, attempt, condition, event, source, and time
+identity and runs inside the evaluator without an external executable. It still
+does not prove that its payload-hash criteria or labels are correct. Native registry executables receive
+condition-bearing input and can access mutable host state; they are diagnostic
+only and cannot satisfy efficacy prerequisites.
 
-Evaluation thresholds and case selection are also caller-supplied. A caller can
-select favorable cases or permissive thresholds, so even a fully replayed
-`continuous_learning` report has `measurement_only` authority and is blocked
-from release readiness. A future efficacy gate must reconstruct the complete
-eligible population from a frozen snapshot and apply a versioned policy rather
-than trust submitted population metadata.
+A `component` evaluation still permits caller-selected cases and thresholds and
+therefore proves only its bounded diagnostic. `continuous_learning` rejects
+caller-selected policy. It reconstructs the independent capture inventory and
+a deterministic sample derived from the fixed policy and frozen corpus content
+hash. Plans must cover every selected artifact exactly once, preserve
+its exact task bytes and Agent assignment, and commit both arms, their order,
+criteria, execution configuration, SUT, and oracle before any result.
+The execution supervisor runs the exact local adapter bytes with challenge-bound
+input that omits condition and acceptance criteria, and records exact output;
+manually observed results are ineligible. A
+started arm cannot be retried, and order is rechecked from ledger position.
+Treatment delivery is not reported as use. This does not prove a claimed remote
+provider/model or native Agent emitted the output. The current arbitrary-adapter
+bridge therefore leaves `verified_agent_execution` false and cannot produce a
+continuous release claim. Human-authored criteria may still be weak or wrong.
+Episode-generation audits are append-only and deletion of referenced retained
+generations fails verification, but a local administrator could still run an
+undisclosed algorithm or directly forge local files outside
+the supported flow. The security claim therefore assumes an honest local
+operator while making supported cherry-picking and post-hoc labeling paths
+auditable and fail-closed.
+
+The evaluator binds its executable, system prompt, tool registry, harness, and
+adapter artifacts, then freezes episode generation, the corpus, the complete
+promotion projection, oracle registry, and capture snapshot in local evidence
+blobs. Compaction labels must be sealed before detector generation. A late
+eligible record, changed artifact, selective portable subset, missing planned
+arm, receipt, projection, Agent stratum, category, or attestation fails closed.
+An ordinary task outside a sealed plan remains outside the trial population.
+The report remains `measurement_only`; a passing population is not universal or
+longitudinal efficacy.
 
 ### Cross-device semantic conflict
 

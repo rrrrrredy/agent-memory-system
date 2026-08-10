@@ -2,6 +2,7 @@ package evaluation
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -260,6 +261,68 @@ func TestVerifyCorpusChecksManifestBlobContent(t *testing.T) {
 	verification := VerifyCorpus(store, result.CorpusID)
 	if !containsIssue(verification.Issues, "manifest blob is invalid") {
 		t.Fatalf("tampered manifest blob was accepted: %+v", verification)
+	}
+}
+
+func TestFreezeLegacyCorpusIndexLimitStoresAndReusesOnlyTheSelectedPrefix(t *testing.T) {
+	base := t.TempDir()
+	store, err := ledger.Init(filepath.Join(base, "evidence"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyRoot := filepath.Join(base, "legacy")
+	firstCard := filepath.Join(legacyRoot, "summaries", "first.md")
+	secondCard := filepath.Join(legacyRoot, "summaries", "second.md")
+	writeTestFile(t, firstCard, []byte("first card\n"))
+	writeTestFile(t, secondCard, []byte("second card\n"))
+	first, _ := json.Marshal(legacyIndexEntry{CardPath: firstCard, SessionID: "first-session"})
+	second, _ := json.Marshal(legacyIndexEntry{CardPath: secondCard, SessionID: "second-session"})
+	indexPath := filepath.Join(legacyRoot, "data", "index.jsonl")
+	indexData := append(append(append([]byte{}, first...), '\n'), second...)
+	indexData = append(indexData, '\n')
+	writeTestFile(t, indexPath, indexData)
+
+	options := FreezeOptions{Name: "limited-index", IndexEntryLimit: 1,
+		Now: func() time.Time { return time.Unix(500, 0).UTC() }}
+	frozen, err := FreezeLegacyCorpus(store, legacyRoot, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := LoadCorpusManifest(store, frozen.CorpusID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var indexBlob *ledger.BlobRef
+	for _, artifact := range manifest.Artifacts {
+		if artifact.Role == RoleLegacyIndex {
+			copy := artifact.Blob
+			indexBlob = &copy
+			break
+		}
+	}
+	if indexBlob == nil {
+		t.Fatal("limited corpus has no index artifact")
+	}
+	file, err := store.OpenBlob(*indexBlob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := io.ReadAll(file)
+	_ = file.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stored) != string(append(first, '\n')) || strings.Contains(string(stored), "second-session") {
+		t.Fatalf("index artifact escaped its selected prefix: %q", stored)
+	}
+	third, _ := json.Marshal(legacyIndexEntry{CardPath: secondCard, SessionID: "third-session"})
+	writeTestFile(t, indexPath, append(indexData, append(third, '\n')...))
+	replayed, err := FreezeLegacyCorpus(store, legacyRoot, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed.CorpusID != frozen.CorpusID || !replayed.Reused {
+		t.Fatalf("data beyond the selected prefix changed the corpus: first=%+v replay=%+v", frozen, replayed)
 	}
 }
 

@@ -182,24 +182,53 @@ Raw-byte capture coverage and normalized-event projection quality MUST be
 reported separately. A parser gap does not prove loss of preserved source
 bytes, and a parsed record does not prove full source capture.
 
-False-memory and compaction-drift measurements MUST bind the exact measured
-value to a prior local append-only attestation, and their ground-truth labels
-require a human attestor. Repeated-correction and paired-outcome measurements
-MUST instead be derived from replayed local task-attempt receipts. Those
-receipts bind a complete causal evidence window, task and acceptance-contract
-hashes, exact memory exposure, and an oracle verdict; their authority is
-measurement-only. The model under evaluation cannot certify its own
-interpretation merely by supplying a label or hash in the evaluation input.
+False-memory ground truth MUST bind the exact measured subject and label to a
+prior local human attestation. Compaction ground truth MUST be one complete
+human-reviewed pack sealed before episode generation or drift detection. It MUST
+supply only expected labels; observed labels MUST come from the later,
+hash-bound continuity detector. Repeated-correction and paired-outcome
+measurements MUST derive from complete sealed pair plans and replayed supervised
+task receipts. Every plan MUST bind both arms, execution order, frozen corpus,
+task artifacts, SUT, and oracle before any result. Every arm MUST bind a complete
+causal window, exact memory exposure, and one execution and oracle verdict
+receipt. Their authority is measurement-only. The model under evaluation cannot
+certify its own interpretation merely by supplying a label or hash. The trial
+universe MUST be deterministically derived from frozen corpus artifacts, the
+fixed policy, and corpus content hash without a caller-chosen seed; selected
+artifacts, task bytes, Agent strata, and derived task/pair
+identities MUST have complete one-to-one coverage before execution. A supervised
+start MUST make its arm non-retryable, and the sealed arm order MUST be enforced
+during execution and replay. Memory delivery MUST NOT be reported as adoption
+without a separate evidence-bound observation.
+Each controlled attempt MUST bind the exact system prompt, tool registry,
+harness, and Agent adapter as local content-addressed blobs. Declared hashes
+without those bytes are insufficient. The supervisor MUST run the exact local
+adapter artifact with challenge-bound input that omits condition and acceptance
+criteria, and record its exact result. Every start MUST produce one terminal
+receipt; non-zero exits, timeouts, start failures, and empty output MUST be
+canonical failures rather than retry opportunities. This does not authenticate
+a remote provider, model, or native Agent runtime.
 
 A metric with no denominator is `not_evaluable`, never a passing zero. A
-component profile may exercise one bounded, measurement-only quality check. The
-`continuous_learning` profile requires all six quality categories, all twelve
-caller-supplied gates, positive minimum counts for correction opportunities and
-paired outcomes, and successful resolution and replay of every required
-artifact and receipt. It remains measurement-only and cannot establish product
-efficacy or release readiness until fixed versioned policy, deterministic
-complete-population reconstruction, and independently runnable oracle checks
-are implemented together.
+component profile may exercise one bounded caller-configured quality check. The
+`continuous_learning` profile MUST use `continuous-learning-policy/v1`, its
+fixed thresholds, the independent capture-supervisor inventory, and the complete
+set of sealed paired plans committed before the first result. It MUST also bind
+the current system artifact, verified episode generation, frozen corpus, full
+local promotion projection, local oracle registry, and historical capture
+snapshot. A caller-selected portable subset is insufficient.
+Those mutable dependencies MUST be frozen as local content-addressed blobs before
+the run. Only the blind, hermetic built-in `evidence-score/v1` oracle may satisfy
+efficacy prerequisites; native executable oracles remain diagnostic. An unknown
+token count MUST remain not evaluated instead of becoming a measured zero.
+Missing projections, categories, per-Agent strata,
+receipts, attestations, stale inputs, or replay failures MUST be issues. A report
+can be release-ready only for those exact bound populations when all gates pass.
+It MUST also have verifiable native Agent execution provenance; an arbitrary
+local adapter receipt is diagnostic and MUST NOT satisfy that prerequisite.
+It MUST NOT be described as covering ordinary tasks that lacked an evaluation
+contract, promoting memory, authorizing a rule change, or proving general
+real-world efficacy.
 
 ### Cross-device and cross-agent reliability
 

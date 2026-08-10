@@ -3,6 +3,7 @@ package episodes_test
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,6 +49,21 @@ func TestBuildReconstructsEpisodeAndSeparatesRiskFromCorrectionEvidence(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
+	attempts, err := episodes.ListVerifiedGenerationAttempts(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	audits, err := episodes.ListVerifiedGenerationAudits(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(attempts) != 1 || len(audits) != 1 ||
+		attempts[0].LedgerIndex >= audits[0].LedgerIndex ||
+		attempts[0].Attempt.SourceRecords+1 != attempts[0].LedgerIndex ||
+		audits[0].Audit.SourceRecords != attempts[0].LedgerIndex {
+		t.Fatalf("generation attempt was not durably committed before detector output: attempts=%+v audits=%+v",
+			attempts, audits)
+	}
 	if result.Episodes != 1 || result.TimelineEntries != 9 || result.Compactions != 3 ||
 		result.DriftEvidence != 1 || result.AtRisk != 1 || result.Reused {
 		t.Fatalf("unexpected build result: %+v", result)
@@ -88,6 +104,39 @@ func TestBuildReconstructsEpisodeAndSeparatesRiskFromCorrectionEvidence(t *testi
 	if !reused.Reused || reused.TimelineSHA256 != result.TimelineSHA256 ||
 		reused.EpisodesSHA256 != result.EpisodesSHA256 {
 		t.Fatalf("identical ledger did not reuse verified generation: %+v", reused)
+	}
+}
+
+func TestBuildCannotCreateDetectorOutputWhileAttemptMarkerIsBlocked(t *testing.T) {
+	store, err := ledger.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := ledger.InlinePayload("utf-8", "text/plain", "source")
+	now := time.Now().UTC()
+	if _, err := store.Append(ledger.Event{SchemaVersion: ledger.SchemaVersion,
+		EventID: "episode-attempt-lock-source", Kind: ledger.KindUserMessage,
+		ObservedAt: now, RecordedAt: now,
+		Source: ledger.Source{Agent: ledger.AgentCodex, Adapter: "test", AdapterVersion: "test/v1",
+			DeviceID: store.DeviceID(), ThreadID: "attempt-lock-thread"},
+		Payload: &payload, Completeness: ledger.Completeness{Status: ledger.CompletenessComplete},
+		Privacy: ledger.Privacy{Classification: "local_only"}}); err != nil {
+		t.Fatal(err)
+	}
+	appender, err := store.NewAppender()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := episodes.Build(store, episodes.BuildOptions{ShardCount: 1}); !errors.Is(err, ledger.ErrWriterLocked) {
+		_ = appender.Close()
+		t.Fatalf("build computed detector output without a durable attempt marker: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(store.Root(), "derived", "generations")); !errors.Is(err, os.ErrNotExist) {
+		_ = appender.Close()
+		t.Fatalf("blocked build exposed a detector generation: %v", err)
+	}
+	if err := appender.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -489,7 +489,7 @@ func (s *Store) ClearStaleWriterLock() (bool, error) {
 }
 
 func validateEvent(event Event) error {
-	if event.SchemaVersion != SchemaVersion {
+	if !validEventKindForVersion(event.SchemaVersion, event.Kind) {
 		return fmt.Errorf("unsupported event schema %q", event.SchemaVersion)
 	}
 	if event.EventID == "" || event.Kind == "" {
@@ -561,6 +561,34 @@ func validateEvent(event Event) error {
 	return nil
 }
 
+func validEventKindForVersion(version string, kind EventKind) bool {
+	base := false
+	switch kind {
+	case KindUserMessage, KindAgentMessage, KindReasoning, KindToolCall, KindToolResult,
+		KindApproval, KindFileChange, KindAttachment, KindSubagentEvent, KindCompaction,
+		KindSystemEvent, KindSourceSnapshot, KindRetrieval, KindInjection, KindAdoption,
+		KindEvaluationCorpus, KindEvaluationAttestation, KindTaskAttempt, KindEvaluationRun,
+		KindGap, KindUnknown:
+		base = true
+	}
+	if version == SchemaVersionV1Alpha1 {
+		return base
+	}
+	if version != SchemaVersionV1Alpha2 {
+		return false
+	}
+	if base {
+		return true
+	}
+	switch kind {
+	case KindCompactionGroundTruth, KindEvaluationTrialPlan, KindTaskExecutionStarted,
+		KindTaskExecutionReceipt, KindEpisodeGenerationAttempt, KindEpisodeGeneration,
+		KindTaskAttemptContract:
+		return true
+	default:
+		return false
+	}
+}
 func makeRecord(event Event, previous string) (Record, error) {
 	eventJSON, err := json.Marshal(event)
 	if err != nil {

@@ -90,6 +90,42 @@ func TestAppendAndVerifyInlineAndBlobEvents(t *testing.T) {
 	}
 }
 
+func TestLedgerAcceptsLegacyPrefixAndCurrentTailButRejectsNewKindsInV1Alpha1(t *testing.T) {
+	store, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_000, 0).UTC()
+	makeEvent := func(version string, kind EventKind, id string, offset time.Duration) Event {
+		payload := InlinePayload("utf-8", "application/json", `{"evidence":"bound"}`)
+		return Event{SchemaVersion: version, EventID: id, Kind: kind,
+			ObservedAt: now.Add(offset), RecordedAt: now.Add(offset),
+			Source: Source{Agent: AgentCodex, Adapter: "mixed-version-test", AdapterVersion: "v1",
+				DeviceID: store.DeviceID(), ThreadID: "mixed-version-thread"},
+			Payload: &payload, Completeness: Completeness{Status: CompletenessComplete},
+			Privacy: Privacy{Classification: "local_only"}}
+	}
+	if _, err := store.Append(makeEvent(SchemaVersionV1Alpha1, KindUserMessage,
+		"legacy-prefix-event", 0)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Append(makeEvent(SchemaVersionV1Alpha2, KindTaskAttemptContract,
+		"current-tail-event", time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if report := store.Verify(); len(report.Issues) != 0 || report.RecordsChecked != 2 {
+		t.Fatalf("mixed-version ledger did not verify: %+v", report)
+	}
+	if _, err := store.Append(makeEvent(SchemaVersionV1Alpha1, KindTaskAttemptContract,
+		"invalid-legacy-new-kind", 2*time.Second)); err == nil {
+		t.Fatal("v1alpha1 event accepted a v1alpha2-only kind")
+	}
+	if _, err := store.Append(makeEvent(SchemaVersionV1Alpha2, EventKind("invented_kind"),
+		"invalid-current-kind", 3*time.Second)); err == nil {
+		t.Fatal("v1alpha2 event accepted an unknown kind")
+	}
+}
+
 func TestMissingReasoningIsExplicit(t *testing.T) {
 	store, err := Init(t.TempDir())
 	if err != nil {

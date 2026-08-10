@@ -129,7 +129,24 @@ func (generation Generation) RequireCurrentEvidence(store *ledger.Store) error {
 	if len(report.Issues) != 0 {
 		return fmt.Errorf("evidence ledger verification failed: %s", strings.Join(report.Issues, "; "))
 	}
-	if prefix.Records != report.RecordsChecked || prefix.LastRecordHash != report.LastRecordHash {
+	if prefix.Records == report.RecordsChecked && prefix.LastRecordHash == report.LastRecordHash {
+		return nil
+	}
+	if report.RecordsChecked != prefix.Records+1 {
+		return errors.New("candidate generation does not cover the current evidence ledger prefix")
+	}
+	audits, err := episodes.ListVerifiedGenerationAudits(store)
+	if err != nil {
+		return fmt.Errorf("verify episode generation audit suffix: %w", err)
+	}
+	if len(audits) == 0 {
+		return errors.New("candidate generation does not cover the current evidence ledger prefix")
+	}
+	audited := audits[len(audits)-1]
+	if audited.LedgerIndex != report.RecordsChecked || audited.Record.RecordHash != report.LastRecordHash ||
+		audited.Audit.SourceRecords != prefix.Records ||
+		audited.Audit.SourceLastRecordHash != prefix.LastRecordHash ||
+		audited.Audit.GenerationName != generation.Manifest.SourceEpisodeGeneration {
 		return errors.New("candidate generation does not cover the current evidence ledger prefix")
 	}
 	return nil

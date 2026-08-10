@@ -11,8 +11,8 @@
     "retrieval", "outcomes", "gates", "release_ready", "issues", "report_sha256", "privacy"
   ],
   "properties": {
-    "schema_version": {"const": "learning-evaluation-report/v1alpha1"},
-    "evaluation_version": {"const": "learning-evaluation/v1alpha1"},
+    "schema_version": {"const": "learning-evaluation-report/v1alpha2"},
+    "evaluation_version": {"const": "learning-evaluation/v1alpha2"},
     "suite_id": {"$ref": "#/$defs/identifier"},
     "run_id": {"$ref": "#/$defs/identifier"},
     "input_sha256": {"$ref": "#/$defs/sha256"},
@@ -36,15 +36,6 @@
     "report_sha256": {"$ref": "#/$defs/sha256"},
     "privacy": {"const": "local_only"}
   },
-  "allOf": [
-    {
-      "if": {
-        "properties": {"quality_profile": {"const": "continuous_learning"}},
-        "required": ["quality_profile"]
-      },
-      "then": {"properties": {"release_ready": {"const": false}}}
-    }
-  ],
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "identifier": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,160}$"},
@@ -64,7 +55,7 @@
       "additionalProperties": false,
       "required": ["unit", "expected", "complete", "partial", "missing", "coverage", "observed_coverage"],
       "properties": {
-        "unit": {"enum": ["none", "evidence_events", "legacy_rollouts"]},
+        "unit": {"enum": ["none", "evidence_events", "legacy_rollouts", "source_inventory_items"]},
         "expected": {"type": "integer", "minimum": 0},
         "complete": {"type": "integer", "minimum": 0},
         "partial": {"type": "integer", "minimum": 0},
@@ -144,7 +135,7 @@
     "outcome_metrics": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pairs", "wins", "ties", "losses", "baseline_successes", "treatment_successes"],
+      "required": ["pairs", "wins", "ties", "losses", "baseline_successes", "treatment_successes", "token_pairs"],
       "properties": {
         "pairs": {"type": "integer", "minimum": 0},
         "wins": {"type": "integer", "minimum": 0},
@@ -152,6 +143,7 @@
         "losses": {"type": "integer", "minimum": 0},
         "baseline_successes": {"type": "integer", "minimum": 0},
         "treatment_successes": {"type": "integer", "minimum": 0},
+        "token_pairs": {"type": "integer", "minimum": 0},
         "mean_score_delta": {"type": "number", "minimum": -1, "maximum": 1},
         "success_rate_delta": {"type": "number", "minimum": -1, "maximum": 1},
         "mean_error_delta": {"type": "number"},

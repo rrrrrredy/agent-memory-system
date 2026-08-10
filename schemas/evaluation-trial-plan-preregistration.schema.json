@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/evaluation-trial-plan-preregistration.schema.json",
+  "title": "Atomic evaluation trial-plan preregistration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "plan", "event_id", "record_hash", "attempts", "privacy"],
+  "properties": {
+    "schema_version": {"const": "evaluation-trial-plan-preregistration/v1alpha1"},
+    "plan": {"$ref": "evaluation-trial-plan.schema.json"},
+    "event_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "record_hash": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "attempts": {
+      "type": "array", "minItems": 2, "uniqueItems": true,
+      "items": {
+        "allOf": [
+          {"$ref": "task-attempt-preregistration.schema.json"},
+          {"properties": {
+            "request": {"required": ["trial_plan_id", "trial_pair_id"]}
+          }}
+        ]
+      }
+    },
+    "privacy": {"const": "local_only"}
+  }
+}

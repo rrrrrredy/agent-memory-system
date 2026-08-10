@@ -10,20 +10,26 @@ import (
 )
 
 const (
-	CorpusManifestSchemaVersion   = "legacy-corpus-manifest/v1alpha1"
+	CorpusManifestSchemaVersion   = "legacy-corpus-manifest/v1alpha2"
 	CorpusFreezeResultSchema      = "legacy-corpus-freeze-result/v1alpha1"
 	CorpusVerifySchemaVersion     = "legacy-corpus-verification/v1alpha1"
-	EvaluationInputSchemaVersion  = "learning-evaluation-input/v1alpha1"
-	EvaluationReportSchema        = "learning-evaluation-report/v1alpha1"
-	EvaluationVersion             = "learning-evaluation/v1alpha1"
-	EvaluationAttestationSchema   = "learning-evaluation-attestation/v1alpha1"
+	EvaluationInputSchemaVersion  = "learning-evaluation-input/v1alpha2"
+	EvaluationReportSchema        = "learning-evaluation-report/v1alpha2"
+	EvaluationVersion             = "learning-evaluation/v1alpha2"
+	EvaluationAttestationSchema   = "learning-evaluation-attestation/v1alpha2"
 	AttestationResultSchema       = "learning-evaluation-attestation-result/v1alpha1"
-	TaskAttemptRequestSchema      = "task-attempt-request/v1alpha1"
-	TaskAttemptContractSchema     = "task-attempt-contract/v1alpha1"
-	TaskAttemptVerdictSchema      = "task-attempt-verdict/v1alpha1"
-	TaskAttemptReceiptSchema      = "task-attempt-receipt/v1alpha1"
+	TaskAttemptRequestSchema      = "task-attempt-request/v1alpha2"
+	TaskAttemptContractSchema     = "task-attempt-contract/v1alpha2"
+	TaskAttemptVerdictSchema      = "task-attempt-verdict/v1alpha2"
+	TaskAttemptReceiptSchema      = "task-attempt-receipt/v1alpha2"
 	TaskAttemptResultSchema       = "task-attempt-record-result/v1alpha1"
 	TaskAttemptVerificationSchema = "task-attempt-verification/v1alpha1"
+	TaskAttemptDraftSchema        = "task-attempt-draft/v1alpha1"
+	TaskAttemptPreregisterSchema  = "task-attempt-preregistration/v1alpha1"
+	TaskAttemptObservationSchema  = "task-attempt-observation-result/v1alpha1"
+	EvaluationPopulationSchema    = "learning-evaluation-population/v1alpha2"
+	OracleRegistrySchema          = "task-oracle-registry/v1alpha2"
+	OracleReplayInputSchema       = "task-oracle-replay-input/v1alpha2"
 	LegacyReviewPackSchema        = "legacy-regression-review-pack/v1alpha2"
 	LegacyReviewPackResultSchema  = "legacy-regression-review-pack-result/v1alpha2"
 	LegacyReviewQueueSchema       = "legacy-regression-review-queue/v1alpha1"
@@ -101,6 +107,7 @@ type CorpusManifest struct {
 	Name                       string             `json:"name"`
 	CreatedAt                  time.Time          `json:"created_at"`
 	SourceRootSHA256           string             `json:"source_root_sha256"`
+	IndexEntryLimit            int                `json:"index_entry_limit,omitempty"`
 	SourceLedgerLastRecordHash string             `json:"source_ledger_last_record_hash,omitempty"`
 	Artifacts                  []CorpusArtifact   `json:"artifacts"`
 	Rollouts                   []RolloutReference `json:"rollouts"`
@@ -110,8 +117,9 @@ type CorpusManifest struct {
 }
 
 type FreezeOptions struct {
-	Name string
-	Now  func() time.Time
+	Name            string
+	IndexEntryLimit int
+	Now             func() time.Time
 }
 
 type LegacyCaptureInputOptions struct {
@@ -332,7 +340,7 @@ type EvaluationAttestation struct {
 	Capture       *CaptureMeasurement       `json:"capture,omitempty"`
 	Memory        *MemoryMeasurement        `json:"memory,omitempty"`
 	Correction    *CorrectionMeasurement    `json:"correction,omitempty"`
-	Compaction    *CompactionMeasurement    `json:"compaction,omitempty"`
+	Compaction    *CompactionExpectation    `json:"compaction,omitempty"`
 	Retrieval     *RetrievalMeasurement     `json:"retrieval,omitempty"`
 	PairedOutcome *PairedOutcomeMeasurement `json:"paired_outcome,omitempty"`
 }
@@ -358,9 +366,10 @@ type CaptureMeasurement struct {
 type CaptureUnit string
 
 const (
-	CaptureUnitNone           CaptureUnit = "none"
-	CaptureUnitEvidenceEvents CaptureUnit = "evidence_events"
-	CaptureUnitLegacyRollouts CaptureUnit = "legacy_rollouts"
+	CaptureUnitNone            CaptureUnit = "none"
+	CaptureUnitEvidenceEvents  CaptureUnit = "evidence_events"
+	CaptureUnitLegacyRollouts  CaptureUnit = "legacy_rollouts"
+	CaptureUnitSourceInventory CaptureUnit = "source_inventory_items"
 )
 
 type MemoryLabel string
@@ -382,6 +391,7 @@ type MemoryMeasurement struct {
 
 type CorrectionMeasurement struct {
 	SemanticKeySHA256              string   `json:"semantic_key_sha256"`
+	InitialCorrectionAttemptID     string   `json:"initial_correction_attempt_id"`
 	AttemptIDs                     []string `json:"attempt_ids"`
 	EligibleFollowupOpportunities  int      `json:"eligible_followup_opportunities"`
 	RepeatedCorrections            int      `json:"repeated_corrections"`
@@ -400,6 +410,10 @@ type CompactionMeasurement struct {
 	CheckpointID string     `json:"checkpoint_id"`
 	Expected     DriftLabel `json:"expected"`
 	Observed     DriftLabel `json:"observed"`
+}
+type CompactionExpectation struct {
+	CheckpointID string     `json:"checkpoint_id"`
+	Expected     DriftLabel `json:"expected"`
 }
 
 type OutcomeLabel string
@@ -421,11 +435,12 @@ type RetrievalMeasurement struct {
 }
 
 type TrialMeasurement struct {
-	Success         bool    `json:"success"`
-	Score           float64 `json:"score"`
-	Errors          int     `json:"errors"`
-	UserCorrections int     `json:"user_corrections"`
-	TotalTokens     int     `json:"total_tokens"`
+	Success             bool    `json:"success"`
+	Score               float64 `json:"score"`
+	Errors              int     `json:"errors"`
+	UserCorrections     int     `json:"user_corrections"`
+	TokenCountEvaluated bool    `json:"token_count_evaluated"`
+	TotalTokens         int     `json:"total_tokens"`
 }
 
 type PairedOutcomeMeasurement struct {
@@ -442,8 +457,56 @@ const (
 	QualityProfileComponent            QualityProfile = "component"
 	QualityProfileContinuousLearning   QualityProfile = "continuous_learning"
 	EvaluationAuthorityMeasurementOnly                = "measurement_only"
-	ContinuousLearningEfficacyIssue                   = "continuous_learning efficacy is not evaluable: fixed versioned policy, complete population, and independently runnable oracle are not bound"
+	ContinuousLearningPolicyV1                        = "continuous-learning-policy/v1"
 )
+
+type EvaluationPopulation struct {
+	SchemaVersion            string                  `json:"schema_version"`
+	PolicyID                 string                  `json:"policy_id"`
+	EpisodeDerivationVersion string                  `json:"episode_derivation_version"`
+	EpisodesSHA256           string                  `json:"episodes_sha256"`
+	TimelineSHA256           string                  `json:"timeline_sha256"`
+	LedgerRecordCount        int                     `json:"ledger_record_count"`
+	LedgerLastRecordHash     string                  `json:"ledger_last_record_hash"`
+	PortableStateSHA256      string                  `json:"portable_state_sha256"`
+	PortableStateBlob        *ledger.BlobRef         `json:"portable_state_blob"`
+	OracleRegistrySHA256     string                  `json:"oracle_registry_sha256"`
+	OracleRegistryBlob       *ledger.BlobRef         `json:"oracle_registry_blob"`
+	SystemArtifactSHA256     string                  `json:"system_artifact_sha256"`
+	SystemUnderTestSHA256    map[ledger.Agent]string `json:"system_under_test_sha256"`
+	CaptureSnapshotSHA256    string                  `json:"capture_snapshot_sha256"`
+	CaptureSnapshotBlob      *ledger.BlobRef         `json:"capture_snapshot_blob"`
+	CorpusID                 string                  `json:"corpus_id"`
+	CorpusContentSHA256      string                  `json:"corpus_content_sha256"`
+	Prerequisites            EfficacyPrerequisites   `json:"efficacy_prerequisites"`
+	CaseSetSHA256            string                  `json:"case_set_sha256"`
+	CategoryCounts           map[CaseCategory]int    `json:"category_counts"`
+	RequiredAgents           []ledger.Agent          `json:"required_agents"`
+	UnpairedAttemptIDs       []string                `json:"unpaired_attempt_ids"`
+	PopulationIssues         []string                `json:"population_issues"`
+}
+
+// EfficacyPrerequisites records whether each independent denominator or
+// execution boundary required for an efficacy claim is actually bound. A
+// continuous-learning report remains measurement-only while any field is
+// false, regardless of metric values.
+type EfficacyPrerequisites struct {
+	FrozenCorpusVerified            bool `json:"frozen_corpus_verified"`
+	IndependentCaptureInventory     bool `json:"independent_capture_inventory"`
+	NormalizedProjectionCoverage    bool `json:"normalized_projection_coverage"`
+	CompletePortablePopulation      bool `json:"complete_portable_population"`
+	PreregisteredAttemptUniverse    bool `json:"preregistered_attempt_universe"`
+	PairedTrialPlanSealed           bool `json:"paired_trial_plan_sealed"`
+	ExecutionSupervisorReceipts     bool `json:"execution_supervisor_receipts"`
+	VerifiedAgentExecution          bool `json:"verified_agent_execution"`
+	SystemArtifactManifest          bool `json:"system_artifact_manifest"`
+	IndependentCompactionDetector   bool `json:"independent_compaction_detector"`
+	SealedCompactionGroundTruth     bool `json:"sealed_compaction_ground_truth"`
+	FrozenCompactionDriftControl    bool `json:"frozen_compaction_drift_control"`
+	FrozenCompactionPreserveControl bool `json:"frozen_compaction_preserve_control"`
+	BlindOracleProtocol             bool `json:"blind_oracle_protocol"`
+	HermeticOracleExecution         bool `json:"hermetic_oracle_execution"`
+}
 
 type EvaluationThresholds struct {
 	MinimumCaptureCoverage         *float64 `json:"minimum_capture_coverage,omitempty"`
@@ -461,16 +524,18 @@ type EvaluationThresholds struct {
 }
 
 type EvaluationInput struct {
-	SchemaVersion  string               `json:"schema_version"`
-	SuiteID        string               `json:"suite_id"`
-	RunID          string               `json:"run_id"`
-	CreatedAt      time.Time            `json:"created_at"`
-	SystemVersion  string               `json:"system_version"`
-	QualityProfile QualityProfile       `json:"quality_profile"`
-	CorpusID       string               `json:"corpus_id,omitempty"`
-	Cases          []EvaluationCase     `json:"cases"`
-	Thresholds     EvaluationThresholds `json:"thresholds"`
-	Privacy        string               `json:"privacy"`
+	SchemaVersion  string                `json:"schema_version"`
+	SuiteID        string                `json:"suite_id"`
+	RunID          string                `json:"run_id"`
+	CreatedAt      time.Time             `json:"created_at"`
+	SystemVersion  string                `json:"system_version"`
+	QualityProfile QualityProfile        `json:"quality_profile"`
+	PolicyID       string                `json:"policy_id,omitempty"`
+	Population     *EvaluationPopulation `json:"population,omitempty"`
+	CorpusID       string                `json:"corpus_id,omitempty"`
+	Cases          []EvaluationCase      `json:"cases"`
+	Thresholds     EvaluationThresholds  `json:"thresholds"`
+	Privacy        string                `json:"privacy"`
 }
 
 type RatioMetric struct {
@@ -540,6 +605,7 @@ type OutcomeMetrics struct {
 	Losses              int      `json:"losses"`
 	BaselineSuccesses   int      `json:"baseline_successes"`
 	TreatmentSuccesses  int      `json:"treatment_successes"`
+	TokenPairs          int      `json:"token_pairs"`
 	MeanScoreDelta      *float64 `json:"mean_score_delta,omitempty"`
 	SuccessRateDelta    *float64 `json:"success_rate_delta,omitempty"`
 	MeanErrorDelta      *float64 `json:"mean_error_delta,omitempty"`
@@ -591,8 +657,14 @@ type RunResult struct {
 }
 
 type RunOptions struct {
-	PortableRoot string
-	Now          func() time.Time
+	PortableRoot   string
+	OracleRegistry string
+	Now            func() time.Time
+}
+
+type RunVerificationOptions struct {
+	PortableRoot   string
+	OracleRegistry string
 }
 
 type RunVerificationReport struct {
@@ -613,21 +685,30 @@ const (
 )
 
 type TaskOracle struct {
-	Kind           string `json:"kind"`
-	ID             string `json:"id"`
-	Version        string `json:"version"`
-	VerdictEventID string `json:"verdict_event_id"`
+	Kind                string `json:"kind"`
+	ID                  string `json:"id"`
+	Version             string `json:"version"`
+	RegistryEntrySHA256 string `json:"registry_entry_sha256,omitempty"`
+	VerdictEventID      string `json:"verdict_event_id"`
 }
 
 type TaskAttemptRequest struct {
 	SchemaVersion            string                      `json:"schema_version"`
 	TaskID                   string                      `json:"task_id"`
 	AttemptID                string                      `json:"attempt_id"`
+	TrialPlanID              string                      `json:"trial_plan_id,omitempty"`
+	TrialPairID              string                      `json:"trial_pair_id,omitempty"`
 	Agent                    ledger.Agent                `json:"agent"`
 	SemanticKeySHA256        string                      `json:"semantic_key_sha256,omitempty"`
 	TaskSpecSHA256           string                      `json:"task_spec_sha256"`
 	AcceptanceCriteriaSHA256 string                      `json:"acceptance_criteria_sha256"`
 	ExecutionConfigSHA256    string                      `json:"execution_config_sha256"`
+	SystemArtifactSHA256     string                      `json:"system_artifact_sha256,omitempty"`
+	SystemUnderTestSHA256    string                      `json:"system_under_test_sha256,omitempty"`
+	SystemUnderTestBlob      *ledger.BlobRef             `json:"system_under_test_blob,omitempty"`
+	TaskSpecBlob             *ledger.BlobRef             `json:"task_spec_blob,omitempty"`
+	AcceptanceCriteriaBlob   *ledger.BlobRef             `json:"acceptance_criteria_blob,omitempty"`
+	ExecutionConfigBlob      *ledger.BlobRef             `json:"execution_config_blob,omitempty"`
 	Condition                TaskCondition               `json:"condition"`
 	WindowStartEventID       string                      `json:"window_start_event_id"`
 	WindowEndEventID         string                      `json:"window_end_event_id"`
@@ -640,18 +721,64 @@ type TaskAttemptRequest struct {
 }
 
 type TaskAttemptContract struct {
-	SchemaVersion            string        `json:"schema_version"`
-	TaskID                   string        `json:"task_id"`
-	AttemptID                string        `json:"attempt_id"`
-	Agent                    ledger.Agent  `json:"agent"`
-	SemanticKeySHA256        string        `json:"semantic_key_sha256"`
-	TaskSpecSHA256           string        `json:"task_spec_sha256"`
-	AcceptanceCriteriaSHA256 string        `json:"acceptance_criteria_sha256"`
-	ExecutionConfigSHA256    string        `json:"execution_config_sha256"`
-	Condition                TaskCondition `json:"condition"`
-	WindowEndEventID         string        `json:"window_end_event_id"`
-	Oracle                   TaskOracle    `json:"oracle"`
-	Privacy                  string        `json:"privacy"`
+	SchemaVersion            string          `json:"schema_version"`
+	TaskID                   string          `json:"task_id"`
+	AttemptID                string          `json:"attempt_id"`
+	TrialPlanID              string          `json:"trial_plan_id,omitempty"`
+	TrialPairID              string          `json:"trial_pair_id,omitempty"`
+	Agent                    ledger.Agent    `json:"agent"`
+	SemanticKeySHA256        string          `json:"semantic_key_sha256"`
+	TaskSpecSHA256           string          `json:"task_spec_sha256"`
+	AcceptanceCriteriaSHA256 string          `json:"acceptance_criteria_sha256"`
+	ExecutionConfigSHA256    string          `json:"execution_config_sha256"`
+	SystemArtifactSHA256     string          `json:"system_artifact_sha256"`
+	SystemUnderTestSHA256    string          `json:"system_under_test_sha256,omitempty"`
+	SystemUnderTestBlob      *ledger.BlobRef `json:"system_under_test_blob,omitempty"`
+	TaskSpecBlob             *ledger.BlobRef `json:"task_spec_blob,omitempty"`
+	AcceptanceCriteriaBlob   *ledger.BlobRef `json:"acceptance_criteria_blob,omitempty"`
+	ExecutionConfigBlob      *ledger.BlobRef `json:"execution_config_blob,omitempty"`
+	Condition                TaskCondition   `json:"condition"`
+	WindowEndEventID         string          `json:"window_end_event_id"`
+	Oracle                   TaskOracle      `json:"oracle"`
+	Privacy                  string          `json:"privacy"`
+}
+
+type TaskAttemptDraft struct {
+	SchemaVersion     string        `json:"schema_version"`
+	TaskID            string        `json:"task_id"`
+	AttemptID         string        `json:"attempt_id"`
+	Agent             ledger.Agent  `json:"agent"`
+	SemanticKeySHA256 string        `json:"semantic_key_sha256"`
+	Condition         TaskCondition `json:"condition"`
+	Privacy           string        `json:"privacy"`
+}
+
+type TaskAttemptPreregisterOptions struct {
+	ThreadID           string
+	SessionID          string
+	TaskSpec           []byte
+	AcceptanceCriteria []byte
+	ExecutionConfig    []byte
+	SystemUnderTest    []byte
+	OracleRegistryPath string
+	Now                func() time.Time
+}
+
+type TaskAttemptPreregistration struct {
+	SchemaVersion string             `json:"schema_version"`
+	Request       TaskAttemptRequest `json:"request"`
+	EventID       string             `json:"event_id"`
+	RecordHash    string             `json:"record_hash"`
+	Privacy       string             `json:"privacy"`
+}
+
+type TaskAttemptObservationResult struct {
+	SchemaVersion string `json:"schema_version"`
+	EventID       string `json:"event_id"`
+	RecordHash    string `json:"record_hash"`
+	PayloadSHA256 string `json:"payload_sha256"`
+	Reused        bool   `json:"reused"`
+	Privacy       string `json:"privacy"`
 }
 
 type TaskVerdict string
@@ -687,18 +814,19 @@ type LabeledUserMessage struct {
 }
 
 type TaskAttemptVerdict struct {
-	SchemaVersion  string               `json:"schema_version"`
-	TaskID         string               `json:"task_id"`
-	AttemptID      string               `json:"attempt_id"`
-	Verdict        TaskVerdict          `json:"verdict"`
-	Score          float64              `json:"score"`
-	TotalTokens    int                  `json:"total_tokens"`
-	ResultEvents   []LabeledResultEvent `json:"result_events"`
-	UserMessages   []LabeledUserMessage `json:"user_messages"`
-	TaskSpecSHA256 string               `json:"task_spec_sha256"`
-	CriteriaSHA256 string               `json:"acceptance_criteria_sha256"`
-	ConfigSHA256   string               `json:"execution_config_sha256"`
-	Privacy        string               `json:"privacy"`
+	SchemaVersion       string               `json:"schema_version"`
+	TaskID              string               `json:"task_id"`
+	AttemptID           string               `json:"attempt_id"`
+	Verdict             TaskVerdict          `json:"verdict"`
+	Score               float64              `json:"score"`
+	TokenCountEvaluated bool                 `json:"token_count_evaluated"`
+	TotalTokens         int                  `json:"total_tokens"`
+	ResultEvents        []LabeledResultEvent `json:"result_events"`
+	UserMessages        []LabeledUserMessage `json:"user_messages"`
+	TaskSpecSHA256      string               `json:"task_spec_sha256"`
+	CriteriaSHA256      string               `json:"acceptance_criteria_sha256"`
+	ConfigSHA256        string               `json:"execution_config_sha256"`
+	Privacy             string               `json:"privacy"`
 }
 
 type BoundEventReference struct {
@@ -713,11 +841,19 @@ type TaskAttemptReceipt struct {
 	RecordedAt               time.Time                   `json:"recorded_at"`
 	TaskID                   string                      `json:"task_id"`
 	AttemptID                string                      `json:"attempt_id"`
+	TrialPlanID              string                      `json:"trial_plan_id,omitempty"`
+	TrialPairID              string                      `json:"trial_pair_id,omitempty"`
 	Agent                    ledger.Agent                `json:"agent"`
 	SemanticKeySHA256        string                      `json:"semantic_key_sha256,omitempty"`
 	TaskSpecSHA256           string                      `json:"task_spec_sha256"`
 	AcceptanceCriteriaSHA256 string                      `json:"acceptance_criteria_sha256"`
 	ExecutionConfigSHA256    string                      `json:"execution_config_sha256"`
+	SystemArtifactSHA256     string                      `json:"system_artifact_sha256"`
+	SystemUnderTestSHA256    string                      `json:"system_under_test_sha256,omitempty"`
+	SystemUnderTestBlob      *ledger.BlobRef             `json:"system_under_test_blob,omitempty"`
+	TaskSpecBlob             *ledger.BlobRef             `json:"task_spec_blob,omitempty"`
+	AcceptanceCriteriaBlob   *ledger.BlobRef             `json:"acceptance_criteria_blob,omitempty"`
+	ExecutionConfigBlob      *ledger.BlobRef             `json:"execution_config_blob,omitempty"`
 	Condition                TaskCondition               `json:"condition"`
 	WindowStart              BoundEventReference         `json:"window_start"`
 	WindowEnd                BoundEventReference         `json:"window_end"`
@@ -751,4 +887,66 @@ type TaskAttemptVerification struct {
 	EventsChecked int      `json:"events_checked"`
 	Issues        []string `json:"issues"`
 	Privacy       string   `json:"privacy"`
+}
+
+type OracleRegistry struct {
+	SchemaVersion string                `json:"schema_version"`
+	Entries       []OracleRegistryEntry `json:"entries"`
+	Privacy       string                `json:"privacy"`
+}
+
+type OracleRegistryEntry struct {
+	Kind             string   `json:"kind"`
+	ID               string   `json:"id"`
+	Version          string   `json:"version"`
+	Executable       string   `json:"executable"`
+	ExecutableSHA256 string   `json:"executable_sha256"`
+	Arguments        []string `json:"arguments"`
+	TimeoutSeconds   int      `json:"timeout_seconds"`
+}
+
+type OracleReplayEvent struct {
+	EventID    string           `json:"event_id"`
+	Kind       ledger.EventKind `json:"kind"`
+	Payload    []byte           `json:"payload"`
+	RecordHash string           `json:"record_hash"`
+}
+
+type OracleReplayInput struct {
+	SchemaVersion      string              `json:"schema_version"`
+	TaskID             string              `json:"task_id"`
+	AttemptID          string              `json:"attempt_id"`
+	Condition          TaskCondition       `json:"condition"`
+	TaskSpec           []byte              `json:"task_spec"`
+	OrderedEvents      []OracleReplayEvent `json:"ordered_events"`
+	AcceptanceCriteria []byte              `json:"acceptance_criteria"`
+	ExecutionConfig    []byte              `json:"execution_config"`
+	ResultEvents       []OracleReplayEvent `json:"result_events"`
+	UserMessages       []OracleReplayEvent `json:"user_messages"`
+	Privacy            string              `json:"privacy"`
+}
+
+const SystemUnderTestManifestSchema = "system-under-test-manifest/v1alpha2"
+
+type SystemUnderTestManifest struct {
+	SchemaVersion      string         `json:"schema_version"`
+	Agent              ledger.Agent   `json:"agent"`
+	Provider           string         `json:"provider"`
+	Model              string         `json:"model"`
+	SystemPromptSHA256 string         `json:"system_prompt_sha256"`
+	SystemPromptBlob   ledger.BlobRef `json:"system_prompt_blob"`
+	ToolRegistrySHA256 string         `json:"tool_registry_sha256"`
+	ToolRegistryBlob   ledger.BlobRef `json:"tool_registry_blob"`
+	HarnessSHA256      string         `json:"harness_sha256"`
+	HarnessBlob        ledger.BlobRef `json:"harness_blob"`
+	AdapterSHA256      string         `json:"adapter_sha256"`
+	AdapterBlob        ledger.BlobRef `json:"adapter_blob"`
+	Privacy            string         `json:"privacy"`
+}
+
+type SystemUnderTestArtifacts struct {
+	SystemPrompt []byte
+	ToolRegistry []byte
+	Harness      []byte
+	Adapter      []byte
 }

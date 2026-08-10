@@ -27,26 +27,35 @@ const (
 var auditNamePattern = regexp.MustCompile(`^([0-9]{20})-([0-9a-f]{64})\.json$`)
 
 type replayState struct {
-	LastSequence        uint64
-	LastEventSHA256     string
-	ConfigSHA256        string
-	RunsCompleted       uint64
-	ActiveRunID         string
-	ActiveRunStarted    *time.Time
-	LastRunID           string
-	LastRunStartedAt    *time.Time
-	LastRunFinishedAt   *time.Time
-	LastRunOutcome      string
-	Sources             map[string]SourceStatus
-	LastInventories     map[string]string
-	LastInventoryDetail map[string]Inventory
-	ConfigReferences    map[string]struct{}
-	InventoryReferences map[string]struct{}
-	ActiveSources       map[string]Source
-	ActiveInventories   map[string][]Inventory
-	ActiveResults       map[string]SourceResult
-	ActiveFullReconcile bool
-	Warnings            []Issue
+	LastSequence               uint64
+	LastEventSHA256            string
+	ConfigSHA256               string
+	RunsCompleted              uint64
+	ActiveRunID                string
+	ActiveRunStarted           *time.Time
+	LastRunID                  string
+	LastRunStartedAt           *time.Time
+	LastRunFinishedAt          *time.Time
+	LastRunOutcome             string
+	Sources                    map[string]SourceStatus
+	LastInventories            map[string]string
+	LastInventoryDetail        map[string]Inventory
+	ConfigReferences           map[string]struct{}
+	InventoryReferences        map[string]struct{}
+	ActiveSources              map[string]Source
+	ActiveInventories          map[string][]Inventory
+	LastCompletedRunID         string
+	LastCompletedConfigSHA256  string
+	LastCompletedOutcome       string
+	LastCompletedAuditSHA256   string
+	LastCompletedAt            time.Time
+	LastCompletedFullReconcile bool
+	LastCompletedSources       map[string]Source
+	LastCompletedInventories   map[string][]Inventory
+	LastCompletedResults       map[string]SourceResult
+	ActiveResults              map[string]SourceResult
+	ActiveFullReconcile        bool
+	Warnings                   []Issue
 }
 
 var errOperationLocked = errors.New("capture supervisor operation lock is held")
@@ -249,24 +258,31 @@ func validateOpenedLockFile(path string, file *os.File) error {
 }
 
 func replayAudit(store *ledger.Store) (replayState, error) {
-	state := replayState{
-		Sources: map[string]SourceStatus{}, LastInventories: map[string]string{},
-		LastInventoryDetail: map[string]Inventory{}, ActiveInventories: map[string][]Inventory{},
-		ActiveResults:    map[string]SourceResult{},
-		ConfigReferences: map[string]struct{}{}, InventoryReferences: map[string]struct{}{},
-		ActiveSources: map[string]Source{}, Warnings: []Issue{},
+	return replayAuditThrough(store, "")
+}
+
+// replayAuditThrough replays a verified audit prefix ending at targetSHA. An
+// empty target preserves replayAudit's behavior and replays the entire audit.
+func replayAuditThrough(store *ledger.Store, targetSHA string) (replayState, error) {
+	state := newReplayState()
+	if targetSHA != "" && !validSHA256(targetSHA) {
+		return state, errors.New("capture supervisor audit target hash is invalid")
 	}
 	if err := ensureStateSafe(store); err != nil {
 		return state, err
 	}
 	entries, err := os.ReadDir(auditRoot(store))
 	if errors.Is(err, os.ErrNotExist) {
+		if targetSHA != "" {
+			return state, errors.New("capture supervisor audit target is unavailable")
+		}
 		return state, nil
 	}
 	if err != nil {
 		return state, fmt.Errorf("read capture supervisor audit: %w", err)
 	}
 	sort.Slice(entries, func(left, right int) bool { return entries[left].Name() < entries[right].Name() })
+	foundTarget := targetSHA == ""
 	for _, entry := range entries {
 		if entry.IsDir() {
 			return state, errors.New("capture supervisor audit contains an unexpected directory")
@@ -318,15 +334,40 @@ func replayAudit(store *ledger.Store) (replayState, error) {
 			state.ActiveInventories[event.SourceID] = append(state.ActiveInventories[event.SourceID], inventory)
 		}
 		applyEvent(&state, event)
+		if targetSHA != "" && event.EventSHA256 == targetSHA {
+			if event.Action != "run_finished" || event.Outcome != "success" {
+				return state, errors.New("capture supervisor audit target is not a successful run_finished event")
+			}
+			foundTarget = true
+			break
+		}
+	}
+	if !foundTarget {
+		return state, errors.New("capture supervisor audit target is unavailable")
 	}
 	if err := verifyReferencedObjects(store, state); err != nil {
 		return state, err
 	}
-	state.Warnings = append(state.Warnings,
-		inspectStateOrphans(configRoot(store), state.ConfigReferences, "config")...)
-	state.Warnings = append(state.Warnings,
-		inspectStateOrphans(inventoryRoot(store), state.InventoryReferences, "inventory")...)
+	if targetSHA == "" {
+		state.Warnings = append(state.Warnings,
+			inspectStateOrphans(configRoot(store), state.ConfigReferences, "config")...)
+		state.Warnings = append(state.Warnings,
+			inspectStateOrphans(inventoryRoot(store), state.InventoryReferences, "inventory")...)
+	}
 	return state, nil
+}
+
+func newReplayState() replayState {
+	return replayState{
+		Sources: map[string]SourceStatus{}, LastInventories: map[string]string{},
+		LastInventoryDetail: map[string]Inventory{}, ActiveInventories: map[string][]Inventory{},
+		LastCompletedSources:     map[string]Source{},
+		LastCompletedInventories: map[string][]Inventory{},
+		LastCompletedResults:     map[string]SourceResult{},
+		ActiveResults:            map[string]SourceResult{},
+		ConfigReferences:         map[string]struct{}{}, InventoryReferences: map[string]struct{}{},
+		ActiveSources: map[string]Source{}, Warnings: []Issue{},
+	}
 }
 
 func appendEvent(store *ledger.Store, event Event, prior replayState) (replayState, error) {
@@ -514,6 +555,15 @@ func applyEvent(state *replayState, event Event) {
 	if state.ActiveInventories == nil {
 		state.ActiveInventories = map[string][]Inventory{}
 	}
+	if state.LastCompletedSources == nil {
+		state.LastCompletedSources = map[string]Source{}
+	}
+	if state.LastCompletedInventories == nil {
+		state.LastCompletedInventories = map[string][]Inventory{}
+	}
+	if state.LastCompletedResults == nil {
+		state.LastCompletedResults = map[string]SourceResult{}
+	}
 	if state.ActiveResults == nil {
 		state.ActiveResults = map[string]SourceResult{}
 	}
@@ -559,6 +609,17 @@ func applyEvent(state *replayState, event Event) {
 		}
 		state.Sources[event.SourceID] = status
 	case "run_finished", "run_abandoned":
+		if event.Action == "run_finished" {
+			state.LastCompletedRunID = event.RunID
+			state.LastCompletedConfigSHA256 = event.ConfigSHA256
+			state.LastCompletedOutcome = event.Outcome
+			state.LastCompletedAuditSHA256 = event.EventSHA256
+			state.LastCompletedAt = event.ObservedAt.UTC()
+			state.LastCompletedFullReconcile = state.ActiveFullReconcile
+			state.LastCompletedSources = cloneSources(state.ActiveSources)
+			state.LastCompletedInventories = cloneInventories(state.ActiveInventories)
+			state.LastCompletedResults = cloneSourceResults(state.ActiveResults)
+		}
 		finished := event.ObservedAt
 		state.LastRunFinishedAt = &finished
 		state.LastRunOutcome = event.Outcome
@@ -576,12 +637,41 @@ func applyEvent(state *replayState, event Event) {
 func validateInventoryEventBinding(inventory Inventory, event Event, configured map[string]Source) error {
 	source, exists := configured[event.SourceID]
 	sourceConfigSHA256, err := sourceSHA256(source)
+
 	if !exists || inventory.RunID != event.RunID || inventory.SourceID != event.SourceID ||
 		inventory.Agent != source.Agent || inventory.Kind != source.Kind || err != nil ||
 		inventory.SourceConfigSHA256 != sourceConfigSHA256 {
 		return errors.New("capture inventory binding is invalid")
 	}
 	return nil
+}
+
+func cloneSources(input map[string]Source) map[string]Source {
+	cloned := make(map[string]Source, len(input))
+	for id, source := range input {
+		cloned[id] = source
+	}
+	return cloned
+}
+
+func cloneInventories(input map[string][]Inventory) map[string][]Inventory {
+	cloned := make(map[string][]Inventory, len(input))
+	for id, inventories := range input {
+		cloned[id] = make([]Inventory, len(inventories))
+		for index, inventory := range inventories {
+			cloned[id][index] = inventory
+			cloned[id][index].Items = append([]InventoryItem(nil), inventory.Items...)
+		}
+	}
+	return cloned
+}
+
+func cloneSourceResults(input map[string]SourceResult) map[string]SourceResult {
+	cloned := make(map[string]SourceResult, len(input))
+	for id, result := range input {
+		cloned[id] = result
+	}
+	return cloned
 }
 
 func (state replayState) sourceCompleted(sourceID string) bool {

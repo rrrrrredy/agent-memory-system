@@ -323,6 +323,7 @@ func assertSixCategoryQualityGate(
 	}
 	correctionMeasurement := evaluation.CorrectionMeasurement{
 		SemanticKeySHA256:             candidate.SemanticKeySHA256,
+		InitialCorrectionAttemptID:    baselineAttempt.Receipt.ReceiptID,
 		AttemptIDs:                    []string{treatmentAttempt.Receipt.ReceiptID},
 		EligibleFollowupOpportunities: 1, RepeatedCorrections: 0, RepeatedCorrectionsAfterMemory: 0,
 	}
@@ -347,8 +348,9 @@ func assertSixCategoryQualityGate(
 			SchemaVersion: evaluation.EvaluationAttestationSchema, AttestationID: "quality-drift-label",
 			CaseID: "compaction-drift", Category: evaluation.CategoryCompactionDrift, Agent: ledger.AgentCodex,
 			Attestor: evaluation.Attestor{Kind: "human", ID: "owner"}, AttestedAt: now.Add(6 * time.Second),
-			Reason:     "The expected and observed continuity labels were independently reviewed.",
-			Compaction: &driftMeasurement,
+			Reason: "The expected continuity label was independently reviewed.",
+			Compaction: &evaluation.CompactionExpectation{
+				CheckpointID: driftMeasurement.CheckpointID, Expected: driftMeasurement.Expected},
 		},
 	} {
 		attested, err := evaluation.RecordAttestation(store, attestation,
@@ -375,7 +377,7 @@ func assertSixCategoryQualityGate(
 	input := evaluation.EvaluationInput{
 		SchemaVersion: evaluation.EvaluationInputSchemaVersion,
 		SuiteID:       "six-category-quality", RunID: "quality-run-1", CreatedAt: now.Add(9 * time.Second),
-		SystemVersion: "acceptance-v1", QualityProfile: evaluation.QualityProfileContinuousLearning,
+		SystemVersion: "acceptance-v1", QualityProfile: evaluation.QualityProfileComponent,
 		Privacy: "local_only",
 		Thresholds: evaluation.EvaluationThresholds{
 			MinimumCaptureCoverage: &one, MaximumFalseMemoryRate: &zero,
@@ -405,6 +407,7 @@ func assertSixCategoryQualityGate(
 				CaseID: "repeated-correction", Category: evaluation.CategoryRepeatedCorrection,
 				Agent: ledger.AgentCodex,
 				Evidence: []evaluation.EvidenceReference{
+					ledgerReference(baselineAttempt.Receipt.ReceiptID),
 					ledgerReference(treatmentAttempt.Receipt.ReceiptID),
 				},
 				Correction: &correctionMeasurement,
@@ -448,11 +451,10 @@ func assertSixCategoryQualityGate(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Report.ReleaseReady || result.Report.Authority != evaluation.EvaluationAuthorityMeasurementOnly ||
-		len(result.Report.Issues) != 1 || result.Report.Issues[0] != evaluation.ContinuousLearningEfficacyIssue ||
-		result.Report.CasesChecked != 6 || result.Report.AttestedReferences != 2 ||
+	if !result.Report.ReleaseReady || result.Report.Authority != evaluation.EvaluationAuthorityMeasurementOnly ||
+		len(result.Report.Issues) != 0 || result.Report.CasesChecked != 6 || result.Report.AttestedReferences != 2 ||
 		len(result.Report.Gates) != 12 {
-		t.Fatalf("six-category diagnostic report crossed its authority boundary: %+v", result.Report)
+		t.Fatalf("six-category component report did not pass its evidence gates: %+v", result.Report)
 	}
 	for _, gate := range result.Report.Gates {
 		if gate.Status != "pass" {
@@ -525,21 +527,25 @@ func recordComparableTaskAttempts(t *testing.T, store *ledger.Store, repository,
 	if err != nil {
 		t.Fatal(err)
 	}
-	appendEvent(baseline.WindowStartEventID, ledger.KindSystemEvent,
+	appendEvent(baseline.WindowStartEventID, ledger.KindTaskAttemptContract,
 		baseline.WindowStartEventID, string(baselineContract), now)
+	baselineCorrectionID := "quality-baseline-correction"
+	appendEvent(baselineCorrectionID, ledger.KindUserMessage,
+		baseline.WindowStartEventID, "The report must stay local.", now.Add(time.Second), baseline.WindowStartEventID)
 	appendEvent(baseline.WindowEndEventID, ledger.KindToolResult,
-		baseline.WindowStartEventID, "acceptance check failed", now.Add(time.Second), baseline.WindowStartEventID)
+		baseline.WindowStartEventID, "acceptance check failed", now.Add(2*time.Second), baselineCorrectionID)
 	appendVerdict(baseline, evaluation.TaskAttemptVerdict{
 		SchemaVersion: evaluation.TaskAttemptVerdictSchema, TaskID: baseline.TaskID,
 		AttemptID: baseline.AttemptID, Verdict: evaluation.TaskVerdictFail, Score: 0.4,
-		TotalTokens: 500,
+		TokenCountEvaluated: true, TotalTokens: 500,
 		ResultEvents: []evaluation.LabeledResultEvent{{EventID: baseline.WindowEndEventID,
-			Label: evaluation.ResultLabelError}}, UserMessages: []evaluation.LabeledUserMessage{},
+			Label: evaluation.ResultLabelError}}, UserMessages: []evaluation.LabeledUserMessage{{
+			EventID: baselineCorrectionID, Label: evaluation.UserMessageCorrection}},
 		TaskSpecSHA256: baseline.TaskSpecSHA256, CriteriaSHA256: baseline.AcceptanceCriteriaSHA256,
 		ConfigSHA256: baseline.ExecutionConfigSHA256, Privacy: "local_only",
-	}, now.Add(2*time.Second), baseline.WindowEndEventID)
+	}, now.Add(3*time.Second), baseline.WindowEndEventID)
 	baselineResult, err := evaluation.RecordTaskAttempt(store, baseline,
-		func() time.Time { return now.Add(3 * time.Second) })
+		func() time.Time { return now.Add(4 * time.Second) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -550,7 +556,7 @@ func recordComparableTaskAttempts(t *testing.T, store *ledger.Store, repository,
 	if err != nil {
 		t.Fatal(err)
 	}
-	appendEvent(treatment.WindowStartEventID, ledger.KindSystemEvent,
+	appendEvent(treatment.WindowStartEventID, ledger.KindTaskAttemptContract,
 		treatment.WindowStartEventID, string(treatmentContract), now.Add(4*time.Second))
 	contextValue := retrieval.Context{Agent: ledger.AgentCodex, ThreadID: treatment.WindowStartEventID,
 		SessionID: treatment.WindowStartEventID, Channel: retrieval.ChannelHarness}
@@ -566,15 +572,6 @@ func recordComparableTaskAttempts(t *testing.T, store *ledger.Store, repository,
 	treatment.MemoryReferences = delivered.Memories
 	appendEvent(treatment.WindowEndEventID, ledger.KindToolResult,
 		treatment.WindowStartEventID, "acceptance check passed", now.Add(5*time.Second), treatment.InjectionID)
-	appendVerdict(treatment, evaluation.TaskAttemptVerdict{
-		SchemaVersion: evaluation.TaskAttemptVerdictSchema, TaskID: treatment.TaskID,
-		AttemptID: treatment.AttemptID, Verdict: evaluation.TaskVerdictPass, Score: 0.9,
-		TotalTokens: 400,
-		ResultEvents: []evaluation.LabeledResultEvent{{EventID: treatment.WindowEndEventID,
-			Label: evaluation.ResultLabelSuccess}}, UserMessages: []evaluation.LabeledUserMessage{},
-		TaskSpecSHA256: treatment.TaskSpecSHA256, CriteriaSHA256: treatment.AcceptanceCriteriaSHA256,
-		ConfigSHA256: treatment.ExecutionConfigSHA256, Privacy: "local_only",
-	}, now.Add(6*time.Second), treatment.WindowEndEventID)
 	adoption, err := retrieval.RecordAdoption(store, contextValue, retrieval.AdoptionRequest{
 		SchemaVersion:      retrieval.AdoptionRequestSchemaVersion,
 		Reporter:           retrieval.Reporter{Kind: "harness", ID: "deterministic-checker"},
@@ -586,6 +583,15 @@ func recordComparableTaskAttempts(t *testing.T, store *ledger.Store, repository,
 	if err != nil {
 		t.Fatal(err)
 	}
+	appendVerdict(treatment, evaluation.TaskAttemptVerdict{
+		SchemaVersion: evaluation.TaskAttemptVerdictSchema, TaskID: treatment.TaskID,
+		AttemptID: treatment.AttemptID, Verdict: evaluation.TaskVerdictPass, Score: 0.9,
+		TokenCountEvaluated: true, TotalTokens: 400,
+		ResultEvents: []evaluation.LabeledResultEvent{{EventID: treatment.WindowEndEventID,
+			Label: evaluation.ResultLabelSuccess}}, UserMessages: []evaluation.LabeledUserMessage{},
+		TaskSpecSHA256: treatment.TaskSpecSHA256, CriteriaSHA256: treatment.AcceptanceCriteriaSHA256,
+		ConfigSHA256: treatment.ExecutionConfigSHA256, Privacy: "local_only",
+	}, now.Add(6*time.Second), treatment.WindowEndEventID)
 	treatment.AdoptionID = adoption.AdoptionID
 	treatmentResult, err := evaluation.RecordTaskAttempt(store, treatment,
 		func() time.Time { return now.Add(7 * time.Second) })

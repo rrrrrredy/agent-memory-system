@@ -1,6 +1,8 @@
 package evaluation
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -82,35 +84,23 @@ func TestRunRejectsMeasurementThatDoesNotMatchEvidence(t *testing.T) {
 	}
 }
 
-func TestVerifyRunRejectsRemovedContinuousEfficacyIssue(t *testing.T) {
-	store, err := ledger.Init(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestDecodeRejectsLegacyUnboundContinuousInput(t *testing.T) {
 	file, err := os.Open(filepath.Join("..", "..", "evals", "fixtures", "quality-pass.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	input, err := DecodeInput(file)
+	component, err := DecodeInput(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Unix(225, 0).UTC()
-	result, err := Run(store, input, RunOptions{Now: func() time.Time { return now }})
+	component.QualityProfile = QualityProfileContinuousLearning
+	data, err := json.Marshal(component)
 	if err != nil {
 		t.Fatal(err)
 	}
-	forged := result.Report
-	forged.Issues = removeIssue(forged.Issues, ContinuousLearningEfficacyIssue)
-	if len(forged.Issues) != len(result.Report.Issues)-1 {
-		t.Fatalf("continuous efficacy issue was unavailable: %+v", result.Report.Issues)
-	}
-	persistForgedEvaluationRun(t, store, input, forged, result.ReportPath,
-		now.Add(time.Second), nil)
-	verification := VerifyRun(store, input.SuiteID, input.RunID)
-	if !containsIssue(verification.Issues, "complete evidence replay") {
-		t.Fatalf("continuous report without efficacy blocker passed verification: %+v", verification)
+	if _, err := DecodeInput(bytes.NewReader(data)); err == nil || !strings.Contains(err.Error(), "fixed policy") {
+		t.Fatalf("legacy unbound continuous input was accepted: %v", err)
 	}
 }
 
@@ -214,7 +204,7 @@ func TestRunRequiresARecordedAttestationForInterpretedMeasurements(t *testing.T)
 		SchemaVersion: EvaluationAttestationSchema, AttestationID: "compaction-label-1",
 		CaseID: "compaction", Category: CategoryCompactionDrift, Agent: ledger.AgentCodex,
 		Attestor: Attestor{Kind: "human", ID: "owner"}, AttestedAt: now.Add(time.Second),
-		Reason: "The expected and observed continuity labels were reviewed.", Compaction: &measurement,
+		Reason: "The expected continuity label was reviewed.", Compaction: &CompactionExpectation{CheckpointID: measurement.CheckpointID, Expected: measurement.Expected},
 	}
 	attested, err := RecordAttestation(store, attestation,
 		func() time.Time { return now.Add(2 * time.Second) })
@@ -247,14 +237,14 @@ func TestRunRequiresARecordedAttestationForInterpretedMeasurements(t *testing.T)
 
 	input.RunID = "run-2"
 	input.Cases[0].Compaction = &CompactionMeasurement{
-		CheckpointID: "checkpoint-1", Expected: DriftDetected, Observed: DriftPreserved,
+		CheckpointID: "checkpoint-1", Expected: DriftPreserved, Observed: DriftDetected,
 	}
 	mismatched, err := Run(store, input, RunOptions{Now: func() time.Time { return now.Add(4 * time.Second) }})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if mismatched.Report.ReleaseReady ||
-		!containsIssue(mismatched.Report.Issues, "attestation measurement does not match") {
+		!containsIssue(mismatched.Report.Issues, "attestation ground truth does not match") {
 		t.Fatalf("mismatched attestation was accepted: %+v", mismatched.Report)
 	}
 }

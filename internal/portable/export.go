@@ -126,12 +126,19 @@ func Export(store *ledger.Store, repositoryRoot string, options ExportOptions) (
 // ResolveSemanticKey maps a portable revision back to its verified local
 // promotion source without adding private provenance to the portable format.
 func ResolveSemanticKey(store *ledger.Store, memoryID, portableRevisionID string) (string, error) {
+	_, semanticKey, err := ResolveLocalRevision(store, memoryID, portableRevisionID)
+	return semanticKey, err
+}
+
+// ResolveLocalRevision reconstructs the exact portable projection backed by a
+// verified local promotion revision and returns its private semantic key.
+func ResolveLocalRevision(store *ledger.Store, memoryID, portableRevisionID string) (Revision, string, error) {
 	if store == nil {
-		return "", errors.New("store is required")
+		return Revision{}, "", errors.New("store is required")
 	}
 	histories, err := promotion.ListHistories(store)
 	if err != nil {
-		return "", err
+		return Revision{}, "", err
 	}
 	for _, history := range histories {
 		if history.MemoryID != memoryID {
@@ -139,7 +146,7 @@ func ResolveSemanticKey(store *ledger.Store, memoryID, portableRevisionID string
 		}
 		projected, err := projectHistory(history)
 		if err != nil {
-			return "", err
+			return Revision{}, "", err
 		}
 		for index, revision := range projected {
 			if revision.RevisionID != portableRevisionID {
@@ -147,13 +154,57 @@ func ResolveSemanticKey(store *ledger.Store, memoryID, portableRevisionID string
 			}
 			if index >= len(history.Revisions) || history.Revisions[index].Source == nil ||
 				history.Revisions[index].Source.SemanticKeySHA256 == "" {
-				return "", errors.New("portable revision has no local semantic source")
+				return Revision{}, "", errors.New("portable revision has no local semantic source")
 			}
-			return history.Revisions[index].Source.SemanticKeySHA256, nil
+			return revision, history.Revisions[index].Source.SemanticKeySHA256, nil
 		}
-		return "", errors.New("portable revision is absent from its local promotion history")
+		return Revision{}, "", errors.New("portable revision is absent from its local promotion history")
 	}
-	return "", errors.New("portable memory is absent from local promotion history")
+	return Revision{}, "", errors.New("portable memory is absent from local promotion history")
+}
+
+// LoadLocalPopulation reconstructs the complete portable projection of every
+// verified local promotion history. Active heads must remain export-eligible.
+func LoadLocalPopulation(store *ledger.Store) (map[string]Revision, []Revision, error) {
+	if store == nil {
+		return nil, nil, errors.New("store is required")
+	}
+	histories, err := promotion.ListHistories(store)
+	if err != nil {
+		return nil, nil, err
+	}
+	revisions := map[string]Revision{}
+	active := []Revision{}
+	for _, history := range histories {
+		if len(history.Revisions) == 0 {
+			return nil, nil, fmt.Errorf("promotion history %s is empty", history.MemoryID)
+		}
+		projected, projectErr := projectHistory(history)
+		if projectErr != nil {
+			return nil, nil, projectErr
+		}
+		for _, revision := range projected {
+			if _, duplicate := revisions[revision.RevisionID]; duplicate {
+				return nil, nil, fmt.Errorf("portable revision %s is duplicated", revision.RevisionID)
+			}
+			revisions[revision.RevisionID] = revision
+		}
+		currentLocal := history.Revisions[len(history.Revisions)-1]
+		currentPortable := projected[len(projected)-1]
+		if currentLocal.Status != promotion.StatusActive {
+			continue
+		}
+		status, statusErr := promotion.GetStatus(store, history.MemoryID)
+		if statusErr != nil {
+			return nil, nil, statusErr
+		}
+		if status.CurrentRevisionID != currentLocal.RevisionID || !status.ExportEligible {
+			return nil, nil, fmt.Errorf("active memory %s is not eligible for portable export", history.MemoryID)
+		}
+		active = append(active, currentPortable)
+	}
+	sort.Slice(active, func(i, j int) bool { return active[i].RevisionID < active[j].RevisionID })
+	return revisions, active, nil
 }
 
 func projectHistory(history promotion.History) ([]Revision, error) {

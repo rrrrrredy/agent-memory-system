@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -18,7 +19,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/retrieval"
 )
 
-const taskAttemptAdapterVersion = "task-attempt/v1alpha1"
+const taskAttemptAdapterVersion = "task-attempt/v1alpha2"
 
 type indexedRecord struct {
 	Record ledger.Record
@@ -51,7 +52,13 @@ func RecordTaskAttempt(store *ledger.Store, request TaskAttemptRequest,
 		return result, errors.New("store is required")
 	}
 	request.MemoryReferences = append([]retrieval.MemoryReference{}, request.MemoryReferences...)
+	if err := bindCurrentSystemArtifact(&request); err != nil {
+		return result, err
+	}
 	if err := validateTaskAttemptRequest(request); err != nil {
+		return result, err
+	}
+	if err := validateAttemptBlobs(store, request); err != nil {
 		return result, err
 	}
 	if request.Condition == TaskConditionMemory {
@@ -211,6 +218,9 @@ func deriveTaskAttempt(store *ledger.Store, request TaskAttemptRequest, requestS
 	if err := validateTaskAttemptRequest(request); err != nil {
 		return TaskAttemptReceipt{}, nil, err
 	}
+	if err := validateAttemptBlobs(store, request); err != nil {
+		return TaskAttemptReceipt{}, nil, err
+	}
 	required := []string{request.WindowStartEventID, request.WindowEndEventID,
 		request.Oracle.VerdictEventID}
 	if request.Condition == TaskConditionMemory {
@@ -248,7 +258,7 @@ func deriveTaskAttempt(store *ledger.Store, request TaskAttemptRequest, requestS
 		return TaskAttemptReceipt{}, nil, fmt.Errorf("read task attempt contract: %w", err)
 	}
 	var contract TaskAttemptContract
-	if start.Record.Event.Kind != ledger.KindSystemEvent ||
+	if start.Record.Event.Kind != ledger.KindTaskAttemptContract ||
 		decodeStrictEvaluationJSON(contractData, &contract) != nil ||
 		!taskAttemptContractMatches(contract, request) {
 		return TaskAttemptReceipt{}, nil, errors.New("task attempt start does not contain the declared task contract")
@@ -353,7 +363,8 @@ func deriveTaskAttempt(store *ledger.Store, request TaskAttemptRequest, requestS
 	}
 
 	measurement := TrialMeasurement{Success: verdict.Verdict == TaskVerdictPass,
-		Score: verdict.Score, TotalTokens: verdict.TotalTokens}
+		Score: verdict.Score, TokenCountEvaluated: verdict.TokenCountEvaluated,
+		TotalTokens: verdict.TotalTokens}
 	for _, item := range verdict.ResultEvents {
 		if item.Label == ResultLabelError {
 			measurement.Errors++
@@ -381,9 +392,15 @@ func deriveTaskAttempt(store *ledger.Store, request TaskAttemptRequest, requestS
 	receipt := TaskAttemptReceipt{
 		SchemaVersion: TaskAttemptReceiptSchema, ReceiptID: receiptID, RecordedAt: recordedAt.UTC(),
 		TaskID: request.TaskID, AttemptID: request.AttemptID, Agent: request.Agent,
+		TrialPlanID: request.TrialPlanID, TrialPairID: request.TrialPairID,
 		SemanticKeySHA256: request.SemanticKeySHA256, TaskSpecSHA256: request.TaskSpecSHA256,
 		AcceptanceCriteriaSHA256: request.AcceptanceCriteriaSHA256,
-		ExecutionConfigSHA256:    request.ExecutionConfigSHA256, Condition: request.Condition,
+		ExecutionConfigSHA256:    request.ExecutionConfigSHA256,
+		SystemArtifactSHA256:     request.SystemArtifactSHA256,
+		SystemUnderTestSHA256:    request.SystemUnderTestSHA256,
+		SystemUnderTestBlob:      request.SystemUnderTestBlob,
+		TaskSpecBlob:             request.TaskSpecBlob, AcceptanceCriteriaBlob: request.AcceptanceCriteriaBlob,
+		ExecutionConfigBlob: request.ExecutionConfigBlob, Condition: request.Condition,
 		WindowStart: boundReference(start.Record), WindowEnd: boundReference(end.Record),
 		RetrievalReceiptID: request.RetrievalReceiptID, InjectionID: request.InjectionID,
 		AdoptionID: request.AdoptionID, MemoryReferences: append([]retrieval.MemoryReference{}, request.MemoryReferences...),
@@ -399,20 +416,44 @@ func validateTaskAttemptRequest(request TaskAttemptRequest) error {
 	if request.SchemaVersion != TaskAttemptRequestSchema {
 		return fmt.Errorf("unsupported task attempt request schema %q", request.SchemaVersion)
 	}
+	if (request.TrialPlanID == "") != (request.TrialPairID == "") ||
+		(request.TrialPlanID != "" && (!safeIdentifier(request.TrialPlanID) || !safeIdentifier(request.TrialPairID))) {
+		return errors.New("task attempt trial plan binding is incomplete")
+	}
 	if !safeIdentifier(request.TaskID) || !safeIdentifier(request.AttemptID) ||
 		!validAgent(request.Agent) || request.Agent == ledger.AgentUnknown ||
 		!validSHA256(request.SemanticKeySHA256) || !validSHA256(request.TaskSpecSHA256) ||
-		!validSHA256(request.AcceptanceCriteriaSHA256) || !validSHA256(request.ExecutionConfigSHA256) {
+		!validSHA256(request.AcceptanceCriteriaSHA256) || !validSHA256(request.ExecutionConfigSHA256) ||
+		(request.SystemArtifactSHA256 != "" && !validSHA256(request.SystemArtifactSHA256)) ||
+		(request.SystemUnderTestSHA256 != "" && !validSHA256(request.SystemUnderTestSHA256)) {
 		return errors.New("task attempt identity and content hashes are required")
+	}
+	if (request.SystemUnderTestSHA256 == "") != (request.SystemUnderTestBlob == nil) ||
+		(request.SystemUnderTestBlob != nil && !validBlobRef(*request.SystemUnderTestBlob)) {
+		return errors.New("task attempt system-under-test manifest binding is incomplete")
+	}
+	blobs := []*ledger.BlobRef{request.TaskSpecBlob, request.AcceptanceCriteriaBlob, request.ExecutionConfigBlob}
+	present := 0
+	for _, blob := range blobs {
+		if blob != nil {
+			present++
+			if !validBlobRef(*blob) {
+				return errors.New("task attempt artifact blob reference is invalid")
+			}
+		}
+	}
+	if present != 0 && present != len(blobs) {
+		return errors.New("task attempt artifact blobs must be all present or all absent")
 	}
 	if strings.TrimSpace(request.WindowStartEventID) == "" ||
 		strings.TrimSpace(request.WindowEndEventID) == "" || request.WindowStartEventID == request.WindowEndEventID {
 		return errors.New("task attempt requires distinct window boundaries")
 	}
-	if request.Oracle.Kind != "harness" && request.Oracle.Kind != "human" {
-		return errors.New("task attempt oracle must be a harness or human claim")
+	if request.Oracle.Kind != "harness" && request.Oracle.Kind != "builtin" && request.Oracle.Kind != "human" {
+		return errors.New("task attempt oracle must be a harness, builtin, or human claim")
 	}
 	if strings.TrimSpace(request.Oracle.ID) == "" || strings.TrimSpace(request.Oracle.Version) == "" ||
+		(request.Oracle.RegistryEntrySHA256 != "" && !validSHA256(request.Oracle.RegistryEntrySHA256)) ||
 		strings.TrimSpace(request.Oracle.VerdictEventID) == "" {
 		return errors.New("task attempt oracle identity, version, and verdict event are required")
 	}
@@ -440,12 +481,48 @@ func validateTaskAttemptRequest(request TaskAttemptRequest) error {
 	return nil
 }
 
+func validateAttemptBlobs(store *ledger.Store, request TaskAttemptRequest) error {
+	if request.TaskSpecBlob != nil {
+		items := []struct {
+			name string
+			blob *ledger.BlobRef
+			hash string
+		}{
+			{"task spec", request.TaskSpecBlob, request.TaskSpecSHA256},
+			{"acceptance criteria", request.AcceptanceCriteriaBlob, request.AcceptanceCriteriaSHA256},
+			{"execution config", request.ExecutionConfigBlob, request.ExecutionConfigSHA256},
+		}
+		for _, item := range items {
+			if item.blob.SHA256 != item.hash || verifyBlob(store, *item.blob) != nil {
+				return fmt.Errorf("task attempt %s blob does not match its declared hash", item.name)
+			}
+		}
+	}
+	if request.SystemUnderTestBlob != nil {
+		if request.SystemUnderTestBlob.SHA256 != request.SystemUnderTestSHA256 ||
+			verifyBlob(store, *request.SystemUnderTestBlob) != nil {
+			return errors.New("task attempt system-under-test manifest blob does not match its declared hash")
+		}
+		data, err := readAttemptBlob(store, *request.SystemUnderTestBlob)
+		if err != nil {
+			return err
+		}
+		var manifest SystemUnderTestManifest
+		if decodeStrictEvaluationJSON(data, &manifest) != nil {
+			return errors.New("task attempt system-under-test manifest JSON is invalid")
+		}
+		return validateSystemUnderTestManifest(store, manifest, request.Agent)
+	}
+	return nil
+}
+
 func validateTaskAttemptVerdict(verdict TaskAttemptVerdict, request TaskAttemptRequest) error {
 	if verdict.SchemaVersion != TaskAttemptVerdictSchema || verdict.TaskID != request.TaskID ||
 		verdict.AttemptID != request.AttemptID || verdict.TaskSpecSHA256 != request.TaskSpecSHA256 ||
 		verdict.CriteriaSHA256 != request.AcceptanceCriteriaSHA256 || verdict.ConfigSHA256 != request.ExecutionConfigSHA256 ||
 		(verdict.Verdict != TaskVerdictPass && verdict.Verdict != TaskVerdictFail) ||
-		verdict.Score < 0 || verdict.Score > 1 || verdict.TotalTokens < 0 || verdict.Privacy != "local_only" {
+		verdict.Score < 0 || verdict.Score > 1 || verdict.TotalTokens < 0 ||
+		(!verdict.TokenCountEvaluated && verdict.TotalTokens != 0) || verdict.Privacy != "local_only" {
 		return errors.New("task attempt verdict does not match the declared task contract")
 	}
 	if len(verdict.ResultEvents) == 0 || verdict.UserMessages == nil ||
@@ -478,8 +555,10 @@ func validateMemoryAttempt(store *ledger.Store, request TaskAttemptRequest,
 	retrievalRecord := records[request.RetrievalReceiptID]
 	injectionRecord := records[request.InjectionID]
 	adoptionRecord := records[request.AdoptionID]
+	verdictRecord := records[request.Oracle.VerdictEventID]
 	if retrievalRecord.Index <= startIndex || retrievalRecord.Index >= injectionRecord.Index ||
-		injectionRecord.Index > endIndex || adoptionRecord.Index <= injectionRecord.Index {
+		injectionRecord.Index > endIndex || adoptionRecord.Index <= endIndex ||
+		adoptionRecord.Index >= verdictRecord.Index {
 		return errors.New("memory receipt order is invalid for the task window")
 	}
 	if !sameTaskContext(records[request.WindowStartEventID].Record.Event,
@@ -526,8 +605,10 @@ func validateMemoryAttempt(store *ledger.Store, request TaskAttemptRequest,
 	for _, match := range retrievalReceipt.Result.Selected {
 		selected[memoryReferenceKey(match.MemoryReference)] = struct{}{}
 	}
+	observed := map[string]struct{}{}
 	adopted := map[string]struct{}{}
 	for _, item := range adoption.Items {
+		observed[memoryReferenceKey(item.MemoryReference)] = struct{}{}
 		if item.Adoption == retrieval.AdoptionAdopted {
 			adopted[memoryReferenceKey(item.MemoryReference)] = struct{}{}
 		}
@@ -537,7 +618,11 @@ func validateMemoryAttempt(store *ledger.Store, request TaskAttemptRequest,
 		if _, ok := selected[key]; !ok {
 			return errors.New("task attempt memory was not selected by the retrieval")
 		}
-		if _, ok := adopted[key]; !ok {
+		if request.TrialPlanID != "" {
+			if _, ok := observed[key]; !ok {
+				return errors.New("planned task attempt memory lacks a result-bound use observation")
+			}
+		} else if _, ok := adopted[key]; !ok {
 			return errors.New("task attempt memory lacks an adopted-action claim")
 		}
 		semanticKey, err := portable.ResolveSemanticKey(store, reference.MemoryID, reference.RevisionID)
@@ -569,17 +654,27 @@ func loadIndexedRecords(store *ledger.Store) (map[string]indexedRecord, []ledger
 }
 
 func NewTaskAttemptContract(request TaskAttemptRequest) TaskAttemptContract {
+	if request.SystemArtifactSHA256 == "" {
+		request.SystemArtifactSHA256, _ = CurrentSystemArtifactSHA256()
+	}
 	return TaskAttemptContract{
 		SchemaVersion: TaskAttemptContractSchema, TaskID: request.TaskID, AttemptID: request.AttemptID,
+		TrialPlanID: request.TrialPlanID, TrialPairID: request.TrialPairID,
 		Agent: request.Agent, SemanticKeySHA256: request.SemanticKeySHA256,
 		TaskSpecSHA256: request.TaskSpecSHA256, AcceptanceCriteriaSHA256: request.AcceptanceCriteriaSHA256,
-		ExecutionConfigSHA256: request.ExecutionConfigSHA256, Condition: request.Condition,
-		WindowEndEventID: request.WindowEndEventID, Oracle: request.Oracle, Privacy: request.Privacy,
+		ExecutionConfigSHA256: request.ExecutionConfigSHA256,
+		TaskSpecBlob:          request.TaskSpecBlob, AcceptanceCriteriaBlob: request.AcceptanceCriteriaBlob,
+		ExecutionConfigBlob: request.ExecutionConfigBlob, Condition: request.Condition,
+		SystemArtifactSHA256:  request.SystemArtifactSHA256,
+		SystemUnderTestSHA256: request.SystemUnderTestSHA256,
+		SystemUnderTestBlob:   request.SystemUnderTestBlob,
+		WindowEndEventID:      request.WindowEndEventID, Oracle: request.Oracle, Privacy: request.Privacy,
 	}
 }
 
 func taskAttemptContractMatches(contract TaskAttemptContract, request TaskAttemptRequest) bool {
-	return contract == NewTaskAttemptContract(request) && contract.SchemaVersion == TaskAttemptContractSchema &&
+	return reflect.DeepEqual(contract, NewTaskAttemptContract(request)) &&
+		contract.SchemaVersion == TaskAttemptContractSchema &&
 		contract.Privacy == "local_only"
 }
 
@@ -603,7 +698,8 @@ func decodeTaskAttemptReceipt(store *ledger.Store, event ledger.Event) (TaskAtte
 	}
 	if receipt.SchemaVersion != TaskAttemptReceiptSchema || receipt.ReceiptID != event.EventID ||
 		receipt.BindingStatus != "causal_complete" || receipt.Authority != "measurement_only" ||
-		receipt.Privacy != "local_only" {
+		receipt.Privacy != "local_only" || !validSHA256(receipt.SystemArtifactSHA256) ||
+		(receipt.SystemUnderTestSHA256 != "" && !validSHA256(receipt.SystemUnderTestSHA256)) {
 		return TaskAttemptReceipt{}, errors.New("task attempt receipt envelope is invalid")
 	}
 	return receipt, nil
@@ -612,10 +708,16 @@ func decodeTaskAttemptReceipt(store *ledger.Store, event ledger.Event) (TaskAtte
 func taskAttemptRequestFromReceipt(receipt TaskAttemptReceipt) TaskAttemptRequest {
 	return TaskAttemptRequest{
 		SchemaVersion: TaskAttemptRequestSchema, TaskID: receipt.TaskID, AttemptID: receipt.AttemptID,
+		TrialPlanID: receipt.TrialPlanID, TrialPairID: receipt.TrialPairID,
 		Agent: receipt.Agent, SemanticKeySHA256: receipt.SemanticKeySHA256,
 		TaskSpecSHA256: receipt.TaskSpecSHA256, AcceptanceCriteriaSHA256: receipt.AcceptanceCriteriaSHA256,
-		ExecutionConfigSHA256: receipt.ExecutionConfigSHA256, Condition: receipt.Condition,
-		WindowStartEventID: receipt.WindowStart.EventID, WindowEndEventID: receipt.WindowEnd.EventID,
+		ExecutionConfigSHA256: receipt.ExecutionConfigSHA256,
+		TaskSpecBlob:          receipt.TaskSpecBlob, AcceptanceCriteriaBlob: receipt.AcceptanceCriteriaBlob,
+		ExecutionConfigBlob: receipt.ExecutionConfigBlob, Condition: receipt.Condition,
+		SystemArtifactSHA256:  receipt.SystemArtifactSHA256,
+		SystemUnderTestSHA256: receipt.SystemUnderTestSHA256,
+		SystemUnderTestBlob:   receipt.SystemUnderTestBlob,
+		WindowStartEventID:    receipt.WindowStart.EventID, WindowEndEventID: receipt.WindowEnd.EventID,
 		RetrievalReceiptID: receipt.RetrievalReceiptID, InjectionID: receipt.InjectionID,
 		AdoptionID: receipt.AdoptionID, MemoryReferences: append([]retrieval.MemoryReference{}, receipt.MemoryReferences...),
 		Oracle: receipt.Oracle, Privacy: receipt.Privacy,

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/task-execution-started.schema.json",
+  "title": "Supervised task execution start declaration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "execution_id", "trial_plan_id", "trial_pair_id", "attempt_id", "condition",
+    "challenge_sha256", "contract", "system_under_test_sha256", "supervisor_artifact_sha256",
+    "executable_sha256", "arguments_sha256", "environment_sha256", "input_blob", "started_at", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "task-execution-started/v1alpha1"},
+    "execution_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "trial_plan_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "trial_pair_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "attempt_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "condition": {"enum": ["baseline", "memory"]},
+    "challenge_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "contract": {"$ref": "task-attempt-receipt.schema.json#/$defs/bound_event"},
+    "system_under_test_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "supervisor_artifact_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "executable_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "arguments_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "environment_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "input_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "privacy": {"const": "local_only"}
+  }
+}

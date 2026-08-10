@@ -130,8 +130,9 @@ func validateAttestation(attestation EvaluationAttestation) error {
 	if !safeIdentifier(attestation.AttestationID) || !safeIdentifier(attestation.CaseID) {
 		return errors.New("attestation_id and case_id must be safe identifiers")
 	}
-	if !validAgent(attestation.Agent) || attestation.Agent == ledger.AgentUnknown {
-		return errors.New("evaluation attestation must identify a supported agent")
+	if !validAgent(attestation.Agent) ||
+		(attestation.Agent == ledger.AgentUnknown && attestation.Category != CategoryFalseMemory) {
+		return errors.New("evaluation attestation must identify a supported agent unless it labels cross-agent memory")
 	}
 	if attestation.Attestor.Kind != "human" && attestation.Attestor.Kind != "harness" {
 		return errors.New("evaluation attestor must be human or harness")
@@ -151,11 +152,15 @@ func validateAttestation(attestation EvaluationAttestation) error {
 }
 
 func (attestation EvaluationAttestation) evaluationCase() EvaluationCase {
+	var compaction *CompactionMeasurement
+	if attestation.Compaction != nil {
+		compaction = &CompactionMeasurement{CheckpointID: attestation.Compaction.CheckpointID,
+			Expected: attestation.Compaction.Expected, Observed: DriftInsufficientEvidence}
+	}
 	return EvaluationCase{
 		CaseID: attestation.CaseID, Category: attestation.Category, Agent: attestation.Agent,
 		Capture: attestation.Capture, Memory: attestation.Memory, Correction: attestation.Correction,
-		Compaction: attestation.Compaction, Retrieval: attestation.Retrieval,
-		PairedOutcome: attestation.PairedOutcome,
+		Compaction: compaction, Retrieval: attestation.Retrieval, PairedOutcome: attestation.PairedOutcome,
 	}
 }
 
@@ -201,10 +206,18 @@ func validateAttestationRecord(store *ledger.Store, evaluationCase EvaluationCas
 			attestation.Category != evaluationCase.Category || attestation.Agent != evaluationCase.Agent {
 			return errors.New("evaluation attestation belongs to another case")
 		}
-		left, leftErr := measurementSHA256(attestation.evaluationCase())
-		right, rightErr := measurementSHA256(evaluationCase)
-		if leftErr != nil || rightErr != nil || left != right {
-			return errors.New("evaluation attestation measurement does not match the case")
+		if evaluationCase.Category == CategoryCompactionDrift {
+			if evaluationCase.Compaction == nil || attestation.Compaction == nil ||
+				attestation.Compaction.CheckpointID != evaluationCase.Compaction.CheckpointID ||
+				attestation.Compaction.Expected != evaluationCase.Compaction.Expected {
+				return errors.New("evaluation attestation ground truth does not match the compaction case")
+			}
+		} else {
+			left, leftErr := measurementSHA256(attestation.evaluationCase())
+			right, rightErr := measurementSHA256(evaluationCase)
+			if leftErr != nil || rightErr != nil || left != right {
+				return errors.New("evaluation attestation measurement does not match the case")
+			}
 		}
 	}
 	return nil

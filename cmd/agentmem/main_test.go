@@ -20,10 +20,10 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "unknown subcommand", args: []string{"derive", "unknown"}, message: "derive <episodes|candidates>"},
 		{name: "candidate flags", args: []string{"derive", "candidates"}, message: "requires --root and --episodes"},
 		{name: "episode flags", args: []string{"derive", "episodes"}, message: "requires --root"},
-		{name: "missing eval subcommand", args: []string{"eval"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attempt record|attempt verify|attest|run|verify>"},
-		{name: "unknown eval subcommand", args: []string{"eval", "unknown"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attempt record|attempt verify|attest|run|verify>"},
-		{name: "missing eval corpus subcommand", args: []string{"eval", "corpus"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attempt record|attempt verify|attest|run|verify>"},
-		{name: "unknown eval corpus subcommand", args: []string{"eval", "corpus", "unknown"}, message: "eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attempt record|attempt verify|attest|run|verify>"},
+		{name: "missing eval subcommand", args: []string{"eval"}, message: "eval <corpus ...|oracle init|sut bind|trial select|trial preregister"},
+		{name: "unknown eval subcommand", args: []string{"eval", "unknown"}, message: "eval <corpus ...|oracle init|sut bind|trial select|trial preregister"},
+		{name: "missing eval corpus subcommand", args: []string{"eval", "corpus"}, message: "eval <corpus ...|oracle init|sut bind|trial select|trial preregister"},
+		{name: "unknown eval corpus subcommand", args: []string{"eval", "corpus", "unknown"}, message: "eval <corpus ...|oracle init|sut bind|trial select|trial preregister"},
 		{name: "eval corpus baseline flags", args: []string{"eval", "corpus", "baseline"}, message: "requires --root, --corpus, --run, and --system-version"},
 		{name: "eval corpus freeze flags", args: []string{"eval", "corpus", "freeze"}, message: "requires --root and --legacy-root"},
 		{name: "eval corpus verify flags", args: []string{"eval", "corpus", "verify"}, message: "requires --root and --corpus"},
@@ -33,8 +33,17 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "eval corpus Agent assessment import flags", args: []string{"eval", "corpus", "agent-assessment", "import-external"}, message: "requires projection, submission, assessor, claimed model, harness, prompt, and time metadata"},
 		{name: "eval corpus controlled Agent assessment flags", args: []string{"eval", "corpus", "agent-assessment", "run-openai"}, message: "requires --root, --projection, --model, and --confirm-remote-disclosure"},
 		{name: "eval attest flags", args: []string{"eval", "attest"}, message: "requires --root and --file"},
+		{name: "eval sut bind flags", args: []string{"eval", "sut", "bind"}, message: "requires root, agent, provider, model, and four artifact files"},
+		{name: "eval oracle init flags", args: []string{"eval", "oracle", "init"}, message: "requires --file"},
+		{name: "eval trial preregister flags", args: []string{"eval", "trial", "preregister"}, message: "requires root, corpus, suite, selected corpus artifact, agent, semantic key, both arm contexts, four artifact files, and registry"},
+		{name: "eval attempt preregister flags", args: []string{"eval", "attempt", "preregister"}, message: "requires root, draft, four artifact files, registry, thread, and session"},
+		{name: "eval attempt execute flags", args: []string{"eval", "attempt", "execute"}, message: "requires --root, --file, and --repo"},
+		{name: "eval attempt observe flags", args: []string{"eval", "attempt", "observe"}, message: "requires --root, --file, and --result"},
+		{name: "eval attempt finalize flags", args: []string{"eval", "attempt", "finalize"}, message: "requires --root, --file, and --oracle-registry"},
 		{name: "eval attempt record flags", args: []string{"eval", "attempt", "record"}, message: "requires --root and --file"},
 		{name: "eval attempt verify flags", args: []string{"eval", "attempt", "verify"}, message: "requires --root and --receipt"},
+		{name: "eval compaction seal flags", args: []string{"eval", "compaction", "seal"}, message: "requires --root and --file"},
+		{name: "eval prepare flags", args: []string{"eval", "prepare"}, message: "requires --root, --repo, --oracle-registry, --corpus, --suite, --run, and --system-version"},
 		{name: "eval run flags", args: []string{"eval", "run"}, message: "requires --root and --file"},
 		{name: "eval verify flags", args: []string{"eval", "verify"}, message: "requires --root, --suite, and --run"},
 		{name: "missing inject adapter", args: []string{"inject"}, message: "inject <codex|claude-code|opencode>"},
@@ -115,7 +124,7 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 	}
 }
 
-func TestEvaluationRunEnforceRejectsContinuousMeasurementOnly(t *testing.T) {
+func TestEvaluationRunRejectsLegacyUnboundContinuousInput(t *testing.T) {
 	root := t.TempDir()
 	if _, err := ledger.Init(root); err != nil {
 		t.Fatal(err)
@@ -132,9 +141,19 @@ func TestEvaluationRunEnforceRejectsContinuousMeasurementOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	data, err := os.ReadFile(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = []byte(strings.Replace(string(data), `"quality_profile": "component"`,
+		`"quality_profile": "continuous_learning"`, 1))
+	fixture = filepath.Join(t.TempDir(), "legacy-unbound-continuous.json")
+	if err := os.WriteFile(fixture, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	err = runEvaluationRun([]string{"--root", root, "--file", fixture, "--enforce"})
-	if err == nil || !strings.Contains(err.Error(), "not release-ready") {
-		t.Fatalf("continuous measurement-only report passed --enforce: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "fixed policy") {
+		t.Fatalf("legacy unbound continuous input was accepted: %v", err)
 	}
 }
 

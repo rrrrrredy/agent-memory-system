@@ -16,8 +16,9 @@ func TestRecordAttestationIsAppendOnlyAndMeasurementBound(t *testing.T) {
 	now := time.Unix(500, 0).UTC()
 	attestation := correctionAttestation(now, CorrectionMeasurement{
 		SemanticKeySHA256:             repeatedSHA("a"),
-		AttemptIDs:                    []string{"task-attempt-" + repeatedSHA("1"), "task-attempt-" + repeatedSHA("2")},
-		EligibleFollowupOpportunities: 2, RepeatedCorrections: 1,
+		InitialCorrectionAttemptID:    "task-attempt-" + repeatedSHA("1"),
+		AttemptIDs:                    []string{"task-attempt-" + repeatedSHA("2")},
+		EligibleFollowupOpportunities: 1, RepeatedCorrections: 1,
 		RepeatedCorrectionsAfterMemory: 1,
 	})
 	result, err := RecordAttestation(store, attestation, func() time.Time { return now.Add(time.Second) })
@@ -47,9 +48,10 @@ func TestRecordAttestationIsAppendOnlyAndMeasurementBound(t *testing.T) {
 	mismatch := attestation.evaluationCase()
 	mismatch.Correction = &CorrectionMeasurement{
 		SemanticKeySHA256:             repeatedSHA("a"),
-		AttemptIDs:                    []string{"task-attempt-" + repeatedSHA("1"), "task-attempt-" + repeatedSHA("2")},
-		EligibleFollowupOpportunities: 2, RepeatedCorrections: 2,
-		RepeatedCorrectionsAfterMemory: 2,
+		InitialCorrectionAttemptID:    "task-attempt-" + repeatedSHA("1"),
+		AttemptIDs:                    []string{"task-attempt-" + repeatedSHA("2")},
+		EligibleFollowupOpportunities: 1, RepeatedCorrections: 0,
+		RepeatedCorrectionsAfterMemory: 0,
 	}
 	if err := validateAttestationRecord(store, mismatch, record); err == nil ||
 		!strings.Contains(err.Error(), "does not match") {
@@ -73,9 +75,8 @@ func TestAttestationRequiresHumanForFalseMemoryAndCompactionLabels(t *testing.T)
 	attestation.CaseID = "drift-1"
 	attestation.Category = CategoryCompactionDrift
 	attestation.Memory = nil
-	attestation.Compaction = &CompactionMeasurement{
-		CheckpointID: "checkpoint-1", Expected: DriftDetected, Observed: DriftPreserved,
-	}
+	attestation.Compaction = &CompactionExpectation{
+		CheckpointID: "checkpoint-1", Expected: DriftDetected}
 	if err := validateAttestation(attestation); err == nil || !strings.Contains(err.Error(), "human attestor") {
 		t.Fatalf("harness self-certified a compaction label: %v", err)
 	}

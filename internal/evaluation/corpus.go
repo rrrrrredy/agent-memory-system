@@ -103,10 +103,15 @@ func FreezeLegacyCorpus(store *ledger.Store, legacyRoot string, options FreezeOp
 	if err != nil {
 		return result, fmt.Errorf("read legacy index: %w", err)
 	}
+	indexData, err = limitLegacyIndexData(indexData, options.IndexEntryLimit)
+	if err != nil {
+		return result, err
+	}
 	entries, indexIssues, err := parseLegacyIndex(indexData)
 	if err != nil {
 		return result, err
 	}
+
 	result.Issues = append(result.Issues, indexIssues...)
 	result.Counts.IndexEntries = len(entries)
 
@@ -114,6 +119,21 @@ func FreezeLegacyCorpus(store *ledger.Store, legacyRoot string, options FreezeOp
 	if err != nil {
 		return result, err
 	}
+	if options.IndexEntryLimit > 0 {
+		selected := map[string]string{}
+		for _, entry := range entries {
+			path, pathErr := trustedLegacyCardPath(absoluteRoot, entry.CardPath)
+			if pathErr == nil {
+				selected[normalizePathKey(path)] = path
+			}
+		}
+		cardFiles = cardFiles[:0]
+		for _, path := range selected {
+			cardFiles = append(cardFiles, path)
+		}
+		sort.Strings(cardFiles)
+	}
+
 	cardSessions := map[string]map[string]struct{}{}
 	indexedCards := map[string]struct{}{}
 	rolloutReferences := map[string]*rolloutState{}
@@ -182,7 +202,8 @@ func FreezeLegacyCorpus(store *ledger.Store, legacyRoot string, options FreezeOp
 
 	plans := make([]snapshotPlan, 0, len(cardFiles)+1)
 	indexPlan, indexChanged, err := planSnapshot(store, absoluteRoot, indexPath, indexData,
-		RoleLegacyIndex, []string{"legacy-context-journal"}, options.Now())
+		RoleLegacyIndex, []string{"legacy-context-journal"}, options.Now(),
+		options.IndexEntryLimit == 0)
 	if err != nil {
 		return result, err
 	}
@@ -203,7 +224,7 @@ func FreezeLegacyCorpus(store *ledger.Store, legacyRoot string, options FreezeOp
 			return result, fmt.Errorf("read legacy card: %w", err)
 		}
 		sessionIDs := mapKeys(cardSessions[normalizePathKey(cardPath)])
-		plan, changed, err := planSnapshot(store, absoluteRoot, cardPath, data, role, sessionIDs, options.Now())
+		plan, changed, err := planSnapshot(store, absoluteRoot, cardPath, data, role, sessionIDs, options.Now(), true)
 		if err != nil {
 			return result, err
 		}
@@ -369,7 +390,7 @@ func FreezeLegacyCorpus(store *ledger.Store, legacyRoot string, options FreezeOp
 		return rollouts[left].SourcePathSHA256 < rollouts[right].SourcePathSHA256
 	})
 	result.Issues = aggregateCorpusIssues(result.Issues)
-	contentHash, err := corpusContentHash(sourceRootHash, artifacts, rollouts)
+	contentHash, err := corpusContentHash(sourceRootHash, options.IndexEntryLimit, artifacts, rollouts)
 	if err != nil {
 		return result, err
 	}
@@ -405,7 +426,8 @@ func FreezeLegacyCorpus(store *ledger.Store, legacyRoot string, options FreezeOp
 		CorpusContentSHA256: contentHash, Name: options.Name, CreatedAt: options.Now().UTC(),
 		SourceRootSHA256: sourceRootHash, SourceLedgerLastRecordHash: scan.lastRecordHash,
 		Artifacts: artifacts, Rollouts: rollouts, Counts: result.Counts,
-		Issues: result.Issues, Privacy: "local_only",
+		IndexEntryLimit: options.IndexEntryLimit,
+		Issues:          result.Issues, Privacy: "local_only",
 	}
 	manifestBytes, err := marshalIndented(manifest)
 	if err != nil {
@@ -483,7 +505,8 @@ func VerifyCorpus(store *ledger.Store, corpusID string) CorpusVerificationReport
 	if manifest.CorpusID != corpusID {
 		report.Issues = append(report.Issues, "manifest corpus_id does not match path")
 	}
-	contentHash, hashErr := corpusContentHash(manifest.SourceRootSHA256, manifest.Artifacts, manifest.Rollouts)
+	contentHash, hashErr := corpusContentHash(manifest.SourceRootSHA256,
+		manifest.IndexEntryLimit, manifest.Artifacts, manifest.Rollouts)
 	if hashErr != nil || contentHash != manifest.CorpusContentSHA256 || corpusID != "corpus-"+contentHash {
 		report.Issues = append(report.Issues, "manifest corpus content hash mismatch")
 	}
@@ -598,7 +621,7 @@ func LoadCorpusManifest(store *ledger.Store, corpusID string) (CorpusManifest, e
 }
 
 func planSnapshot(store *ledger.Store, root, path string, data []byte, role ArtifactRole,
-	sessionIDs []string, now time.Time) (snapshotPlan, bool, error) {
+	sessionIDs []string, now time.Time, requireFullSource bool) (snapshotPlan, bool, error) {
 	before, err := os.Stat(path)
 	if err != nil {
 		return snapshotPlan{}, false, err
@@ -608,7 +631,8 @@ func planSnapshot(store *ledger.Store, root, path string, data []byte, role Arti
 		return snapshotPlan{}, false, fmt.Errorf("preserve legacy artifact: %w", err)
 	}
 	after, statErr := os.Stat(path)
-	changed := statErr != nil || before.Size() != int64(len(data)) ||
+	changed := statErr != nil ||
+		(requireFullSource && before.Size() != int64(len(data))) ||
 		(after != nil && (after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime())))
 	pathHash, err := adapterjsonl.HashSourcePath(path)
 	if err != nil {
@@ -652,6 +676,34 @@ func planSnapshot(store *ledger.Store, root, path string, data []byte, role Arti
 		ArtifactID: artifactID, Role: role, RelativePath: relative,
 		SourcePathSHA256: pathHash, SnapshotEventID: eventID, Blob: blob,
 	}, event: event}, changed, nil
+}
+
+func limitLegacyIndexData(data []byte, limit int) ([]byte, error) {
+	if limit < 0 {
+		return nil, errors.New("legacy index entry limit is outside the available index")
+	}
+	if limit == 0 {
+		return data, nil
+	}
+	reader := bufio.NewReader(bytes.NewReader(data))
+	end, entries := 0, 0
+	for end < len(data) {
+		line, err := reader.ReadBytes('\n')
+		end += len(line)
+		if len(bytes.TrimSpace(line)) != 0 {
+			entries++
+			if entries == limit {
+				return append([]byte(nil), data[:end]...), nil
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("scan legacy index prefix: %w", err)
+		}
+	}
+	return nil, errors.New("legacy index entry limit is outside the available index")
 }
 
 func parseLegacyIndex(data []byte) ([]legacyIndexEntry, []CorpusIssue, error) {
@@ -763,13 +815,16 @@ func sameSnapshot(left, right ledger.Event) bool {
 		*left.Payload.Blob == *right.Payload.Blob
 }
 
-func corpusContentHash(sourceRootHash string, artifacts []CorpusArtifact, rollouts []RolloutReference) (string, error) {
+func corpusContentHash(sourceRootHash string, indexEntryLimit int, artifacts []CorpusArtifact, rollouts []RolloutReference) (string, error) {
 	content := struct {
 		SchemaVersion    string             `json:"schema_version"`
 		SourceRootSHA256 string             `json:"source_root_sha256"`
 		Artifacts        []CorpusArtifact   `json:"artifacts"`
+		IndexEntryLimit  int                `json:"index_entry_limit,omitempty"`
 		Rollouts         []RolloutReference `json:"rollouts"`
-	}{CorpusManifestSchemaVersion, sourceRootHash, artifacts, rollouts}
+	}{SchemaVersion: CorpusManifestSchemaVersion, SourceRootSHA256: sourceRootHash,
+		Artifacts: artifacts, IndexEntryLimit: indexEntryLimit, Rollouts: rollouts,
+	}
 	data, err := json.Marshal(content)
 	if err != nil {
 		return "", fmt.Errorf("encode corpus content: %w", err)
@@ -781,7 +836,8 @@ func corpusContentHash(sourceRootHash string, artifacts []CorpusArtifact, rollou
 func validateCorpusManifest(manifest CorpusManifest) error {
 	if manifest.SchemaVersion != CorpusManifestSchemaVersion || !validCorpusID(manifest.CorpusID) ||
 		!validSHA256(manifest.CorpusContentSHA256) || !validSHA256(manifest.SourceRootSHA256) ||
-		manifest.CreatedAt.IsZero() || manifest.Privacy != "local_only" || !safeIdentifier(manifest.Name) {
+		manifest.CreatedAt.IsZero() || manifest.Privacy != "local_only" || !safeIdentifier(manifest.Name) ||
+		manifest.IndexEntryLimit < 0 || (manifest.IndexEntryLimit > 0 && manifest.IndexEntryLimit != manifest.Counts.IndexEntries) {
 		return errors.New("corpus manifest header is invalid")
 	}
 	if manifest.SourceLedgerLastRecordHash != "" && !validSHA256(manifest.SourceLedgerLastRecordHash) {

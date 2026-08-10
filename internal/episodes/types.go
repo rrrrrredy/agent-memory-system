@@ -7,12 +7,55 @@ import (
 )
 
 const (
-	EpisodeSchemaVersion  = "episode/v1alpha1"
-	TimelineSchemaVersion = "timeline-entry/v1alpha1"
-	ManifestSchemaVersion = "episode-derivation-manifest/v1alpha1"
-	BuildSchemaVersion    = "episode-build-result/v1alpha1"
-	DerivationVersion     = "episodes/v1alpha1"
+	EpisodeSchemaVersion    = "episode/v1alpha1"
+	TimelineSchemaVersion   = "timeline-entry/v1alpha1"
+	ManifestSchemaVersion   = "episode-derivation-manifest/v1alpha1"
+	BuildSchemaVersion      = "episode-build-result/v1alpha1"
+	DerivationVersion       = "episodes/v1alpha1"
+	GenerationAuditSchema   = "episode-generation-audit/v1alpha1"
+	GenerationAttemptSchema = "episode-generation-attempt/v1alpha1"
 )
+
+// GenerationAttempt is committed before detector computation or any derived
+// output is created. It remains evidence even when the later build fails.
+type GenerationAttempt struct {
+	SchemaVersion        string    `json:"schema_version"`
+	AttemptID            string    `json:"attempt_id"`
+	DerivationVersion    string    `json:"derivation_version"`
+	SourceRecords        int       `json:"source_records"`
+	SourceLastRecordHash string    `json:"source_last_record_hash"`
+	StartedAt            time.Time `json:"started_at"`
+	Privacy              string    `json:"privacy"`
+}
+
+type VerifiedGenerationAttempt struct {
+	Attempt     GenerationAttempt
+	Record      ledger.Record
+	LedgerIndex int
+}
+
+type GenerationAudit struct {
+	SchemaVersion        string `json:"schema_version"`
+	AuditID              string `json:"audit_id"`
+	DerivationVersion    string `json:"derivation_version"`
+	SourceRecords        int    `json:"source_records"`
+	SourceLastRecordHash string `json:"source_last_record_hash"`
+	GenerationName       string `json:"generation_name"`
+	ManifestSHA256       string `json:"manifest_sha256"`
+	EpisodesSHA256       string `json:"episodes_sha256"`
+	TimelineSHA256       string `json:"timeline_sha256"`
+	Episodes             int    `json:"episodes"`
+	TimelineEntries      int64  `json:"timeline_entries"`
+	Compactions          int    `json:"compactions"`
+	Privacy              string `json:"privacy"`
+}
+
+type VerifiedGenerationAudit struct {
+	Audit       GenerationAudit
+	Record      ledger.Record
+	LedgerIndex int
+	Generation  BuildResult
+}
 
 type ContinuityStatus string
 

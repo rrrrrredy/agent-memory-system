@@ -2,7 +2,11 @@ package ledger
 
 import "time"
 
-const SchemaVersion = "evidence-event/v1alpha1"
+const (
+	SchemaVersionV1Alpha1 = "evidence-event/v1alpha1"
+	SchemaVersionV1Alpha2 = "evidence-event/v1alpha2"
+	SchemaVersion         = SchemaVersionV1Alpha2
+)
 
 type Agent string
 
@@ -16,27 +20,34 @@ const (
 type EventKind string
 
 const (
-	KindUserMessage           EventKind = "user_message"
-	KindAgentMessage          EventKind = "agent_message"
-	KindReasoning             EventKind = "reasoning"
-	KindToolCall              EventKind = "tool_call"
-	KindToolResult            EventKind = "tool_result"
-	KindApproval              EventKind = "approval"
-	KindFileChange            EventKind = "file_change"
-	KindAttachment            EventKind = "attachment"
-	KindSubagentEvent         EventKind = "subagent_event"
-	KindCompaction            EventKind = "compaction"
-	KindSystemEvent           EventKind = "system_event"
-	KindSourceSnapshot        EventKind = "source_snapshot"
-	KindRetrieval             EventKind = "memory_retrieval"
-	KindInjection             EventKind = "memory_injection"
-	KindAdoption              EventKind = "memory_adoption"
-	KindEvaluationCorpus      EventKind = "evaluation_corpus"
-	KindEvaluationAttestation EventKind = "evaluation_attestation"
-	KindTaskAttempt           EventKind = "task_attempt"
-	KindEvaluationRun         EventKind = "evaluation_run"
-	KindGap                   EventKind = "gap"
-	KindUnknown               EventKind = "unknown"
+	KindUserMessage              EventKind = "user_message"
+	KindAgentMessage             EventKind = "agent_message"
+	KindReasoning                EventKind = "reasoning"
+	KindToolCall                 EventKind = "tool_call"
+	KindToolResult               EventKind = "tool_result"
+	KindApproval                 EventKind = "approval"
+	KindFileChange               EventKind = "file_change"
+	KindAttachment               EventKind = "attachment"
+	KindSubagentEvent            EventKind = "subagent_event"
+	KindCompaction               EventKind = "compaction"
+	KindSystemEvent              EventKind = "system_event"
+	KindSourceSnapshot           EventKind = "source_snapshot"
+	KindRetrieval                EventKind = "memory_retrieval"
+	KindInjection                EventKind = "memory_injection"
+	KindAdoption                 EventKind = "memory_adoption"
+	KindEvaluationCorpus         EventKind = "evaluation_corpus"
+	KindEvaluationAttestation    EventKind = "evaluation_attestation"
+	KindCompactionGroundTruth    EventKind = "compaction_ground_truth"
+	KindEvaluationTrialPlan      EventKind = "evaluation_trial_plan"
+	KindTaskExecutionStarted     EventKind = "task_execution_started"
+	KindTaskExecutionReceipt     EventKind = "task_execution_receipt"
+	KindEpisodeGenerationAttempt EventKind = "episode_generation_attempt"
+	KindEpisodeGeneration        EventKind = "episode_generation"
+	KindTaskAttemptContract      EventKind = "task_attempt_contract"
+	KindTaskAttempt              EventKind = "task_attempt"
+	KindEvaluationRun            EventKind = "evaluation_run"
+	KindGap                      EventKind = "gap"
+	KindUnknown                  EventKind = "unknown"
 )
 
 type ReasoningVisibility string

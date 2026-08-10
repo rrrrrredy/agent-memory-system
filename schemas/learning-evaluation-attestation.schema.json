@@ -9,7 +9,7 @@
     "attestor", "attested_at", "reason"
   ],
   "properties": {
-    "schema_version": {"const": "learning-evaluation-attestation/v1alpha1"},
+    "schema_version": {"const": "learning-evaluation-attestation/v1alpha2"},
     "attestation_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
     "case_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
     "category": {
@@ -33,7 +33,7 @@
     "capture": {"$ref": "learning-evaluation-input.schema.json#/$defs/capture"},
     "memory": {"$ref": "learning-evaluation-input.schema.json#/$defs/memory"},
     "correction": {"$ref": "learning-evaluation-input.schema.json#/$defs/correction"},
-    "compaction": {"$ref": "learning-evaluation-input.schema.json#/$defs/compaction"},
+    "compaction": {"type": "object", "additionalProperties": false, "required": ["checkpoint_id", "expected"], "properties": {"checkpoint_id": {"type": "string", "minLength": 1}, "expected": {"enum": ["preserved", "drift", "insufficient_evidence"]}}},
     "retrieval": {"$ref": "learning-evaluation-input.schema.json#/$defs/retrieval"},
     "paired_outcome": {"$ref": "learning-evaluation-input.schema.json#/$defs/paired_outcome"}
   },

@@ -9,12 +9,13 @@
     "source_root_sha256", "artifacts", "rollouts", "counts", "issues", "privacy"
   ],
   "properties": {
-    "schema_version": {"const": "legacy-corpus-manifest/v1alpha1"},
+    "schema_version": {"const": "legacy-corpus-manifest/v1alpha2"},
     "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
     "corpus_content_sha256": {"$ref": "#/$defs/sha256"},
     "name": {"$ref": "#/$defs/identifier"},
     "created_at": {"type": "string", "format": "date-time"},
     "source_root_sha256": {"$ref": "#/$defs/sha256"},
+    "index_entry_limit": {"type": "integer", "minimum": 1},
     "source_ledger_last_record_hash": {"$ref": "#/$defs/sha256"},
     "artifacts": {
       "type": "array",

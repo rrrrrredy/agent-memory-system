@@ -5,16 +5,17 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "task_id", "attempt_id", "verdict", "score", "total_tokens",
+    "schema_version", "task_id", "attempt_id", "verdict", "score", "token_count_evaluated", "total_tokens",
     "result_events", "user_messages", "task_spec_sha256", "acceptance_criteria_sha256",
     "execution_config_sha256", "privacy"
   ],
   "properties": {
-    "schema_version": {"const": "task-attempt-verdict/v1alpha1"},
+    "schema_version": {"const": "task-attempt-verdict/v1alpha2"},
     "task_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
     "attempt_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
     "verdict": {"enum": ["pass", "fail"]},
     "score": {"type": "number", "minimum": 0, "maximum": 1},
+    "token_count_evaluated": {"type": "boolean"},
     "total_tokens": {"type": "integer", "minimum": 0},
     "result_events": {
       "type": "array", "minItems": 1, "uniqueItems": true,
@@ -40,5 +41,9 @@
     "acceptance_criteria_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
     "execution_config_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
     "privacy": {"const": "local_only"}
-  }
+  },
+  "allOf": [{
+    "if": {"properties": {"token_count_evaluated": {"const": false}}, "required": ["token_count_evaluated"]},
+    "then": {"properties": {"total_tokens": {"const": 0}}}
+  }]
 }

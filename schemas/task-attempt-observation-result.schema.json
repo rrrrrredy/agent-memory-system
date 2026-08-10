@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/task-attempt-observation-result.schema.json",
+  "title": "Task attempt result observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "record_hash", "payload_sha256", "reused", "privacy"],
+  "properties": {
+    "schema_version": {"const": "task-attempt-observation-result/v1alpha1"},
+    "event_id": {"type": "string", "minLength": 1},
+    "record_hash": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "payload_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "reused": {"type": "boolean"},
+    "privacy": {"const": "local_only"}
+  }
+}

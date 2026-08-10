@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"runtime"
@@ -608,6 +610,10 @@ func runEvaluation(args []string) error {
 			return evalUsageError()
 		}
 		return runEvaluationCorpus(args[1:])
+	case "compaction":
+		return runEvaluationCompaction(args[1:])
+	case "trial":
+		return runEvaluationTrial(args[1:])
 	case "attest":
 		return runEvaluationAttest(args[1:])
 	case "attempt":
@@ -615,6 +621,12 @@ func runEvaluation(args []string) error {
 			return evalUsageError()
 		}
 		return runEvaluationAttempt(args[1:])
+	case "oracle":
+		return runEvaluationOracle(args[1:])
+	case "sut":
+		return runEvaluationSUT(args[1:])
+	case "prepare":
+		return runEvaluationPrepare(args[1:])
 	case "run":
 		return runEvaluationRun(args[1:])
 	case "verify":
@@ -626,6 +638,149 @@ func runEvaluation(args []string) error {
 
 func runEvaluationAttempt(args []string) error {
 	switch args[0] {
+	case "preregister":
+		flags := flag.NewFlagSet("eval attempt preregister", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		draftPath := flags.String("file", "", "task attempt draft JSON (required)")
+		taskPath := flags.String("task-spec", "", "exact task specification file (required)")
+		criteriaPath := flags.String("criteria", "", "builtin evidence-score criteria file (required)")
+		configPath := flags.String("config", "", "execution configuration file (required)")
+		sutPath := flags.String("sut-manifest", "", "system-under-test manifest file (required)")
+		registryPath := flags.String("oracle-registry", "", "local oracle registry file (required)")
+		threadID := flags.String("thread", "", "bound Agent thread id (required)")
+		sessionID := flags.String("session", "", "bound Agent session id (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *draftPath == "" || *taskPath == "" || *criteriaPath == "" ||
+			*configPath == "" || *sutPath == "" || *registryPath == "" || *threadID == "" || *sessionID == "" {
+			return errors.New("eval attempt preregister requires root, draft, four artifact files, registry, thread, and session")
+		}
+		draftFile, err := os.Open(*draftPath)
+		if err != nil {
+			return err
+		}
+		defer draftFile.Close()
+		draft, err := evaluation.DecodeTaskAttemptDraft(draftFile)
+		if err != nil {
+			return err
+		}
+		read := func(path string) ([]byte, error) { return os.ReadFile(path) }
+		task, err := read(*taskPath)
+		if err != nil {
+			return err
+		}
+		criteria, err := read(*criteriaPath)
+		if err != nil {
+			return err
+		}
+		config, err := read(*configPath)
+		if err != nil {
+			return err
+		}
+		sut, err := read(*sutPath)
+		if err != nil {
+			return err
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, err := evaluation.PreregisterTaskAttempt(store, draft, evaluation.TaskAttemptPreregisterOptions{
+			ThreadID: *threadID, SessionID: *sessionID, TaskSpec: task, AcceptanceCriteria: criteria,
+			ExecutionConfig: config, SystemUnderTest: sut, OracleRegistryPath: *registryPath,
+		})
+		if err != nil {
+			return err
+		}
+		return encodeIndented(result)
+	case "execute":
+		flags := flag.NewFlagSet("eval attempt execute", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		requestPath := flags.String("file", "", "trial plan, preregistration, request, or execution result JSON (required)")
+		attemptID := flags.String("attempt", "", "attempt id when --file contains a trial plan")
+		portableRoot := flags.String("repo", "", "portable promoted-memory repository (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *requestPath == "" || *portableRoot == "" {
+			return errors.New("eval attempt execute requires --root, --file, and --repo")
+		}
+		request, err := decodeTaskAttemptInputForAttempt(*requestPath, *attemptID)
+		if err != nil {
+			return err
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		result, err := evaluation.ExecutePlannedTaskAttempt(store, request,
+			evaluation.ExecutePlannedAttemptOptions{PortableRoot: *portableRoot})
+		if err != nil {
+			return err
+		}
+		if err := encodeIndented(result); err != nil {
+			return err
+		}
+		if result.Execution.Outcome == evaluation.TaskExecutionFailed {
+			return fmt.Errorf("planned execution failed with %s; terminal evidence was recorded",
+				result.Execution.FailureKind)
+		}
+		return nil
+	case "observe":
+		flags := flag.NewFlagSet("eval attempt observe", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		requestPath := flags.String("file", "", "preregistration envelope or task attempt request JSON (required)")
+		resultPath := flags.String("result", "", "exact task result artifact (required)")
+		mediaType := flags.String("media-type", "application/octet-stream", "result media type")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *requestPath == "" || *resultPath == "" {
+			return errors.New("eval attempt observe requires --root, --file, and --result")
+		}
+		request, err := decodeTaskAttemptInput(*requestPath)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(*resultPath)
+		if err != nil {
+			return err
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		observed, err := evaluation.ObserveTaskAttemptResult(store, request, data, *mediaType, nil)
+		if err != nil {
+			return err
+		}
+		return encodeIndented(observed)
+	case "finalize":
+		flags := flag.NewFlagSet("eval attempt finalize", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		requestPath := flags.String("file", "", "preregistered task attempt request JSON (required)")
+		registryPath := flags.String("oracle-registry", "", "local oracle registry file (required)")
+		attemptID := flags.String("attempt", "", "attempt id when --file contains a trial plan")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *requestPath == "" || *registryPath == "" {
+			return errors.New("eval attempt finalize requires --root, --file, and --oracle-registry")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		request, err := decodeTaskAttemptInputForFinalize(store, *requestPath, *attemptID)
+		if err != nil {
+			return err
+		}
+		result, err := evaluation.FinalizeBuiltinTaskAttempt(store, request, *registryPath, nil)
+		if err != nil {
+			return err
+		}
+		return encodeIndented(result)
 	case "record":
 		flags := flag.NewFlagSet("eval attempt record", flag.ContinueOnError)
 		root := flags.String("root", "", "local evidence root (required)")
@@ -685,6 +840,293 @@ func runEvaluationAttempt(args []string) error {
 	default:
 		return evalUsageError()
 	}
+}
+
+func runEvaluationTrial(args []string) error {
+	if len(args) == 0 {
+		return evalUsageError()
+	}
+	if args[0] == "select" {
+		flags := flag.NewFlagSet("eval trial select", flag.ContinueOnError)
+		root := flags.String("root", "", "local evidence root (required)")
+		corpusID := flags.String("corpus", "", "verified frozen corpus id (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *corpusID == "" {
+			return errors.New("eval trial select requires --root and --corpus")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		selection, err := evaluation.SelectTrialCorpus(store, *corpusID)
+		if err != nil {
+			return err
+		}
+		return encodeIndented(selection)
+	}
+	if args[0] != "preregister" {
+		return evalUsageError()
+	}
+	flags := flag.NewFlagSet("eval trial preregister", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	corpusID := flags.String("corpus", "", "verified frozen corpus id (required)")
+	suiteID := flags.String("suite", "", "evaluation suite id (required)")
+	pairID := flags.String("pair", "", "optional pair id; derived from corpus assignment and artifact when omitted")
+	taskID := flags.String("task", "", "optional task id; derived from the frozen corpus artifact when omitted")
+	agent := flags.String("agent", "", "agent: codex, claude_code, or opencode (required)")
+	corpusArtifactID := flags.String("corpus-artifact", "", "deterministically selected frozen corpus artifact id (required)")
+	semanticKey := flags.String("semantic-key", "", "semantic key SHA-256 (required)")
+	baselineThread := flags.String("baseline-thread", "", "baseline Agent thread id (required)")
+	baselineSession := flags.String("baseline-session", "", "baseline Agent session id (required)")
+	treatmentThread := flags.String("treatment-thread", "", "memory-treatment Agent thread id (required)")
+	treatmentSession := flags.String("treatment-session", "", "memory-treatment Agent session id (required)")
+	taskPath := flags.String("task-spec", "", "exact task specification file (required)")
+	criteriaPath := flags.String("criteria", "", "builtin evidence-score criteria file (required)")
+	configPath := flags.String("config", "", "execution configuration file (required)")
+	sutPath := flags.String("sut-manifest", "", "system-under-test manifest file (required)")
+	registryPath := flags.String("oracle-registry", "", "local oracle registry file (required)")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" || *corpusID == "" || *suiteID == "" ||
+		*agent == "" || *corpusArtifactID == "" || *semanticKey == "" || *baselineThread == "" || *baselineSession == "" ||
+		*treatmentThread == "" || *treatmentSession == "" || *taskPath == "" ||
+		*criteriaPath == "" || *configPath == "" || *sutPath == "" || *registryPath == "" {
+		return errors.New("eval trial preregister requires root, corpus, suite, selected corpus artifact, agent, semantic key, both arm contexts, four artifact files, and registry")
+	}
+	read := func(path string) ([]byte, error) { return os.ReadFile(path) }
+	task, err := read(*taskPath)
+	if err != nil {
+		return err
+	}
+	criteria, err := read(*criteriaPath)
+	if err != nil {
+		return err
+	}
+	config, err := read(*configPath)
+	if err != nil {
+		return err
+	}
+	sut, err := read(*sutPath)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := evaluation.PreregisterTrialPlan(store, evaluation.TrialPlanPreregisterOptions{
+		SuiteID: *suiteID, CorpusID: *corpusID, OracleRegistryPath: *registryPath,
+		Pairs: []evaluation.TrialPlanPairInput{{PairID: *pairID, TaskID: *taskID,
+			Agent: ledger.Agent(*agent), CorpusArtifactID: *corpusArtifactID,
+			SemanticKeySHA256: *semanticKey,
+			BaselineThreadID:  *baselineThread, BaselineSessionID: *baselineSession,
+			TreatmentThreadID: *treatmentThread, TreatmentSessionID: *treatmentSession,
+			TaskSpec: task, AcceptanceCriteria: criteria, ExecutionConfig: config, SystemUnderTest: sut}},
+	})
+	if err != nil {
+		return err
+	}
+	return encodeIndented(result)
+}
+
+func runEvaluationCompaction(args []string) error {
+	if len(args) == 0 || args[0] != "seal" {
+		return evalUsageError()
+	}
+	flags := flag.NewFlagSet("eval compaction seal", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	requestPath := flags.String("file", "", "human compaction ground-truth seal request JSON (required)")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" || *requestPath == "" {
+		return errors.New("eval compaction seal requires --root and --file")
+	}
+	file, err := os.Open(*requestPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	request, err := evaluation.DecodeCompactionGroundTruthSealRequest(file)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := evaluation.SealCompactionGroundTruth(store,
+		evaluation.SealCompactionGroundTruthOptions{CorpusID: request.CorpusID,
+			ReviewerID: request.ReviewerID, Reason: request.Reason, Labels: request.Labels})
+	if err != nil {
+		return err
+	}
+	return encodeIndented(result)
+}
+
+func runEvaluationSUT(args []string) error {
+	if len(args) == 0 || args[0] != "bind" {
+		return evalUsageError()
+	}
+	flags := flag.NewFlagSet("eval sut bind", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	agent := flags.String("agent", "", "agent: codex, claude_code, or opencode (required)")
+	provider := flags.String("provider", "", "model provider identity (required)")
+	model := flags.String("model", "", "model identity (required)")
+	systemPromptPath := flags.String("system-prompt", "", "exact system prompt artifact (required)")
+	toolRegistryPath := flags.String("tool-registry", "", "exact tool registry artifact (required)")
+	harnessPath := flags.String("harness", "", "exact harness artifact (required)")
+	adapterPath := flags.String("adapter", "", "exact Agent adapter artifact (required)")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" || *agent == "" || *provider == "" || *model == "" ||
+		*systemPromptPath == "" || *toolRegistryPath == "" || *harnessPath == "" || *adapterPath == "" {
+		return errors.New("eval sut bind requires root, agent, provider, model, and four artifact files")
+	}
+	read := func(path string) ([]byte, error) { return os.ReadFile(path) }
+	systemPrompt, err := read(*systemPromptPath)
+	if err != nil {
+		return err
+	}
+	toolRegistry, err := read(*toolRegistryPath)
+	if err != nil {
+		return err
+	}
+	harness, err := read(*harnessPath)
+	if err != nil {
+		return err
+	}
+	adapter, err := read(*adapterPath)
+	if err != nil {
+		return err
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	manifest, err := evaluation.BindSystemUnderTest(store, ledger.Agent(*agent), *provider, *model,
+		evaluation.SystemUnderTestArtifacts{SystemPrompt: systemPrompt, ToolRegistry: toolRegistry,
+			Harness: harness, Adapter: adapter})
+	if err != nil {
+		return err
+	}
+	return encodeIndented(manifest)
+}
+
+func decodeTaskAttemptInput(path string) (evaluation.TaskAttemptRequest, error) {
+	return decodeTaskAttemptInputForAttempt(path, "")
+}
+
+func decodeTaskAttemptInputForAttempt(path, attemptID string) (evaluation.TaskAttemptRequest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return evaluation.TaskAttemptRequest{}, err
+	}
+	request, requestErr := evaluation.DecodeTaskAttemptRequest(bytes.NewReader(data))
+	if requestErr == nil {
+		return request, nil
+	}
+	preregistration, envelopeErr := evaluation.DecodeTaskAttemptPreregistration(bytes.NewReader(data))
+	if envelopeErr == nil {
+		if attemptID != "" && preregistration.Request.AttemptID != attemptID {
+			return evaluation.TaskAttemptRequest{}, errors.New("selected attempt does not match the preregistration")
+		}
+		return preregistration.Request, nil
+	}
+	var plan evaluation.TrialPlanPreregistration
+	if err := decodeStrictCLIJSON(data, &plan); err == nil &&
+		plan.SchemaVersion == evaluation.TrialPlanPreregistrationSchema {
+		if attemptID == "" {
+			return evaluation.TaskAttemptRequest{}, errors.New("trial plan input requires --attempt")
+		}
+		for _, item := range plan.Attempts {
+			if item.Request.AttemptID == attemptID {
+				return item.Request, nil
+			}
+		}
+		return evaluation.TaskAttemptRequest{}, errors.New("selected attempt is not in the trial plan")
+	}
+	return evaluation.TaskAttemptRequest{}, fmt.Errorf(
+		"decode task attempt request, preregistration, trial plan, or execution result: %v; %v",
+		requestErr, envelopeErr)
+}
+
+func decodeTaskAttemptInputForFinalize(store *ledger.Store, path, attemptID string) (evaluation.TaskAttemptRequest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return evaluation.TaskAttemptRequest{}, err
+	}
+	executed, executionErr := evaluation.DecodeTaskExecutionResult(store, bytes.NewReader(data))
+	if executionErr == nil {
+		if attemptID != "" && executed.Request.AttemptID != attemptID {
+			return evaluation.TaskAttemptRequest{}, errors.New("selected attempt does not match the execution result")
+		}
+		if executed.Execution.Outcome != evaluation.TaskExecutionCompleted {
+			return evaluation.TaskAttemptRequest{}, errors.New("failed supervised execution cannot be finalized")
+		}
+		return executed.Request, nil
+	}
+	request, requestErr := decodeTaskAttemptInputForAttempt(path, attemptID)
+	if requestErr == nil {
+		return request, nil
+	}
+	return evaluation.TaskAttemptRequest{}, fmt.Errorf("decode supervised execution result: %v; %v", executionErr, requestErr)
+}
+
+func decodeStrictCLIJSON(data []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("JSON input contains more than one value")
+		}
+		return err
+	}
+	return nil
+}
+
+func runEvaluationOracle(args []string) error {
+	if len(args) < 1 || args[0] != "init" {
+		return evalUsageError()
+	}
+	flags := flag.NewFlagSet("eval oracle init", flag.ContinueOnError)
+	path := flags.String("file", "", "new local oracle registry path (required)")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *path == "" {
+		return errors.New("eval oracle init requires --file")
+	}
+	registry, entrySHA := evaluation.BuiltinEvidenceScoreRegistry()
+	data, err := json.MarshalIndent(registry, "", "  ")
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(*path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(append(data, '\n')); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return encodeIndented(map[string]any{"schema_version": "task-oracle-registry-init/v1alpha1",
+		"file": *path, "entry_sha256": entrySHA, "privacy": "local_only"})
 }
 
 func runEvaluationAttest(args []string) error {
@@ -757,6 +1199,8 @@ func runEvaluationCorpus(args []string) error {
 		root := flags.String("root", "", "local evidence root (required)")
 		legacyRoot := flags.String("legacy-root", "", "legacy context-journal root (required)")
 		name := flags.String("name", "legacy-context-journal", "safe corpus name")
+		indexEntryLimit := flags.Int("index-entry-limit", 0,
+			"freeze only the first N non-empty index entries; 0 freezes the current full index")
 		allowIncomplete := flags.Bool("allow-incomplete", false,
 			"return success while preserving explicit legacy coverage issues")
 		if err := flags.Parse(args[1:]); err != nil {
@@ -770,7 +1214,7 @@ func runEvaluationCorpus(args []string) error {
 			return err
 		}
 		result, freezeErr := evaluation.FreezeLegacyCorpus(store, *legacyRoot,
-			evaluation.FreezeOptions{Name: *name})
+			evaluation.FreezeOptions{Name: *name, IndexEntryLimit: *indexEntryLimit})
 		if err := encodeIndented(result); err != nil {
 			return err
 		}
@@ -959,11 +1403,43 @@ func runAgentAssessment(args []string) error {
 	}
 }
 
+func runEvaluationPrepare(args []string) error {
+	flags := flag.NewFlagSet("eval prepare", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	portableRoot := flags.String("repo", "", "portable memory repository (required)")
+	oracleRegistry := flags.String("oracle-registry", "", "local runnable oracle registry (required)")
+	suiteID := flags.String("suite", "", "evaluation suite id (required)")
+	corpusID := flags.String("corpus", "", "verified frozen regression corpus id (required)")
+	runID := flags.String("run", "", "evaluation run id (required)")
+	systemVersion := flags.String("system-version", "", "system version under evaluation (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *portableRoot == "" || *oracleRegistry == "" || *corpusID == "" ||
+		*suiteID == "" || *runID == "" || *systemVersion == "" {
+		return errors.New("eval prepare requires --root, --repo, --oracle-registry, --corpus, --suite, --run, and --system-version")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	input, err := evaluation.PrepareContinuousInput(store, evaluation.PrepareContinuousOptions{
+		SuiteID: *suiteID, RunID: *runID, SystemVersion: *systemVersion,
+		CorpusID:     *corpusID,
+		PortableRoot: *portableRoot, OracleRegistry: *oracleRegistry,
+	})
+	if err != nil {
+		return err
+	}
+	return encodeIndented(input)
+}
+
 func runEvaluationRun(args []string) error {
 	flags := flag.NewFlagSet("eval run", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
 	requestPath := flags.String("file", "", "evaluation input JSON file, or - for stdin (required)")
 	portableRoot := flags.String("repo", "", "portable memory repository when revision evidence is used")
+	oracleRegistry := flags.String("oracle-registry", "", "local runnable oracle registry for continuous learning")
 	enforce := flags.Bool("enforce", false, "return a failure when release gates do not pass")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -990,7 +1466,8 @@ func runEvaluationRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	result, err := evaluation.Run(store, input, evaluation.RunOptions{PortableRoot: *portableRoot})
+	result, err := evaluation.Run(store, input, evaluation.RunOptions{
+		PortableRoot: *portableRoot, OracleRegistry: *oracleRegistry})
 	if err != nil {
 		return err
 	}
@@ -1007,6 +1484,7 @@ func runEvaluationVerify(args []string) error {
 	flags := flag.NewFlagSet("eval verify", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
 	portableRoot := flags.String("repo", "", "portable memory repository (required when the run references portable revisions)")
+	oracleRegistry := flags.String("oracle-registry", "", "local runnable oracle registry for continuous learning")
 	suiteID := flags.String("suite", "", "evaluation suite id (required)")
 	runID := flags.String("run", "", "evaluation run id (required)")
 	if err := flags.Parse(args); err != nil {
@@ -1019,7 +1497,8 @@ func runEvaluationVerify(args []string) error {
 	if err != nil {
 		return err
 	}
-	report := evaluation.VerifyRun(store, *suiteID, *runID, *portableRoot)
+	report := evaluation.VerifyRunWithOptions(store, *suiteID, *runID,
+		evaluation.RunVerificationOptions{PortableRoot: *portableRoot, OracleRegistry: *oracleRegistry})
 	if err := encodeIndented(report); err != nil {
 		return err
 	}
@@ -2187,7 +2666,7 @@ func deriveUsageError() error {
 }
 
 func evalUsageError() error {
-	return errors.New("usage: agentmem eval <corpus baseline|corpus freeze|corpus verify|corpus review-pack|corpus review-queue|corpus agent-assessment prepare|corpus agent-assessment import-external|corpus agent-assessment run-openai|attempt record|attempt verify|attest|run|verify> [options]")
+	return errors.New("usage: agentmem eval <corpus ...|oracle init|sut bind|trial select|trial preregister|attempt preregister|attempt execute|attempt observe|attempt finalize|attempt record|attempt verify|compaction seal|attest|prepare|run|verify> [options]")
 }
 
 func captureUsageError() error {

@@ -8,8 +8,9 @@ agent runtime makes locally available before deriving memories from it. Raw
 evidence stays local by default. Only reviewed, redacted, promoted memories may
 enter a separate private Git repository.
 
-> Status: v1alpha1 foundation. The evidence, review, promotion, synchronization,
-> retrieval, evaluation, and encrypted-recovery protocols are implemented and
+> Status: foundation. New evidence events use `v1alpha2`; existing `v1alpha1`
+> ledger prefixes remain verifiable without rewriting. The review, promotion,
+> synchronization, retrieval, evaluation, and encrypted-recovery protocols are
 > covered by synthetic cross-platform tests. Native Agent integrations remain
 > opt-in and version-sensitive. A passing test suite proves the controls, not
 > real-world learning efficacy or capture of data a runtime never exposed.
@@ -68,7 +69,7 @@ canonical data and is never merged through Git.
 - `docs/research`: adopt/modify/reject reviews of related projects
 - `adapters`: Codex, Claude Code, and OpenCode evidence adapters
 - `integrations`: optional Agent-native live capture and injection bridges
-- `evals`: synthetic continuous-learning and sync reliability fixtures
+- `evals`: synthetic evaluation-metric and sync reliability fixtures
 
 ## Install
 
@@ -173,7 +174,16 @@ go run ./cmd/agentmem eval corpus agent-assessment prepare --root <local-data-di
 go run ./cmd/agentmem eval corpus agent-assessment import-external --root <local-data-directory> --projection <agent-projection-id> --file <submission.json> --assessor-id <id> --claimed-provider <provider> --claimed-model <model> --harness-version <version> --prompt-sha256 <sha256> --data-disclosure-claim <remote|local|unknown> --assessed-at <rfc3339>
 go run ./cmd/agentmem eval corpus agent-assessment run-openai --root <local-data-directory> --projection <agent-projection-id> --model <openai-responses-model> --confirm-remote-disclosure <exact-agent-payload-id>
 go run ./cmd/agentmem eval attest --root <local-data-directory> --file <evaluation-attestation.json>
-go run ./cmd/agentmem eval run --root <local-data-directory> --file <evaluation-input.json> --repo <private-memory-directory> --enforce
+go run ./cmd/agentmem eval oracle init --file <local-oracle-registry.json>
+go run ./cmd/agentmem eval sut bind --root <local-data-directory> --agent codex --provider <provider> --model <model> --system-prompt <file> --tool-registry <file> --harness <file> --adapter <file>
+go run ./cmd/agentmem eval trial select --root <local-data-directory> --corpus <corpus-id>
+go run ./cmd/agentmem eval trial preregister --root <local-data-directory> --corpus <corpus-id> --suite <suite-id> --agent codex --corpus-artifact <selected-artifact-id> --semantic-key <sha256> --baseline-thread <id> --baseline-session <id> --treatment-thread <id> --treatment-session <id> --task-spec <local-data-directory>/<selected-blob-relative-path> --criteria <file> --config <file> --sut-manifest <file> --oracle-registry <local-oracle-registry.json>
+go run ./cmd/agentmem eval compaction seal --root <local-data-directory> --file <compaction-ground-truth-request.json>
+go run ./cmd/agentmem eval attempt execute --root <local-data-directory> --file <trial-plan.json> --attempt <attempt-id> --repo <private-memory-directory>
+go run ./cmd/agentmem eval attempt finalize --root <local-data-directory> --file <execution-result.json> --oracle-registry <local-oracle-registry.json>
+go run ./cmd/agentmem eval attempt verify --root <local-data-directory> --receipt <task-attempt-receipt-id>
+go run ./cmd/agentmem eval prepare --root <local-data-directory> --repo <private-memory-directory> --oracle-registry <local-oracle-registry.json> --corpus <corpus-id> --suite <suite-id> --run <run-id> --system-version <version>
+go run ./cmd/agentmem eval run --root <local-data-directory> --file <evaluation-input.json> --enforce
 go run ./cmd/agentmem eval verify --root <local-data-directory> --suite <suite-id> --run <run-id>
 go run ./cmd/agentmem backup keygen --identity <separate-private-key-file>
 go run ./cmd/agentmem backup create --root <local-data-directory> --output <encrypted-archive> --recipient <age-recipient>
@@ -237,7 +247,10 @@ Keep runtime evidence and raw staging directories outside every Git worktree.
 
 `derive episodes` reconstructs a deterministic per-thread process timeline and
 episode generation from the hash-chain-verified ledger prefix. Derived files
-remain under the local evidence root. Compaction checks distinguish confirmed
+remain under the local evidence root. An append-only attempt marker is committed
+before detector computation, and each retained generation is anchored by a
+completion audit event; deleting its derived files is detected rather
+than erasing detector history. Compaction checks distinguish confirmed
 repeated user correction evidence from lexical risk and unavailable
 representations; none of these results is promoted memory. See
 [episode derivation](docs/episodes.md).
@@ -296,16 +309,66 @@ delivery, and downstream adoption are recorded separately. See
 `eval corpus freeze` turns legacy cards and referenced rollout snapshots into
 a hash-bound local regression corpus without promoting them. Raw capture and
 parser projection gaps are measured separately. Interpretive quality labels
-must be recorded first as append-only case attestations, and a run cannot pass
-on empty samples or unresolved evidence. See
-[continuous-learning evaluation](docs/evaluation.md).
+for false-memory cases must be recorded first as append-only attestations.
+Compaction controls instead use one complete pack sealed before any retained
+detector generation covers the frozen subjects. A run cannot pass on empty
+samples or unresolved evidence. See [continuous-learning evaluation](docs/evaluation.md).
 
-Repeated-correction and paired-outcome gates use replayable local task-attempt
-receipts instead of self-reported aggregate counts. The
-`continuous_learning` profile requires the complete six-category, twelve-gate
-diagnostic shape. It remains `measurement_only` and cannot claim product
-efficacy until a versioned fixed policy, a deterministically closed population,
-and independently runnable oracles are bound to the run.
+Repeated-correction and paired-outcome gates use supervised local task-attempt
+receipts instead of self-reported aggregate counts. Before any result exists,
+an evaluation trial plan atomically commits both arms, their execution order,
+the frozen corpus, task artifacts, SUT, and oracle. Missing arms, receipts, or
+planned results fail closed. `eval prepare` then binds the complete sealed plan
+population, the independently scanned capture inventory, verified episode
+generation, the full promoted-memory projection, the frozen corpus, and oracle
+registry to one ledger prefix. The trial population is not caller-selected: a
+policy-derived assignment digest ranks the frozen legacy-card artifacts, selects at most 20,
+assigns them round-robin across Codex, Claude Code, and OpenCode, and derives
+the pair and task identities. Each task specification must equal its selected
+artifact bytes, and every selected artifact must appear exactly once before the
+first result. `trial select` returns each selected artifact's content-addressed
+BlobRef; use its `relative_path` under the local evidence root as `--task-spec`.
+Exact portable state, registry bytes, and the
+historical capture snapshot are stored as content-addressed local evidence
+blobs, so later `run` and `verify` replay prepared dependencies rather than
+mutable live paths. The fixed policy is `continuous-learning-policy/v1`.
+
+Controlled trials first bind the actual system prompt, tool registry, harness,
+and Agent adapter bytes into a `system-under-test-manifest/v1alpha2`. The
+execution supervisor runs those exact local adapter bytes with a challenge-bound
+input that omits plan identity, condition, and acceptance criteria. It records a
+bound start/result/receipt chain and rejects manual result observation for
+continuous populations. Non-zero exits, timeouts, start failures, and empty
+output become canonical failed terminals and cannot be retried. This proves the
+local artifact and I/O path, not that Codex, Claude Code, OpenCode, a remote
+provider, or a claimed model emitted the response. The sealed arm order is
+enforced during execution and replay. Treatment delivery creates an `unknown`
+adoption observation, not a claim that the memory was used. Only the built-in
+`evidence-score/v1` oracle can satisfy the blind and hermetic efficacy
+prerequisites. It classifies the ordered result and
+user-message stream by payload SHA-256 without receiving task, attempt,
+treatment, source, or time identity. Unavailable token counts remain not
+evaluated. Native executable oracles remain diagnostic.
+
+Compaction labels are sealed as one complete human-reviewed pack for the frozen
+corpus before episode generation or drift detection. The review surface must not
+show detector output. The evaluator rejects later per-case labels as a substitute
+for this prior ground truth. Portable evaluation likewise reconstructs the full
+local promotion projection; exporting only favorable revisions cannot satisfy
+the population gate.
+
+A report can become release-ready only for the exact bound evaluation
+population when all six categories, fixed gates, per-Agent strata, minimum
+independent sample counts, and evidence replays pass. Its authority remains
+`measurement_only`: a passing run neither promotes memory nor proves broad
+real-world efficacy or coverage of every ordinary user task.
+
+The current release deliberately leaves `verified_agent_execution=false`.
+Supervised local-adapter results are useful diagnostics, but no included bridge
+yet provides verifiable native Codex, Claude Code, or OpenCode execution
+provenance. Consequently, the current implementation cannot honestly produce a
+`ReleaseReady` continuous-learning claim; that gate requires a future
+Agent-specific bridge and does not authenticate provider-private reasoning.
 
 `eval corpus review-pack` deterministically samples corpus-overlapping
 candidates and compaction checkpoints for human review. The pack stays under

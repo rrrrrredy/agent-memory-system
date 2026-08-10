@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/compaction-ground-truth-seal.schema.json",
+  "title": "Compaction ground-truth seal result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pack", "event_id", "record_hash", "privacy"],
+  "properties": {
+    "schema_version": {"const": "compaction-ground-truth-seal/v1alpha1"},
+    "pack": {"$ref": "compaction-ground-truth-pack.schema.json"},
+    "event_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "record_hash": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "privacy": {"const": "local_only"}
+  }
+}

@@ -25,7 +25,7 @@ import (
 
 const (
 	evaluationAdapterName    = "learning-evaluation"
-	evaluationAdapterVersion = "learning-evaluation/v1alpha1"
+	evaluationAdapterVersion = "learning-evaluation/v1alpha2"
 	runVerificationSchema    = "learning-evaluation-verification/v1alpha1"
 )
 
@@ -40,6 +40,8 @@ func Run(store *ledger.Store, input EvaluationInput, options RunOptions) (result
 	if err != nil {
 		return result, err
 	}
+	report.Issues = append(report.Issues, verifyContinuousPopulation(
+		store, input, options.PortableRoot, options.OracleRegistry, true)...)
 	inputData, err := marshalIndented(input)
 	if err != nil {
 		return result, fmt.Errorf("encode evaluation input: %w", err)
@@ -66,8 +68,7 @@ func Run(store *ledger.Store, input EvaluationInput, options RunOptions) (result
 		}
 	}
 
-	portableRevisions, portableIssues := loadPortableRevisions(store.Root(), options.PortableRoot,
-		hasEvidenceKind(input, "portable_revision"))
+	portableRevisions, portableIssues := loadEvaluationPortableRevisions(store, input, options.PortableRoot)
 	report.Issues = append(report.Issues, portableIssues...)
 	if hasCategory(input, CategoryRetrievalCost) || hasCategory(input, CategoryRepeatedCorrection) ||
 		hasCategory(input, CategoryPairedOutcome) {
@@ -111,6 +112,8 @@ func Run(store *ledger.Store, input EvaluationInput, options RunOptions) (result
 			returnedErr = closeErr
 		}
 	}()
+
+	report.Issues = append(report.Issues, lockedContinuousLedgerIssues(input, orderedRecords)...)
 
 	for _, evaluationCase := range input.Cases {
 		caseRecords := map[string]ledger.Record{}
@@ -225,6 +228,15 @@ func Run(store *ledger.Store, input EvaluationInput, options RunOptions) (result
 
 func VerifyRun(store *ledger.Store, suiteID, runID string,
 	portableRoots ...string) RunVerificationReport {
+	options := RunVerificationOptions{}
+	if len(portableRoots) != 0 {
+		options.PortableRoot = portableRoots[0]
+	}
+	return VerifyRunWithOptions(store, suiteID, runID, options)
+}
+
+func VerifyRunWithOptions(store *ledger.Store, suiteID, runID string,
+	options RunVerificationOptions) RunVerificationReport {
 	verification := RunVerificationReport{
 		SchemaVersion: runVerificationSchema, SuiteID: suiteID, RunID: runID,
 		Issues: []string{}, Privacy: "local_only",
@@ -302,12 +314,8 @@ func VerifyRun(store *ledger.Store, suiteID, runID string,
 		verification.Issues = append(verification.Issues, "read evaluation evidence: "+err.Error())
 		return verification
 	}
-	portableRoot := ""
-	if len(portableRoots) != 0 {
-		portableRoot = portableRoots[0]
-	}
-	replayed := replayEvaluationEvidence(store, input, recalculated, portableRoot,
-		allRecords, orderedRecords)
+	replayed := replayEvaluationEvidence(store, input, recalculated, options.PortableRoot,
+		options.OracleRegistry, allRecords, orderedRecords)
 	if !sameReplayedReport(stored, replayed) {
 		verification.Issues = append(verification.Issues, "evaluation report does not match complete evidence replay")
 	}
@@ -346,8 +354,10 @@ func sameReplayedReport(stored, replayed EvaluationReport) bool {
 }
 
 func replayEvaluationEvidence(store *ledger.Store, input EvaluationInput, report EvaluationReport,
-	portableRoot string, allRecords map[string]indexedRecord,
+	portableRoot, oracleRegistry string, allRecords map[string]indexedRecord,
 	orderedRecords []ledger.Record) EvaluationReport {
+	report.Issues = append(report.Issues, verifyContinuousPopulation(
+		store, input, portableRoot, oracleRegistry, false)...)
 	corpusArtifacts := map[string]CorpusArtifact{}
 	var corpusManifest *CorpusManifest
 	if input.CorpusID != "" {
@@ -365,8 +375,7 @@ func replayEvaluationEvidence(store *ledger.Store, input EvaluationInput, report
 			}
 		}
 	}
-	portableRevisions, portableIssues := loadPortableRevisions(store.Root(), portableRoot,
-		hasEvidenceKind(input, "portable_revision"))
+	portableRevisions, portableIssues := loadEvaluationPortableRevisions(store, input, portableRoot)
 	report.Issues = append(report.Issues, portableIssues...)
 	if hasCategory(input, CategoryRetrievalCost) || hasCategory(input, CategoryRepeatedCorrection) ||
 		hasCategory(input, CategoryPairedOutcome) {
@@ -564,11 +573,29 @@ func validateCorrectionAttemptEvidence(store *ledger.Store, evaluationCase Evalu
 	caseRecords map[string]ledger.Record, allRecords map[string]indexedRecord,
 	orderedRecords []ledger.Record) []string {
 	measurement := evaluationCase.Correction
+	initialRecord, referenced := caseRecords[measurement.InitialCorrectionAttemptID]
+	initialIndexed, indexed := allRecords[measurement.InitialCorrectionAttemptID]
+	if !referenced || !indexed || initialRecord.Event.Kind != ledger.KindTaskAttempt {
+		return []string{"case " + evaluationCase.CaseID + ": initial correction attempt is unavailable"}
+	}
+	if verification := verifyTaskAttemptRecord(store, initialRecord, allRecords, orderedRecords); len(verification.Issues) != 0 {
+		return []string{"case " + evaluationCase.CaseID + ": initial correction attempt failed replay: " +
+			strings.Join(verification.Issues, "; ")}
+	}
+	initial, err := decodeTaskAttemptReceipt(store, initialRecord.Event)
+	if err != nil || initial.Agent != evaluationCase.Agent ||
+		initial.SemanticKeySHA256 != measurement.SemanticKeySHA256 ||
+		initial.Measurement.UserCorrections == 0 {
+		return []string{"case " + evaluationCase.CaseID + ": initial attempt does not establish the claimed correction"}
+	}
+
 	repeated := 0
 	for _, attemptID := range measurement.AttemptIDs {
 		record, referenced := caseRecords[attemptID]
-		if !referenced || record.Event.Kind != ledger.KindTaskAttempt {
-			return []string{"case " + evaluationCase.CaseID + ": correction measurement lacks exact task attempt " + attemptID}
+		indexed, exists := allRecords[attemptID]
+		if !referenced || !exists || record.Event.Kind != ledger.KindTaskAttempt ||
+			indexed.Index <= initialIndexed.Index {
+			return []string{"case " + evaluationCase.CaseID + ": correction follow-up is unavailable or not later than the initial correction"}
 		}
 		verification := verifyTaskAttemptRecord(store, record, allRecords, orderedRecords)
 		if len(verification.Issues) != 0 {
@@ -577,7 +604,7 @@ func validateCorrectionAttemptEvidence(store *ledger.Store, evaluationCase Evalu
 		receipt, err := decodeTaskAttemptReceipt(store, record.Event)
 		if err != nil || receipt.Condition != TaskConditionMemory || receipt.Agent != evaluationCase.Agent ||
 			receipt.SemanticKeySHA256 != measurement.SemanticKeySHA256 {
-			return []string{"case " + evaluationCase.CaseID + ": correction task attempt has the wrong condition, agent, or semantic key"}
+			return []string{"case " + evaluationCase.CaseID + ": correction follow-up has the wrong condition, agent, or semantic key"}
 		}
 		if receipt.Measurement.UserCorrections > 0 {
 			repeated++
@@ -721,6 +748,22 @@ func eventPayload(store *ledger.Store, event ledger.Event) ([]byte, error) {
 	return io.ReadAll(file)
 }
 
+func loadEvaluationPortableRevisions(store *ledger.Store, input EvaluationInput,
+	portableRoot string) (map[string]portable.Revision, []string) {
+	if input.QualityProfile != QualityProfileContinuousLearning {
+		return loadPortableRevisions(store.Root(), portableRoot,
+			hasEvidenceKind(input, "portable_revision"))
+	}
+	if input.Population == nil || input.Population.PortableStateBlob == nil {
+		return map[string]portable.Revision{}, []string{"continuous portable state snapshot is missing"}
+	}
+	revisions, _, err := loadPortablePopulationSnapshot(store, *input.Population.PortableStateBlob)
+	if err != nil {
+		return map[string]portable.Revision{}, []string{"continuous portable state snapshot: " + err.Error()}
+	}
+	return revisions, nil
+}
+
 func loadPortableRevisions(evidenceRoot, portableRoot string, required bool) (map[string]portable.Revision, []string) {
 	result := map[string]portable.Revision{}
 	if !required {
@@ -831,6 +874,25 @@ func hasEvidenceKind(input EvaluationInput, kind string) bool {
 		}
 	}
 	return false
+}
+
+func lockedContinuousLedgerIssues(input EvaluationInput, ordered []ledger.Record) []string {
+	if input.QualityProfile != QualityProfileContinuousLearning || input.Population == nil {
+		return nil
+	}
+	prefix := input.Population.LedgerRecordCount
+	if prefix < 1 || prefix > len(ordered) {
+		return []string{"continuous-learning population is stale relative to the locked ledger snapshot"}
+	}
+	if ordered[prefix-1].RecordHash != input.Population.LedgerLastRecordHash {
+		return []string{"continuous-learning population prefix hash does not match the locked ledger snapshot"}
+	}
+	for _, record := range ordered[prefix:] {
+		if record.Event.Kind != ledger.KindEvaluationRun {
+			return []string{"continuous-learning population is stale relative to the locked ledger snapshot"}
+		}
+	}
+	return nil
 }
 
 func sha256Hex(data []byte) string {

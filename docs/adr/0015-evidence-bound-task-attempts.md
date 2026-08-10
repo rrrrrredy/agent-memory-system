@@ -15,17 +15,19 @@ corrections.
 ## Decision
 
 Repeated-correction and paired-outcome gates use append-only
-`task-attempt-receipt/v1alpha1` records as their canonical replay record. A receipt
+`task-attempt-receipt/v1alpha2` records as their canonical replay record. A receipt
 binds:
 
 - a stable task and attempt identity;
-- hashes of the task specification, acceptance criteria, and execution
-  configuration;
+- hashes and local blob references for the exact task specification,
+  acceptance criteria, execution configuration, and current system artifact;
+- a system-under-test manifest whose local blobs bind the actual system prompt,
+  tool registry, harness, and Agent adapter;
 - one Agent, semantic key, and baseline or memory condition;
 - an exact, complete ledger window;
 - every observed result and user message in that window;
 - causal ancestry from task start or exact memory injection;
-- an identified, versioned oracle verdict; and
+- an identified, versioned oracle verdict with an optional registry-entry hash;
 - a derived trial measurement.
 
 A memory-conditioned attempt additionally binds verified retrieval, exact
@@ -46,17 +48,17 @@ referenced attempt and compares all derived measurements.
 
 Evaluation inputs declare either a `component` profile or the
 `continuous_learning` profile. The latter requires every quality category, all
-twelve gates, and positive sample minimums, but remains a measurement-only
-diagnostic. Every continuous-learning report records that efficacy is not
-evaluable and cannot become release-ready while thresholds and population are
-caller-selected and oracle judgments are not independently rerunnable.
-
-A future efficacy policy must atomically bind a versioned policy to fixed
-thresholds and eligibility rules, deterministically rebuild a population
-manifest from frozen ledger and repository state, require exact measured-subject
-coverage, and rerun keyed oracle checkers. Self-reported trust flags, adapter
-allowlists, source strings, signatures, or submitted population hashes do not
-establish those properties.
+every fixed metric gate, efficacy prerequisite, and positive sample minimum, and remains measurement-only.
+ADR 0016 adds the atomic release gate: it binds the versioned fixed policy,
+deterministically rebuilds independent capture and sealed paired-trial
+populations, requires exact measured-subject coverage, full promoted-memory
+projection, prior compaction ground truth, task-artifact blobs, and supervised
+execution, then reruns the blind built-in `evidence-score/v1` oracle. Controlled
+efficacy trials use `trial preregister`, `attempt execute`, and `attempt finalize`;
+per-attempt preregistration, manual observation, and `attempt record` remain
+component compatibility paths. Native checkers remain diagnostic. Self-reported
+trust flags, adapter allowlists, source strings, signatures, or submitted
+population hashes do not establish those properties.
 
 ## Consequences
 
@@ -65,9 +67,9 @@ establish those properties.
 - Baseline and memory results with different task contracts cannot form a
   pair.
 - Self-declared human or harness identities remain unauthenticated, and an
-  oracle verdict remains a claim. The protocol makes that claim attributable
-  and replayable rather than objectively true.
-- Passing all twelve continuous-learning gates remains diagnostic and cannot
-  be reported as product efficacy.
+  oracle verdict remains a policy judgment. Registry-bound replay makes harness
+  output reproducible rather than objectively true.
+- Passing every continuous-learning metric gate and efficacy prerequisite applies only to the exact bound
+  population and cannot be reported as general product efficacy.
 - Provider-private events or reasoning that never reach the local runtime
   remain outside the evidence boundary and must be reported as unavailable.

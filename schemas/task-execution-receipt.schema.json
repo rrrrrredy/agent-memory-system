@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/task-execution-receipt.schema.json",
+  "title": "Evidence-bound supervised task execution receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "receipt_id", "execution_id", "trial_plan_id", "trial_pair_id", "attempt_id",
+    "condition", "agent", "provider", "model", "contract", "started", "result",
+    "system_under_test_sha256", "supervisor_artifact_sha256", "executable_sha256", "arguments_sha256",
+    "environment_sha256", "input_blob", "result_blob", "outcome", "result_media_type", "exit_code",
+    "started_at", "finished_at", "memory_references", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "task-execution-receipt/v1alpha1"},
+    "receipt_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "execution_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "trial_plan_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "trial_pair_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "attempt_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "condition": {"enum": ["baseline", "memory"]},
+    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "provider": {"type": "string", "minLength": 1},
+    "model": {"type": "string", "minLength": 1},
+    "contract": {"$ref": "task-attempt-receipt.schema.json#/$defs/bound_event"},
+    "started": {"$ref": "task-attempt-receipt.schema.json#/$defs/bound_event"},
+    "result": {"$ref": "task-attempt-receipt.schema.json#/$defs/bound_event"},
+    "system_under_test_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "supervisor_artifact_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "executable_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "arguments_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "environment_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "input_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "result_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "stdout_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "stderr_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "outcome": {"enum": ["completed", "failed"]},
+    "result_media_type": {"type": "string", "minLength": 1},
+    "failure_kind": {"enum": ["timeout", "start_error", "process_exit", "empty_output"]},
+    "exit_code": {"type": "integer"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "retrieval_receipt_id": {"type": "string", "pattern": "^retrieval-"},
+    "injection_id": {"type": "string", "pattern": "^injection-"},
+    "memory_references": {
+      "type": "array", "uniqueItems": true,
+      "items": {"$ref": "memory-retrieval-result.schema.json#/$defs/memory_reference"}
+    },
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"condition": {"const": "baseline"}}, "required": ["condition"]},
+      "then": {
+        "properties": {
+          "retrieval_receipt_id": false, "injection_id": false, "memory_references": {"maxItems": 0}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"condition": {"const": "memory"}}, "required": ["condition"]},
+      "then": {
+        "required": ["retrieval_receipt_id", "injection_id"],
+        "properties": {"memory_references": {"minItems": 1}}
+      }
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "completed"}}, "required": ["outcome"]},
+      "then": {
+        "properties": {
+          "exit_code": {"const": 0},
+          "failure_kind": false,
+          "stdout_blob": false,
+          "result_media_type": {"not": {"const": "application/vnd.agentmem.task-execution-failure+json"}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "failed"}}, "required": ["outcome"]},
+      "then": {
+        "required": ["failure_kind"],
+        "properties": {
+          "exit_code": {"not": {"const": 0}},
+          "result_media_type": {"const": "application/vnd.agentmem.task-execution-failure+json"}
+        }
+      }
+    }
+  ]
+}

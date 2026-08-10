@@ -6,21 +6,60 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "task_id", "attempt_id", "agent", "semantic_key_sha256",
-    "task_spec_sha256", "acceptance_criteria_sha256", "execution_config_sha256", "condition",
+    "task_spec_sha256", "acceptance_criteria_sha256", "execution_config_sha256", "system_artifact_sha256", "condition",
     "window_end_event_id", "oracle", "privacy"
   ],
   "properties": {
-    "schema_version": {"const": "task-attempt-contract/v1alpha1"},
+    "schema_version": {"const": "task-attempt-contract/v1alpha2"},
     "task_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
     "attempt_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "trial_plan_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "trial_pair_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
     "agent": {"enum": ["codex", "claude_code", "opencode"]},
     "semantic_key_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
     "task_spec_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
     "acceptance_criteria_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
     "execution_config_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "system_artifact_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "system_under_test_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "system_under_test_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "task_spec_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "acceptance_criteria_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "execution_config_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
     "condition": {"enum": ["baseline", "memory"]},
     "window_end_event_id": {"type": "string", "minLength": 1},
     "oracle": {"$ref": "task-attempt-request.schema.json#/properties/oracle"},
     "privacy": {"const": "local_only"}
-  }
+  },
+  "dependentRequired": {
+    "trial_plan_id": ["trial_pair_id"],
+    "trial_pair_id": ["trial_plan_id"]
+  },
+  "allOf": [
+    {
+      "if": {
+        "anyOf": [
+          {"required": ["system_under_test_sha256"]},
+          {"required": ["system_under_test_blob"]}
+        ]
+      },
+      "then": {
+        "required": ["system_under_test_sha256", "system_under_test_blob"]
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {"required": ["task_spec_blob"]},
+          {"required": ["acceptance_criteria_blob"]},
+          {"required": ["execution_config_blob"]}
+        ]
+      },
+      "then": {
+        "required": [
+          "task_spec_blob", "acceptance_criteria_blob", "execution_config_blob"
+        ]
+      }
+    }
+  ]
 }

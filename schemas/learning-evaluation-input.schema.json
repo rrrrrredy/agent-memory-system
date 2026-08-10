@@ -9,12 +9,14 @@
     "cases", "thresholds", "privacy"
   ],
   "properties": {
-    "schema_version": {"const": "learning-evaluation-input/v1alpha1"},
+    "schema_version": {"const": "learning-evaluation-input/v1alpha2"},
     "suite_id": {"$ref": "#/$defs/identifier"},
     "run_id": {"$ref": "#/$defs/identifier"},
     "created_at": {"type": "string", "format": "date-time"},
     "system_version": {"type": "string", "minLength": 1},
     "quality_profile": {"enum": ["component", "continuous_learning"]},
+    "policy_id": {"const": "continuous-learning-policy/v1"},
+    "population": {"$ref": "#/$defs/population"},
     "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
     "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}, "minItems": 1},
     "thresholds": {"$ref": "#/$defs/thresholds"},
@@ -23,6 +25,7 @@
   "$defs": {
     "identifier": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,160}$"},
     "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "optional_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"const": ""}]},
     "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
     "evidence": {
       "type": "object",
@@ -39,7 +42,7 @@
       "additionalProperties": false,
       "required": ["unit", "expected", "complete", "partial", "missing"],
       "properties": {
-        "unit": {"enum": ["evidence_events", "legacy_rollouts"]},
+        "unit": {"enum": ["evidence_events", "legacy_rollouts", "source_inventory_items"]},
         "expected": {"type": "integer", "minimum": 0},
         "complete": {"type": "integer", "minimum": 0},
         "partial": {"type": "integer", "minimum": 0},
@@ -62,11 +65,12 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "semantic_key_sha256", "attempt_ids", "eligible_followup_opportunities", "repeated_corrections",
+        "semantic_key_sha256", "initial_correction_attempt_id", "attempt_ids", "eligible_followup_opportunities", "repeated_corrections",
         "repeated_corrections_after_memory"
       ],
       "properties": {
         "semantic_key_sha256": {"$ref": "#/$defs/sha256"},
+        "initial_correction_attempt_id": {"type": "string", "pattern": "^task-attempt-[a-f0-9]{64}$"},
         "attempt_ids": {
           "type": "array", "minItems": 1, "uniqueItems": true,
           "items": {"type": "string", "pattern": "^task-attempt-[a-f0-9]{64}$"}
@@ -104,14 +108,19 @@
     "trial": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["success", "score", "errors", "user_corrections", "total_tokens"],
+      "required": ["success", "score", "errors", "user_corrections", "token_count_evaluated", "total_tokens"],
       "properties": {
         "success": {"type": "boolean"},
         "score": {"type": "number", "minimum": 0, "maximum": 1},
         "errors": {"type": "integer", "minimum": 0},
         "user_corrections": {"type": "integer", "minimum": 0},
+        "token_count_evaluated": {"type": "boolean"},
         "total_tokens": {"type": "integer", "minimum": 0}
-      }
+      },
+      "allOf": [{
+        "if": {"properties": {"token_count_evaluated": {"const": false}}, "required": ["token_count_evaluated"]},
+        "then": {"properties": {"total_tokens": {"const": 0}}}
+      }]
     },
     "paired_outcome": {
       "type": "object",
@@ -173,6 +182,91 @@
         }
       ]
     },
+    "population": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "policy_id", "episode_derivation_version", "episodes_sha256", "timeline_sha256",
+        "ledger_record_count", "ledger_last_record_hash", "portable_state_sha256", "portable_state_blob",
+        "oracle_registry_sha256", "oracle_registry_blob", "system_artifact_sha256", "system_under_test_sha256",
+        "capture_snapshot_sha256", "capture_snapshot_blob", "corpus_id", "corpus_content_sha256",
+        "efficacy_prerequisites", "case_set_sha256", "category_counts", "required_agents",
+        "unpaired_attempt_ids", "population_issues"
+      ],
+      "properties": {
+        "schema_version": {"const": "learning-evaluation-population/v1alpha2"},
+        "policy_id": {"const": "continuous-learning-policy/v1"},
+        "episode_derivation_version": {"type": "string"},
+        "episodes_sha256": {"$ref": "#/$defs/optional_sha256"},
+        "timeline_sha256": {"$ref": "#/$defs/optional_sha256"},
+        "ledger_record_count": {"type": "integer", "minimum": 1},
+        "ledger_last_record_hash": {"$ref": "#/$defs/sha256"},
+        "portable_state_sha256": {"$ref": "#/$defs/sha256"},
+        "portable_state_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+        "oracle_registry_sha256": {"$ref": "#/$defs/sha256"},
+        "oracle_registry_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+        "case_set_sha256": {"$ref": "#/$defs/sha256"},
+        "system_artifact_sha256": {"$ref": "#/$defs/optional_sha256"},
+        "system_under_test_sha256": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "codex": {"$ref": "#/$defs/sha256"},
+            "claude_code": {"$ref": "#/$defs/sha256"},
+            "opencode": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "capture_snapshot_sha256": {"$ref": "#/$defs/sha256"},
+        "capture_snapshot_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+        "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+        "corpus_content_sha256": {"$ref": "#/$defs/sha256"},
+        "efficacy_prerequisites": {
+          "type": "object", "additionalProperties": false,
+          "required": [
+            "frozen_corpus_verified", "independent_capture_inventory", "normalized_projection_coverage",
+            "complete_portable_population", "preregistered_attempt_universe", "paired_trial_plan_sealed",
+            "execution_supervisor_receipts", "verified_agent_execution", "system_artifact_manifest", "independent_compaction_detector",
+            "sealed_compaction_ground_truth",
+            "frozen_compaction_drift_control", "frozen_compaction_preserve_control", "blind_oracle_protocol",
+            "hermetic_oracle_execution"
+          ],
+          "properties": {
+            "frozen_corpus_verified": {"type": "boolean"},
+            "independent_capture_inventory": {"type": "boolean"},
+            "normalized_projection_coverage": {"type": "boolean"},
+            "complete_portable_population": {"type": "boolean"},
+            "preregistered_attempt_universe": {"type": "boolean"},
+            "paired_trial_plan_sealed": {"type": "boolean"},
+            "execution_supervisor_receipts": {"type": "boolean"},
+            "verified_agent_execution": {"type": "boolean"},
+            "system_artifact_manifest": {"type": "boolean"},
+            "independent_compaction_detector": {"type": "boolean"},
+            "sealed_compaction_ground_truth": {"type": "boolean"},
+            "frozen_compaction_drift_control": {"type": "boolean"},
+            "frozen_compaction_preserve_control": {"type": "boolean"},
+            "blind_oracle_protocol": {"type": "boolean"},
+            "hermetic_oracle_execution": {"type": "boolean"}
+          }
+        },
+        "category_counts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["capture_coverage", "false_memory", "repeated_correction", "compaction_drift", "retrieval_cost", "paired_outcome"],
+          "properties": {
+            "capture_coverage": {"type": "integer", "minimum": 0},
+            "false_memory": {"type": "integer", "minimum": 0},
+            "repeated_correction": {"type": "integer", "minimum": 0},
+            "compaction_drift": {"type": "integer", "minimum": 0},
+            "retrieval_cost": {"type": "integer", "minimum": 0},
+            "paired_outcome": {"type": "integer", "minimum": 0}
+          }
+        },
+        "required_agents": {
+          "type": "array", "minItems": 3, "maxItems": 3,
+          "prefixItems": [{"const": "codex"}, {"const": "claude_code"}, {"const": "opencode"}]
+        },
+        "unpaired_attempt_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^task-attempt-[a-f0-9]{64}$"}},
+        "population_issues": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
     "unit_interval": {"type": "number", "minimum": 0, "maximum": 1},
     "thresholds": {
       "type": "object",
@@ -192,5 +286,21 @@
         "minimum_paired_outcome_pairs": {"type": "number", "minimum": 0}
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"quality_profile": {"const": "component"}}, "required": ["quality_profile"]},
+      "then": {"properties": {"policy_id": false, "population": false}}
+    },
+    {
+      "if": {"properties": {"quality_profile": {"const": "continuous_learning"}}, "required": ["quality_profile"]},
+      "then": {
+        "required": ["policy_id", "population", "corpus_id"],
+        "properties": {
+          "policy_id": {"const": "continuous-learning-policy/v1"},
+          "population": {"$ref": "#/$defs/population"}
+        }
+      }
+    }
+  ]
 }

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/task-execution-result.schema.json",
+  "title": "Supervised task execution CLI result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request", "execution", "privacy"],
+  "properties": {
+    "schema_version": {"const": "task-execution-result/v1alpha1"},
+    "request": {
+      "allOf": [
+        {"$ref": "task-attempt-request.schema.json"},
+        {"required": ["trial_plan_id", "trial_pair_id"]}
+      ]
+    },
+    "execution": {"$ref": "task-execution-receipt.schema.json"},
+    "privacy": {"const": "local_only"}
+  }
+}

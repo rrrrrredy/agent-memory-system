@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 
+	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -55,6 +57,7 @@ func Calculate(input EvaluationInput) (EvaluationReport, error) {
 
 	tokens := []int{}
 	var scoreDelta, successDelta, errorDelta, correctionDelta, tokenDelta float64
+	tokenPairs := 0
 	for _, evaluationCase := range input.Cases {
 		switch evaluationCase.Category {
 		case CategoryCaptureCoverage:
@@ -142,7 +145,10 @@ func Calculate(input EvaluationInput) (EvaluationReport, error) {
 			successDelta += boolFloat(measurement.Treatment.Success) - boolFloat(measurement.Baseline.Success)
 			errorDelta += float64(measurement.Treatment.Errors - measurement.Baseline.Errors)
 			correctionDelta += float64(measurement.Treatment.UserCorrections - measurement.Baseline.UserCorrections)
-			tokenDelta += float64(measurement.Treatment.TotalTokens - measurement.Baseline.TotalTokens)
+			if measurement.Baseline.TokenCountEvaluated && measurement.Treatment.TokenCountEvaluated {
+				tokenDelta += float64(measurement.Treatment.TotalTokens - measurement.Baseline.TotalTokens)
+				tokenPairs++
+			}
 		}
 	}
 
@@ -193,13 +199,13 @@ func Calculate(input EvaluationInput) (EvaluationReport, error) {
 		report.Outcomes.SuccessRateDelta = roundedPointer(successDelta / pairs)
 		report.Outcomes.MeanErrorDelta = roundedPointer(errorDelta / pairs)
 		report.Outcomes.MeanCorrectionDelta = roundedPointer(correctionDelta / pairs)
-		report.Outcomes.MeanTotalTokenDelta = roundedPointer(tokenDelta / pairs)
+	}
+	report.Outcomes.TokenPairs = tokenPairs
+	if tokenPairs > 0 {
+		report.Outcomes.MeanTotalTokenDelta = roundedPointer(tokenDelta / float64(tokenPairs))
 	}
 
 	report.Gates = evaluateGates(input.Thresholds, report)
-	if input.QualityProfile == QualityProfileContinuousLearning {
-		report.Issues = append(report.Issues, ContinuousLearningEfficacyIssue)
-	}
 	// Metric calculation alone never proves a release gate. Run resolves every
 	// referenced artifact before it may set ReleaseReady.
 	report.ReleaseReady = false
@@ -225,6 +231,15 @@ func validateInput(input EvaluationInput) error {
 	if input.QualityProfile != QualityProfileComponent &&
 		input.QualityProfile != QualityProfileContinuousLearning {
 		return errors.New("quality_profile must be component or continuous_learning")
+	}
+	if input.QualityProfile == QualityProfileComponent {
+		if input.PolicyID != "" || input.Population != nil {
+			return errors.New("component evaluation cannot claim a continuous-learning policy or population")
+		}
+	} else {
+		if input.PolicyID != ContinuousLearningPolicyV1 || input.Population == nil {
+			return errors.New("continuous_learning requires the fixed policy and deterministic population binding")
+		}
 	}
 	if input.CorpusID != "" && !strings.HasPrefix(input.CorpusID, "corpus-") {
 		return errors.New("corpus_id must use the corpus- prefix")
@@ -295,6 +310,14 @@ func validateInput(input EvaluationInput) error {
 				return err
 			}
 		case CategoryRepeatedCorrection:
+			if err := claimSubject("correction_semantic_key", evaluationCase.Correction.SemanticKeySHA256,
+				evaluationCase.CaseID); err != nil {
+				return err
+			}
+			if err := claimSubject("initial_correction_attempt", evaluationCase.Correction.InitialCorrectionAttemptID,
+				evaluationCase.CaseID); err != nil {
+				return err
+			}
 			for _, attemptID := range evaluationCase.Correction.AttemptIDs {
 				if err := claimSubject("correction_attempt", attemptID, evaluationCase.CaseID); err != nil {
 					return err
@@ -333,6 +356,9 @@ func validateInput(input EvaluationInput) error {
 			}
 		}
 	}
+	if captureUnit == CaptureUnitSourceInventory && input.QualityProfile != QualityProfileContinuousLearning {
+		return errors.New("source_inventory_items capture is derived only by the continuous_learning population builder")
+	}
 	if input.QualityProfile == QualityProfileContinuousLearning {
 		if err := validateContinuousLearningProfile(input); err != nil {
 			return err
@@ -370,7 +396,8 @@ func validateCaseMeasurement(evaluationCase EvaluationCase) error {
 	case CategoryCaptureCoverage:
 		measurement := evaluationCase.Capture
 		if measurement == nil ||
-			(measurement.Unit != CaptureUnitEvidenceEvents && measurement.Unit != CaptureUnitLegacyRollouts) ||
+			(measurement.Unit != CaptureUnitEvidenceEvents && measurement.Unit != CaptureUnitLegacyRollouts &&
+				measurement.Unit != CaptureUnitSourceInventory) ||
 			measurement.Expected < 0 || measurement.Complete < 0 ||
 			measurement.Partial < 0 || measurement.Missing < 0 || measurement.AccountedMissing < 0 ||
 			measurement.AccountedMissing > measurement.Missing ||
@@ -391,12 +418,13 @@ func validateCaseMeasurement(evaluationCase EvaluationCase) error {
 	case CategoryRepeatedCorrection:
 		measurement := evaluationCase.Correction
 		if measurement == nil || !validSHA256(measurement.SemanticKeySHA256) ||
-			len(measurement.AttemptIDs) == 0 || !sortedUniqueAttemptIDs(measurement.AttemptIDs) ||
-			measurement.EligibleFollowupOpportunities < 0 || measurement.RepeatedCorrections < 0 ||
+			!strings.HasPrefix(measurement.InitialCorrectionAttemptID, "task-attempt-") ||
+			len(measurement.AttemptIDs) != 1 || !sortedUniqueAttemptIDs(measurement.AttemptIDs) ||
+			measurement.InitialCorrectionAttemptID == measurement.AttemptIDs[0] ||
+			measurement.EligibleFollowupOpportunities != 1 || measurement.RepeatedCorrections < 0 ||
 			measurement.RepeatedCorrectionsAfterMemory < 0 ||
 			measurement.RepeatedCorrections > measurement.EligibleFollowupOpportunities ||
 			measurement.RepeatedCorrectionsAfterMemory > measurement.RepeatedCorrections ||
-			measurement.EligibleFollowupOpportunities != len(measurement.AttemptIDs) ||
 			measurement.RepeatedCorrectionsAfterMemory != measurement.RepeatedCorrections {
 			return errors.New("correction measurement is inconsistent")
 		}
@@ -604,34 +632,45 @@ func validateContinuousLearningProfile(input EvaluationInput) error {
 			return fmt.Errorf("continuous_learning profile requires category %q", category)
 		}
 	}
-	t := input.Thresholds
-	requiredThresholds := []struct {
-		name  string
-		value *float64
-	}{
-		{"minimum_capture_coverage", t.MinimumCaptureCoverage},
-		{"maximum_false_memory_rate", t.MaximumFalseMemoryRate},
-		{"maximum_unknown_memory_rate", t.MaximumUnknownMemoryRate},
-		{"maximum_repeated_correction_rate", t.MaximumRepeatedCorrectionRate},
-		{"minimum_drift_precision", t.MinimumDriftPrecision},
-		{"minimum_drift_recall", t.MinimumDriftRecall},
-		{"maximum_mean_retrieval_tokens", t.MaximumMeanRetrievalTokens},
-		{"minimum_mean_outcome_score_delta", t.MinimumMeanOutcomeScoreDelta},
-		{"maximum_mean_correction_delta", t.MaximumMeanCorrectionDelta},
-		{"maximum_harmful_outcomes", t.MaximumHarmfulOutcomes},
-		{"minimum_correction_opportunities", t.MinimumCorrectionOpportunities},
-		{"minimum_paired_outcome_pairs", t.MinimumPairedOutcomePairs},
+	if !reflect.DeepEqual(input.Thresholds, FixedContinuousLearningThresholds()) {
+		return errors.New("continuous_learning thresholds do not match the fixed versioned policy")
 	}
-	for _, threshold := range requiredThresholds {
-		name, value := threshold.name, threshold.value
-		if value == nil {
-			return fmt.Errorf("continuous_learning profile requires threshold %s", name)
+	population := input.Population
+	if population.SchemaVersion != EvaluationPopulationSchema || population.PolicyID != input.PolicyID ||
+		population.EpisodeDerivationVersion != episodes.DerivationVersion ||
+		population.LedgerRecordCount < 1 || !validSHA256(population.LedgerLastRecordHash) ||
+		!validSHA256(population.PortableStateSHA256) || !validSHA256(population.OracleRegistrySHA256) ||
+		population.PortableStateBlob == nil || !validBlobRef(*population.PortableStateBlob) ||
+		population.PortableStateBlob.SHA256 != population.PortableStateSHA256 ||
+		population.OracleRegistryBlob == nil || !validBlobRef(*population.OracleRegistryBlob) ||
+		population.OracleRegistryBlob.SHA256 != population.OracleRegistrySHA256 ||
+		!validCorpusID(population.CorpusID) || population.CorpusID != input.CorpusID ||
+		!validSHA256(population.CorpusContentSHA256) ||
+		!validOptionalBoundSHA(population.SystemArtifactSHA256, population.Prerequisites.SystemArtifactManifest) ||
+		!validSHA256(population.CaptureSnapshotSHA256) ||
+		population.CaptureSnapshotBlob == nil || !validBlobRef(*population.CaptureSnapshotBlob) ||
+		!validOptionalBoundSHA(population.EpisodesSHA256, population.Prerequisites.IndependentCompactionDetector) ||
+		!validOptionalBoundSHA(population.TimelineSHA256, population.Prerequisites.IndependentCompactionDetector) ||
+		!validSHA256(population.CaseSetSHA256) || population.CategoryCounts == nil ||
+		!reflect.DeepEqual(population.RequiredAgents,
+			[]ledger.Agent{ledger.AgentCodex, ledger.AgentClaudeCode, ledger.AgentOpenCode}) {
+		return errors.New("continuous_learning population envelope is invalid")
+	}
+	for agent, digest := range population.SystemUnderTestSHA256 {
+		if (agent != ledger.AgentCodex && agent != ledger.AgentClaudeCode && agent != ledger.AgentOpenCode) ||
+			!validSHA256(digest) {
+			return errors.New("continuous_learning system-under-test manifest map is invalid")
 		}
 	}
-	if *t.MinimumCorrectionOpportunities < 1 || *t.MinimumPairedOutcomePairs < 1 {
-		return errors.New("continuous_learning profile requires positive evidence sample minimums")
+	if !sortedUniqueAttemptIDs(population.UnpairedAttemptIDs) ||
+		!sort.StringsAreSorted(population.PopulationIssues) {
+		return errors.New("continuous_learning population diagnostics must be sorted")
 	}
 	return nil
+}
+
+func validOptionalBoundSHA(value string, required bool) bool {
+	return validSHA256(value) || (!required && value == "")
 }
 
 func sortedUniqueAttemptIDs(values []string) bool {
@@ -669,7 +708,8 @@ func validDriftLabel(label DriftLabel) bool {
 
 func validTrial(trial TrialMeasurement) bool {
 	return trial.Score >= 0 && trial.Score <= 1 && !math.IsNaN(trial.Score) &&
-		!math.IsInf(trial.Score, 0) && trial.Errors >= 0 && trial.UserCorrections >= 0 && trial.TotalTokens >= 0
+		!math.IsInf(trial.Score, 0) && trial.Errors >= 0 && trial.UserCorrections >= 0 &&
+		trial.TotalTokens >= 0 && (trial.TokenCountEvaluated || trial.TotalTokens == 0)
 }
 
 func validSHA256(value string) bool {

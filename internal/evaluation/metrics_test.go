@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -27,7 +28,10 @@ func TestCalculateMeasuresAllQualitySignalsWithoutSelfCertifying(t *testing.T) {
 			captureCase("capture", 3, 2, 1, 0),
 			memoryCase("memory-false", "memory-1", MemoryIncorrect, "a"),
 			memoryCase("memory-supported", "memory-2", MemorySupported, "b"),
-			correctionCase("correction", 4, 1, 1),
+			correctionCase("correction-1", 1, 1),
+			correctionCase("correction-2", 0, 0),
+			correctionCase("correction-3", 0, 0),
+			correctionCase("correction-4", 0, 0),
 			compactionCase("drift-tp", DriftDetected, DriftDetected, "1"),
 			compactionCase("drift-fp", DriftPreserved, DriftDetected, "2"),
 			compactionCase("drift-tn", DriftPreserved, DriftPreserved, "3"),
@@ -38,6 +42,8 @@ func TestCalculateMeasuresAllQualitySignalsWithoutSelfCertifying(t *testing.T) {
 			pairedCase("pair-loss", 0.8, 0.7, true, false, "8"),
 		},
 	}
+	input.Cases[len(input.Cases)-1].PairedOutcome.Treatment.TokenCountEvaluated = false
+	input.Cases[len(input.Cases)-1].PairedOutcome.Treatment.TotalTokens = 0
 	report, err := Calculate(input)
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +68,8 @@ func TestCalculateMeasuresAllQualitySignalsWithoutSelfCertifying(t *testing.T) {
 		t.Fatalf("unexpected retrieval metrics: %+v", report.Retrieval)
 	}
 	if report.Outcomes.MeanScoreDelta == nil || *report.Outcomes.MeanScoreDelta != 0.05 ||
-		report.Outcomes.Wins != 1 || report.Outcomes.Losses != 1 {
+		report.Outcomes.Wins != 1 || report.Outcomes.Losses != 1 || report.Outcomes.TokenPairs != 1 ||
+		report.Outcomes.MeanTotalTokenDelta == nil || *report.Outcomes.MeanTotalTokenDelta != 20 {
 		t.Fatalf("unexpected outcome metrics: %+v", report.Outcomes)
 	}
 	for _, gate := range report.Gates {
@@ -156,32 +163,60 @@ func TestCalculateKeepsUnattestedMemoryLabelNonReleaseReady(t *testing.T) {
 }
 
 func TestContinuousLearningProfileRequiresCompleteDiagnosticShape(t *testing.T) {
+	blob := func(digest string) *ledger.BlobRef {
+		return &ledger.BlobRef{SHA256: digest, Bytes: 1,
+			RelativePath: "evidence/blobs/sha256/" + digest[:2] + "/" + digest[2:]}
+	}
 	makeInput := func() EvaluationInput {
-		minimumCapture, maximumFalse, maximumUnknown := 0.9, 0.1, 0.1
-		maximumCorrection, minimumPrecision, minimumRecall := 0.1, 0.9, 0.9
-		maximumTokens, minimumScore, maximumCorrectionDelta := 200.0, 0.1, 0.0
-		maximumHarmful, minimumSamples := 0.0, 1.0
-		return EvaluationInput{
+		input := EvaluationInput{
 			SchemaVersion: EvaluationInputSchemaVersion, SuiteID: "continuous-policy",
 			RunID: "run-1", CreatedAt: time.Unix(103, 0).UTC(), SystemVersion: "test-v1",
-			QualityProfile: QualityProfileContinuousLearning, Privacy: "local_only",
-			Thresholds: EvaluationThresholds{
-				MinimumCaptureCoverage: &minimumCapture, MaximumFalseMemoryRate: &maximumFalse,
-				MaximumUnknownMemoryRate: &maximumUnknown, MaximumRepeatedCorrectionRate: &maximumCorrection,
-				MinimumDriftPrecision: &minimumPrecision, MinimumDriftRecall: &minimumRecall,
-				MaximumMeanRetrievalTokens: &maximumTokens, MinimumMeanOutcomeScoreDelta: &minimumScore,
-				MaximumMeanCorrectionDelta: &maximumCorrectionDelta, MaximumHarmfulOutcomes: &maximumHarmful,
-				MinimumCorrectionOpportunities: &minimumSamples, MinimumPairedOutcomePairs: &minimumSamples,
+			QualityProfile: QualityProfileContinuousLearning, PolicyID: ContinuousLearningPolicyV1,
+			CorpusID: "corpus-" + sha256Hex([]byte("regression-corpus")),
+			Population: &EvaluationPopulation{
+				SchemaVersion: EvaluationPopulationSchema, PolicyID: ContinuousLearningPolicyV1,
+				EpisodeDerivationVersion: episodes.DerivationVersion,
+				EpisodesSHA256:           sha256Hex([]byte("episodes")), TimelineSHA256: sha256Hex([]byte("timeline")),
+				LedgerRecordCount: 1, LedgerLastRecordHash: repeatedSHA("a"),
+				PortableStateSHA256: repeatedSHA("b"), OracleRegistrySHA256: repeatedSHA("c"),
+				PortableStateBlob: blob(repeatedSHA("b")), OracleRegistryBlob: blob(repeatedSHA("c")),
+				SystemArtifactSHA256: sha256Hex([]byte("system")), CaptureSnapshotSHA256: sha256Hex([]byte("capture")),
+				CaptureSnapshotBlob: blob(sha256Hex([]byte("capture"))),
+				CorpusID:            "corpus-" + sha256Hex([]byte("regression-corpus")),
+				CorpusContentSHA256: sha256Hex([]byte("corpus-content")),
+				Prerequisites: EfficacyPrerequisites{
+					FrozenCorpusVerified: true, IndependentCaptureInventory: true,
+					NormalizedProjectionCoverage: true, PreregisteredAttemptUniverse: true,
+					VerifiedAgentExecution: true,
+					SystemArtifactManifest: true, IndependentCompactionDetector: true,
+					BlindOracleProtocol: true, HermeticOracleExecution: true,
+				},
+				CaseSetSHA256: repeatedSHA("d"), CategoryCounts: map[CaseCategory]int{
+					CategoryCaptureCoverage: 1, CategoryFalseMemory: 1,
+					CategoryRepeatedCorrection: 20, CategoryCompactionDrift: 1,
+					CategoryRetrievalCost: 1, CategoryPairedOutcome: 10,
+				}, RequiredAgents: []ledger.Agent{
+					ledger.AgentCodex, ledger.AgentClaudeCode, ledger.AgentOpenCode,
+				}, UnpairedAttemptIDs: []string{}, PopulationIssues: []string{},
 			},
+			Thresholds: FixedContinuousLearningThresholds(), Privacy: "local_only",
 			Cases: []EvaluationCase{
 				captureCase("capture", 1, 1, 0, 0),
 				memoryCase("memory", "memory-1", MemorySupported, "a"),
-				correctionCase("correction", 1, 0, 0),
+				correctionCase("correction-a", 0, 0),
 				compactionCase("drift", DriftPreserved, DriftPreserved, "b"),
 				retrievalCase("retrieval", "retrieval-1", 50, 100, 1, true, OutcomeHelpful, "c"),
-				pairedCase("pair", 0.5, 0.8, false, true, "d"),
 			},
 		}
+		for index := 1; index < 20; index++ {
+			id := "correction-" + string(rune('a'+index))
+			input.Cases = append(input.Cases, correctionCase(id, 0, 0))
+		}
+		for index := 0; index < 10; index++ {
+			seed := string(rune('0' + index))
+			input.Cases = append(input.Cases, pairedCase("pair-"+seed, 0.5, 0.8, false, true, seed))
+		}
+		return input
 	}
 
 	t.Run("all gates remain measurement only", func(t *testing.T) {
@@ -196,15 +231,14 @@ func TestContinuousLearningProfileRequiresCompleteDiagnosticShape(t *testing.T) 
 				t.Fatalf("diagnostic gate %q did not pass: %+v", gate.Name, gate)
 			}
 		}
-		if report.ReleaseReady || report.Authority != EvaluationAuthorityMeasurementOnly ||
-			!containsIssue(report.Issues, ContinuousLearningEfficacyIssue) {
-			t.Fatalf("continuous-learning diagnostics claimed efficacy: %+v", report)
+		if report.ReleaseReady || report.Authority != EvaluationAuthorityMeasurementOnly || len(report.Issues) != 0 {
+			t.Fatalf("metric calculation exceeded measurement authority: %+v", report)
 		}
 	})
 
 	t.Run("missing category", func(t *testing.T) {
 		input := makeInput()
-		input.Cases = input.Cases[:len(input.Cases)-1]
+		input.Cases = input.Cases[:5]
 		if _, err := Calculate(input); err == nil || !strings.Contains(err.Error(), "requires category") {
 			t.Fatalf("incomplete continuous-learning category set was accepted: %v", err)
 		}
@@ -213,7 +247,7 @@ func TestContinuousLearningProfileRequiresCompleteDiagnosticShape(t *testing.T) 
 	t.Run("missing threshold", func(t *testing.T) {
 		input := makeInput()
 		input.Thresholds.MinimumPairedOutcomePairs = nil
-		if _, err := Calculate(input); err == nil || !strings.Contains(err.Error(), "requires threshold") {
+		if _, err := Calculate(input); err == nil || !strings.Contains(err.Error(), "fixed versioned policy") {
 			t.Fatalf("incomplete continuous-learning threshold set was accepted: %v", err)
 		}
 	})
@@ -222,7 +256,7 @@ func TestContinuousLearningProfileRequiresCompleteDiagnosticShape(t *testing.T) 
 		input := makeInput()
 		zero := 0.0
 		input.Thresholds.MinimumCorrectionOpportunities = &zero
-		if _, err := Calculate(input); err == nil || !strings.Contains(err.Error(), "positive evidence sample") {
+		if _, err := Calculate(input); err == nil || !strings.Contains(err.Error(), "fixed versioned policy") {
 			t.Fatalf("zero continuous-learning evidence minimum was accepted: %v", err)
 		}
 	})
@@ -230,8 +264,9 @@ func TestContinuousLearningProfileRequiresCompleteDiagnosticShape(t *testing.T) 
 
 func TestEvaluationRejectsRepeatedMeasuredSubjectsAcrossCases(t *testing.T) {
 	t.Run("correction attempt", func(t *testing.T) {
-		first := correctionCase("correction-1", 1, 0, 0)
-		second := correctionCase("correction-2", 1, 0, 0)
+		first := correctionCase("correction-1", 0, 0)
+		second := correctionCase("correction-2", 0, 0)
+		second.Correction.AttemptIDs = append([]string{}, first.Correction.AttemptIDs...)
 		input := EvaluationInput{
 			SchemaVersion: EvaluationInputSchemaVersion, SuiteID: "duplicate-correction",
 			RunID: "run-1", CreatedAt: time.Unix(104, 0).UTC(), SystemVersion: "test-v1",
@@ -337,16 +372,15 @@ func memoryCase(id, memoryID string, label MemoryLabel, seed string) EvaluationC
 	}
 }
 
-func correctionCase(id string, opportunities, repeated, afterMemory int) EvaluationCase {
-	attemptIDs := make([]string, 0, opportunities)
-	for index := 0; index < opportunities; index++ {
-		attemptIDs = append(attemptIDs, "task-attempt-"+strings.Repeat(string(rune('a'+index)), 64))
-	}
+func correctionCase(id string, repeated, afterMemory int) EvaluationCase {
+	initial := "task-attempt-" + sha256Hex([]byte("initial:"+id))
+	followup := "task-attempt-" + sha256Hex([]byte("followup:"+id))
 	return EvaluationCase{
 		CaseID: id, Category: CategoryRepeatedCorrection, Agent: ledger.AgentCodex,
 		Evidence: []EvidenceReference{{Kind: "ledger_event", ID: "event-" + id, SHA256: repeatedSHA("2")}},
-		Correction: &CorrectionMeasurement{SemanticKeySHA256: repeatedSHA("3"), AttemptIDs: attemptIDs,
-			EligibleFollowupOpportunities: opportunities, RepeatedCorrections: repeated,
+		Correction: &CorrectionMeasurement{SemanticKeySHA256: sha256Hex([]byte("semantic:" + id)),
+			InitialCorrectionAttemptID: initial, AttemptIDs: []string{followup},
+			EligibleFollowupOpportunities: 1, RepeatedCorrections: repeated,
 			RepeatedCorrectionsAfterMemory: afterMemory},
 	}
 }
@@ -378,9 +412,9 @@ func pairedCase(id string, baseline, treatment float64, baselineSuccess, treatme
 			BaselineAttemptID:  "task-attempt-" + sha256Hex([]byte("baseline:"+id)),
 			TreatmentAttemptID: "task-attempt-" + sha256Hex([]byte("treatment:"+id)),
 			Baseline: TrialMeasurement{Success: baselineSuccess, Score: baseline, Errors: 2,
-				UserCorrections: 1, TotalTokens: 100},
+				UserCorrections: 1, TokenCountEvaluated: true, TotalTokens: 100},
 			Treatment: TrialMeasurement{Success: treatmentSuccess, Score: treatment, Errors: 1,
-				UserCorrections: 0, TotalTokens: 120}},
+				UserCorrections: 0, TokenCountEvaluated: true, TotalTokens: 120}},
 	}
 }
 

@@ -246,18 +246,20 @@ The first contract covers six categories:
 | Capture coverage | complete, partial, missing, and separately accounted missing records | exact source-snapshot or gap records |
 | False memory | incorrect, unsupported, or stale active memory | exact portable revision and human attestation |
 | Repeated correction | memory-conditioned task attempts with at least one exact user-correction label | replayed task-attempt receipts |
-| Compaction drift | precision and recall against reviewed drift labels | compaction evidence and human attestation |
+| Compaction drift | precision and recall against reviewed drift labels | complete sealed frozen-corpus label pack and later detector generation |
 | Retrieval cost | selected items, bytes, estimated tokens, adoption, outcome | exact retrieval and adoption receipts |
 | Paired outcome | treatment minus baseline task result | comparable replayed baseline and memory task-attempt receipts |
 
-An attestation contains the full measured value, case identity, Agent,
+A false-memory attestation contains the full measured value, case identity, Agent,
 attestor, time, and reason. `eval attest` records it as an
 `evaluation_attestation` event before the case is run. The evaluation then
 compares the event payload with the case measurement and verifies its ledger
-record hash. False-memory and compaction-drift ground-truth labels require a
-human attestor. Repeated-correction and paired-outcome measurements do not
-accept aggregate attestations as their source of truth. They are recomputed
-from task-attempt receipts described below.
+record hash. Compaction ground truth follows a different protocol: one human
+reviews the complete frozen subject set without seeing detector output and seals
+one pack before any retained detector generation covers those subjects.
+Repeated-correction and paired-outcome measurements do not accept aggregate
+attestations as their source of truth. They are recomputed from task-attempt
+receipts described below.
 
 ```text
 agentmem eval attest \
@@ -272,59 +274,191 @@ the original case.
 
 ## Evidence-bound task attempts
 
-An outcome claim needs a stable task identity and a closed observation window.
-Create a structured oracle verdict as a complete local `tool_result`, then bind
-it with:
+An outcome claim needs a stable task identity, a closed observation window, and
+a population committed before any outcome is visible. A supported
+`continuous_learning` trial uses this sequence:
 
 ```text
-agentmem eval attempt record \
+agentmem eval oracle init \
+  --file <local-oracle-registry.json>
+
+agentmem eval sut bind \
   --root <local-evidence-directory> \
-  --file <task-attempt-request.json>
+  --agent <codex|claude_code|opencode> \
+  --provider <provider> --model <model> \
+  --system-prompt <file> --tool-registry <file> \
+  --harness <file> --adapter <file> \
+  > <sut-manifest.json>
+
+agentmem eval trial select \
+  --root <local-evidence-directory> --corpus <corpus-id> \
+  > <trial-selection.json>
+
+agentmem eval trial preregister \
+  --root <local-evidence-directory> --corpus <corpus-id> \
+  --suite <suite-id> \
+  --agent <codex|claude_code|opencode> --semantic-key <sha256> \
+  --corpus-artifact <selected-artifact-id> \
+  --baseline-thread <id> --baseline-session <id> \
+  --treatment-thread <id> --treatment-session <id> \
+  --task-spec <local-evidence-directory>/<selected-blob-relative-path> \
+  --criteria <builtin-evidence-score-criteria.json> \
+  --config <file> --sut-manifest <sut-manifest.json> \
+  --oracle-registry <local-oracle-registry.json> \
+  > <trial-plan.json>
+
+# Repeat trial preregistration for every required pair before executing any arm.
+# Separately, seal the complete reviewed compaction labels before generating
+# episodes or running the drift detector.
+agentmem eval compaction seal \
+  --root <local-evidence-directory> \
+  --file <compaction-ground-truth-request.json>
+
+# Execute both arms in the order stored in each plan.
+agentmem eval attempt execute \
+  --root <local-evidence-directory> --repo <portable-memory-directory> \
+  --file <trial-plan.json> --attempt <attempt-id> \
+  > <execution-result.json>
+
+agentmem eval attempt finalize \
+  --root <local-evidence-directory> \
+  --file <execution-result.json> \
+  --oracle-registry <local-oracle-registry.json> \
+  > <attempt-result.json>
 
 agentmem eval attempt verify \
   --root <local-evidence-directory> \
   --receipt <task-attempt-receipt-id>
+
+# After every planned arm has a terminal result and receipt, derive once over
+# the final prefix and prepare immediately afterward.
+agentmem derive episodes \
+  --root <local-evidence-directory>
 ```
 
-The request fixes the task, attempt, task-spec hash, acceptance-criteria hash,
-execution-config hash, Agent, condition, exact ledger window, and oracle
-identity/version. The first event contains the same structured task contract;
-its source adapter and the verdict source must match that oracle. A baseline
-window must contain no memory retrieval or injection in its window or causal
-ancestry. A memory window must contain exactly the declared verified retrieval
-and injection, followed by an adopted-action claim for the exact delivered
-revision set. Those revisions must resolve through local promotion provenance
-to the contract's semantic key. Every result must be a causal descendant of
-the baseline start or the treatment injection, and every user message must
-descend from the same condition anchor through backward-only ledger edges.
+`trial select` derives one assignment digest from the fixed policy and frozen
+corpus content hash. That digest ranks at most 20 selected legacy-card
+artifacts, assigns them round-robin to Codex, Claude Code, and OpenCode, and
+derives each pair and task ID. Callers cannot supply or grind a seed. Run
+`trial preregister` for every returned item before executing any arm. Each item
+includes a content-addressed BlobRef; resolve its `relative_path` under the
+local evidence root for `--task-spec`. The task-spec bytes must exactly equal
+the selected frozen artifact; pair, task, artifact, hash, and Agent bindings
+are replayed from the corpus.
+Acceptance criteria and execution configuration are still human-authored
+evaluation inputs. They must be fixed before results and remain reviewable
+local evidence; the evaluator does not claim that they encode objective truth.
 
-The oracle verdict must label every observed `tool_result`, `file_change`, and
-`user_message` in the window. The receipt derives success, error count, user
-correction count, score, and token count from that exact verdict and preserves
+A trial plan atomically stores both baseline and memory contracts before either
+result is visible. It binds the frozen corpus, assignment digest, execution order,
+exact task, criteria, execution config, SUT manifest, oracle, and separate thread
+and session contexts. Attempt, result, and verdict identities derive from the
+sealed plan. Every plan that contributes to one population must be present
+before the first result; missing or duplicate arms and receipts block release.
+This prevents constructing a convenient baseline after seeing a treatment.
+
+The SUT manifest binds local content-addressed blobs for the exact system prompt,
+tool registry, harness manifest, and Agent adapter. The execution supervisor
+hashes and runs those exact local adapter bytes. Its challenge-bound stdin
+contains the task and declared SUT but omits plan ID, pair ID, attempt ID,
+condition, and acceptance criteria. It records exact output, exit status, local
+artifact hashes, and causal event chain. Any non-zero exit, timeout, start
+failure, or empty output becomes a canonical failed terminal with retained
+stdout/stderr evidence. `continuous_learning` rejects manual `attempt observe`
+results. This establishes what the local supervisor ran and recorded. It does
+not authenticate a claimed cloud provider/model or prove that provider-private
+events and reasoning existed.
+
+This is a controlled evaluation bridge, not retroactive capture of arbitrary
+native Agent tasks. A Codex, Claude Code, or OpenCode adapter must accept the
+supervisor input and preserve the planned thread/session and causal boundaries.
+A native task that cannot expose those boundaries remains local evidence but is
+not an eligible efficacy trial.
+
+The current implementation does not yet include an Agent-specific bridge that
+can establish native Codex, Claude Code, or OpenCode execution provenance.
+Therefore `verified_agent_execution` remains false: local supervised adapter
+receipts are diagnostic evidence and cannot make a continuous-learning report
+release-ready. A future bridge may satisfy that prerequisite while still being
+unable to authenticate provider-private reasoning that never reaches the local
+runtime.
+
+The resulting request fixes the task, attempt, task-spec hash, acceptance-criteria hash,
+execution-config hash, system-artifact manifest hash, Agent, condition, exact
+ledger window, plan/pair identity, and oracle identity/version. Local blob
+references for the exact task specification, acceptance criteria, execution
+configuration, and SUT manifest are mandatory for `continuous_learning`. The
+first event contains the same structured task contract before the result.
+
+Execute the two arms in the sealed order. A baseline window contains no memory
+retrieval or injection. For a treatment, the supervisor performs exactly one
+verified retrieval and injection after the contract, runs the adapter, then
+records a result-bound adoption observation after the result and before the
+verdict. Delivery is recorded as `unknown`, not `adopted`; a later independent
+observation is required to claim actual use. The exact delivered revision set
+must resolve through local promotion provenance to the contract's semantic key.
+Every result and user message remains causally attached to its planned condition
+anchor. Execution enforces and population replay rechecks the sealed arm order.
+Once a supervised start exists, that arm cannot be retried; an interrupted run
+always receives a failed terminal receipt. Failed terminals remain in the
+planned population and make the fixed efficacy population ineligible instead
+of permitting repeated attempts until a favorable output appears.
+
+`finalize` recomputes the canonical built-in verdict even when a verdict event
+already exists; a different existing payload is rejected. The verdict labels
+every observed `tool_result`, `file_change`, and `user_message` in the window.
+The receipt derives success, error count, user correction count, and score from
+that exact verdict and preserves
 record and payload hashes without copying raw messages or tool output. Its
 authority is fixed to `measurement_only`; it cannot review, promote, export, or
-authorize a rule change.
+authorize a rule change. `token_count_evaluated=false` means token usage was not
+independently measured; `total_tokens=0` in that case is a placeholder, not a
+measured zero. Paired token deltas use only pairs where both sides are measured.
+
+For `continuous_learning`, the task's oracle binds the canonical SHA-256 of one
+entry in a local-only registry. Only `builtin/evidence-score/v1` satisfies the blind and
+hermetic efficacy prerequisites. Its criteria bind the unified ledger-ordered
+stream of result and user events by event kind and payload SHA-256, result and
+user labels, and a pass threshold. The score is
+`(success + 0.5 * neutral) / result count`. The judgment core receives no task ID,
+attempt ID, condition, event ID, timestamp, source, or record hash. The
+evaluator restores event IDs after judgment and requires the reconstructed
+verdict to equal the recorded verdict. This deterministic policy does not prove
+that its criteria or labels are semantically correct.
+
+The registry may also contain native harness executables identified by absolute
+path, file SHA-256, arguments, and timeout. Those checkers are useful local
+diagnostics, but they can observe condition-bearing input and access host state.
+They do not satisfy the blind or hermetic prerequisites and therefore cannot
+make a continuous-learning report release-ready.
+
+`attempt preregister`, `attempt observe`, and `attempt record` remain available
+for component diagnostics and compatibility integrations. They do not seal a
+paired trial population or create supervised execution receipts and therefore
+cannot make a `continuous_learning` report release-ready.
 
 Memory references, result labels, and user-message labels are sorted canonical
 arrays. Missing or JSON `null` arrays are rejected rather than treated as empty
-evidence.
+evidence. `causal_complete` means the declared ledger window is complete,
+contains no observed gap, has exact label coverage, and has the required causal
+links. It does not authenticate a human or provider identity, recover unavailable
+provider events or reasoning, or turn a deterministic checker into objective
+truth.
 
-`causal_complete` means the declared ledger window is complete, contains no
-observed gap, has exact label coverage, and has the required causal links. It
-does not authenticate a self-declared human or harness identity, prove that a
-provider emitted no unavailable event, or turn an oracle judgment into
-objective truth. Those limitations stay visible in the local evidence layer.
-
-Repeated-correction cases list sorted task-attempt receipt IDs. The denominator
-is the number of complete memory-conditioned attempts, and the numerator is the
-number whose fully covered window contains at least one oracle-labeled user
-correction. A zero therefore requires an observed closed window; absence of a
-user-message reference alone is never accepted as zero evidence.
+A repeated-correction case exists only after one fully covered attempt contains
+an oracle-labeled user correction and a later memory-conditioned attempt with
+the same Agent and semantic key is observed. Each semantic key and initial
+correction attempt can contribute at most one follow-up opportunity. The
+numerator is one when that later window contains another labeled correction.
+Absence of an initial correction, an eligible later treatment, or complete
+user-message coverage never becomes a zero.
 
 Paired-outcome cases name one baseline and one treatment receipt. The evaluator
 requires identical task, task-spec, acceptance criteria, execution config,
-semantic key, Agent, and oracle identity/version before deriving deltas. The
-treatment must have exact memory delivery; the baseline must have none.
+system artifact, semantic key, Agent, and oracle identity/version before
+deriving deltas. Both arms must come from the same sealed pair and supervised
+execution chain. One task-spec hash can contribute only one pair. The treatment
+must have exact memory delivery; the baseline must have none.
 
 ## Metrics and gates
 
@@ -339,55 +473,152 @@ The report calculates:
 - paired changes in success, score, errors, user corrections, and total
   tokens.
 
-Thresholds are explicit caller-supplied values in each evaluation input. A zero
-denominator is `not_evaluable`, never a passing zero. Every report has
-`authority: measurement_only`. A `component` report can be release-ready only
-for its bounded diagnostic when at least one gate exists, every gate passes,
-the corpus verifies, and every required evidence reference and attestation
-resolves without an issue. That status is not a product-efficacy claim.
+A zero denominator is `not_evaluable`, never a passing zero. Every report has
+`authority: measurement_only`. A `component` input may use caller-supplied
+thresholds and can be release-ready only for its bounded diagnostic when at
+least one gate exists, every gate passes, and every required artifact resolves.
+That status is not a continuous-learning or product-efficacy claim.
 
-Every input declares a `quality_profile`. `component` supports a focused
-diagnostic gate. `continuous_learning` requires all six categories and all
-twelve thresholds, including positive minimum counts for correction
-opportunities and comparable outcome pairs, plus a gate on mean user-correction
-delta. It currently produces a complete measurement-only diagnostic and always
-records an issue stating that efficacy is not evaluable. It cannot become
-release-ready because oracle authority and the complete eligible population are
-not independently bound.
+`continuous_learning` uses the fixed `continuous-learning-policy/v1`. Callers
+cannot replace its eligibility rules or thresholds:
 
-Enabling a real efficacy gate requires one atomic policy upgrade: a versioned
-policy ID must resolve to fixed thresholds and eligibility rules; a population
-ID must resolve to a manifest deterministically rebuilt from a frozen ledger
-and repository snapshot; the measured-subject set must equal that manifest;
-and each oracle must be a keyed verifier that can rerun its checker against the
-bound task, criteria, configuration, and result blobs. A caller-provided trust
-flag, allowlist, subject-list hash, source string, or signature alone is not
-sufficient.
+- capture coverage must be 1.0;
+- false-memory and unknown-memory rates must be 0;
+- repeated corrections after memory must be at most 0.10, with at least 20
+  independently corrected semantic keys and at least 3 for each Agent;
+- compaction-drift precision and recall must each be at least 0.90;
+- mean retrieval cost must be at most 800 estimated tokens;
+- mean paired outcome score delta must be at least 0.01;
+- mean paired user-correction delta must be at most -0.01;
+- harmful retrieval outcomes must be 0; and
+- at least 10 independent comparable baseline/treatment pairs must be present,
+  with at least 3 for each Agent.
+
+`eval prepare` binds the ledger prefix and last record hash, current system
+artifact, exact verified episode generation, current portable-memory state,
+frozen-corpus content hash, capture-supervisor snapshot, raw oracle-registry
+hash, case-set hash, and population diagnostics.
+
+Capture coverage is derived from the last successful full supervisor reconcile,
+not from source-snapshot events alone. Every inventoried source file or native
+OpenCode session must match a content-addressed full-source blob. Every JSONL
+line or OpenCode message/part must then have a causally bound normalized event
+or explicit gap.
+
+A healthy live population need not manufacture a drift incident. The frozen
+corpus must instead contribute at least one reviewed, fully captured known-drift
+control and one reviewed, fully captured known-preserved control. Precision and
+recall therefore remain fail-closed without positive controls, while a live run
+with no drift can still be evaluated against the frozen controls.
+
+Compaction ground truth is one complete human-reviewed pack over every frozen
+compaction subject. The review surface exposes only frozen pre/post evidence,
+not detector output. The pack is sealed before episode generation or drift
+detection and supplies only expected labels; observed labels come from the
+later, hash-bound continuity detector. Post-hoc per-case attestations cannot
+substitute for the pack. False-memory labels still require a human attestation.
+
+The task efficacy universe is derived from the frozen corpus rather than chosen
+from submitted plans. A digest of the fixed policy and corpus content selects at
+most 20 legacy-card artifacts, assigns Agent strata, and derives pair and task IDs.
+Every selected artifact must appear exactly once across the complete set of
+sealed trial plans committed before the first result, and its task specification
+must equal the frozen artifact bytes. Every planned arm must have exactly one
+supervised execution start, execution receipt, and task-attempt receipt; any
+missing, duplicate, out-of-order, extra, or changed arm blocks release. A start
+cannot be discarded and retried. The fixed sample prevents selecting only easy
+corpus items by seed grinding, but it does not make human-authored criteria
+objective or prove performance outside the frozen sample.
+
+The portable population is the complete local
+promotion projection, not a caller-selected export. These controls close the
+supported post-result cherry-picking paths inside the evaluation run; they do
+not claim that every ordinary user task was planned or evaluated. Missing
+categories, Agent strata, attestations, receipts, task artifacts, projections,
+or oracle replays are explicit issues. Later eligible evidence makes a prepared
+population stale; appended `evaluation_run` events alone preserve idempotency.
 
 ```text
+# This must immediately follow the final episode derivation for this prefix.
+# Any later eligible event requires a new derivation and preparation.
+
+agentmem eval prepare \
+  --root <local-evidence-directory> \
+  --repo <portable-memory-directory> \
+  --oracle-registry <local-oracle-registry.json> \
+  --suite <suite-id> \
+  --corpus <corpus-id> \
+  --run <run-id> \
+  --system-version <version> \
+  > <evaluation-input.json>
+
 agentmem eval run \
   --root <local-evidence-directory> \
   --file <evaluation-input.json> \
-  --repo <portable-memory-directory> \
   --enforce
 
 agentmem eval verify \
   --root <local-evidence-directory> \
-  --repo <portable-memory-directory> \
   --suite <suite-id> \
   --run <run-id>
 ```
 
-`eval run` writes immutable input and report files under the local evidence
-root and appends an `evaluation_run` event. `eval verify` checks their hashes,
-the input blob, report blob, and run event, recomputes report metrics from the
-input, and replays evidence for all six categories, including correction and
-paired-outcome task-attempt receipts. Use a new run ID for a new source state or
-measurement.
+The oracle registry is local evidence and must not be committed to the public
+code repository or portable memory repository when it contains machine paths.
+Its schema is `schemas/task-oracle-registry.schema.json`. Native diagnostic
+stdin follows `schemas/task-oracle-replay-input.schema.json` and stdout must be
+a strict `task-attempt-verdict/v1alpha2` object. The built-in
+`evidence-score/v1` oracle runs inside the evaluator and does not execute a
+registry path.
 
-`--enforce` therefore fails for `continuous_learning` in the current schema,
-even when all twelve diagnostic gates pass. This fail-closed behavior prevents
-replayable claims from being misreported as independently established efficacy.
+During `prepare`, the exact portable population and oracle registry bytes are
+stored as local content-addressed blobs. The capture denominator is stored as a
+separate snapshot blob and remains bound to the successful full-reconcile audit
+event that produced it. Portable and oracle semantic hashes equal their blob
+hashes. The capture snapshot self-hash is calculated with its own hash field
+empty, so its JSON BlobRef is a separate exact-byte binding.
+
+`eval run` writes immutable input and report files under the local evidence root
+and appends an `evaluation_run` event. `eval verify` checks their hashes, the
+input blob, report blob, and run event; reconstructs the bound population;
+loads the prepared dependency blobs rather than mutable live paths; independently
+reruns every task oracle; recomputes all metrics; and replays evidence for all six
+categories. Use a new run ID after any eligible source, memory, attestation,
+retrieval, compaction, or task-attempt change.
+
+`--enforce` succeeds for `continuous_learning` only when the exact fixed-policy
+population passes every fixed metric gate and efficacy prerequisite with no replay issue. `release_ready` means
+that bounded evaluation run passed. It does not modify memory, authorize rules,
+or establish general real-world or longitudinal efficacy beyond the measured
+population.
+
+In this release, `verified_agent_execution` is intentionally unsatisfied because
+the repository does not include a verifiable native Agent execution bridge.
+Accordingly, continuous reports remain measurement-only diagnostics even when
+their metric gates pass. This fail-closed status is a product limitation, not an
+invitation to set the field manually.
+
+### Protocol migration
+
+Evaluation input, report, evaluator adapter, and task verdict protocols are
+`v1alpha2`. Earlier `v1alpha1` files and receipts remain immutable historical
+evidence, but they cannot be relabeled or reused to satisfy the alpha2
+`ReleaseReady` gate. Evidence ledgers may contain a `v1alpha1` prefix and a
+`v1alpha2` tail; verification dispatches by each event's version and never
+rewrites record bytes or hashes. The current corpus verifier accepts only
+`legacy-corpus-manifest/v1alpha2`; alpha1 corpus files and receipts retain their
+bytes as historical evidence but cannot be replayed by the alpha2 evaluation.
+
+For a new continuous run, use a fresh alpha2 evaluation store, freeze the corpus,
+and seal the complete compaction ground-truth pack before the first episode
+derivation. Rebind the exact SUT artifacts, preregister every paired plan before
+executing any arm, and execute through the supervisor. After all terminal
+receipts and task-attempt receipts exist, run `derive episodes` once over the
+final ledger prefix and then run `eval prepare` immediately. To retain a historical legacy-card
+boundary after an index has grown, pass its prior entry count through
+`eval corpus freeze --index-entry-limit <count>`. Existing corpora, receipts,
+attestations, and events remain historical evidence; migration never deletes,
+overwrites, or promotes them.
 
 ## Regression policy
 
@@ -398,8 +629,9 @@ candidate or an expected rejection, but it cannot bypass review and promotion.
 Deterministic sampling prevents convenient hand-picking, while separate
 strata retain strong evidence, conflict cases, and negative controls.
 
-Future continuous-learning efficacy claims require paired or longitudinal evidence. Capture
-coverage proves preservation, not usefulness. Retrieval volume proves neither
+Real-world continuous-learning efficacy claims require paired or longitudinal
+evidence. Capture coverage proves preservation, not usefulness. Retrieval
+volume proves neither
 adoption nor improved outcomes. Improvements must reduce repeated mistakes or
 measured work while false-memory, drift, harmful-outcome, and context-cost
 gates remain within budget.
