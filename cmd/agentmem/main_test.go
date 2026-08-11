@@ -200,22 +200,51 @@ func TestLeafCommandHelpSucceeds(t *testing.T) {
 }
 
 func TestNestedCommandGroupHelpSucceeds(t *testing.T) {
-	for _, args := range [][]string{
-		{"capture", "hook", "--help"},
-		{"capture", "supervisor", "--help"},
-		{"eval", "corpus", "--help"},
-		{"eval", "corpus", "agent-assessment", "--help"},
-		{"eval", "attempt", "--help"},
-		{"eval", "compaction", "--help"},
-		{"eval", "trial", "--help"},
-		{"eval", "oracle", "--help"},
-		{"eval", "sut", "--help"},
-		{"sync", "auto", "--help"},
-	} {
-		if err := runForExit(args); err != nil {
-			t.Fatalf("%v: %v", args, err)
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"capture", "hook", "--help"}, "capture hook <codex|claude-code>"},
+		{[]string{"capture", "supervisor", "--help"}, "capture supervisor <configure|run|watch|status|recover|clear-stale-lock>"},
+		{[]string{"eval", "corpus", "--help"}, "eval corpus <baseline|freeze|verify|review-pack|review-queue|agent-assessment>"},
+		{[]string{"eval", "corpus", "agent-assessment", "--help"}, "eval corpus agent-assessment <prepare|import-external|run-openai>"},
+		{[]string{"eval", "attempt", "--help"}, "eval attempt <preregister|execute|observe|finalize|record|verify>"},
+		{[]string{"eval", "compaction", "--help"}, "eval compaction seal"},
+		{[]string{"eval", "trial", "--help"}, "eval trial <select|preregister>"},
+		{[]string{"eval", "oracle", "--help"}, "eval oracle init"},
+		{[]string{"eval", "sut", "--help"}, "eval sut bind"},
+		{[]string{"sync", "auto", "--help"}, "sync auto <enable|disable|status|run|recover>"},
+	}
+	for _, test := range tests {
+		output, err := captureRunForExitOutput(t, test.args)
+		if err != nil {
+			t.Fatalf("%v: %v", test.args, err)
+		}
+		if !strings.Contains(output, test.want) {
+			t.Fatalf("%v: output %q does not contain %q", test.args, output, test.want)
 		}
 	}
+}
+
+func captureRunForExitOutput(t *testing.T, args []string) (string, error) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "stdout.txt")
+	outputFile, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalStdout := os.Stdout
+	os.Stdout = outputFile
+	runErr := runForExit(args)
+	os.Stdout = originalStdout
+	if err := outputFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data), runErr
 }
 
 func TestRunForExitPreservesNonHelpErrors(t *testing.T) {

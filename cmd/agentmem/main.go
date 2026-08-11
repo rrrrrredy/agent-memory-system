@@ -69,17 +69,23 @@ func nestedCommandGroupHelp(args []string) (error, bool) {
 	}
 	switch strings.Join(args[:len(args)-1], " ") {
 	case "capture hook":
-		return captureUsageError(), true
+		return captureHookUsageError(), true
 	case "capture supervisor":
 		return captureSupervisorUsageError(), true
-	case "eval corpus",
-		"eval corpus agent-assessment",
-		"eval attempt",
-		"eval compaction",
-		"eval trial",
-		"eval oracle",
-		"eval sut":
-		return evalUsageError(), true
+	case "eval corpus":
+		return evalCorpusUsageError(), true
+	case "eval corpus agent-assessment":
+		return evalAgentAssessmentUsageError(), true
+	case "eval attempt":
+		return evalAttemptUsageError(), true
+	case "eval compaction":
+		return evalCompactionUsageError(), true
+	case "eval trial":
+		return evalTrialUsageError(), true
+	case "eval oracle":
+		return evalOracleUsageError(), true
+	case "eval sut":
+		return evalSUTUsageError(), true
 	case "sync auto":
 		return syncAutoUsageError(), true
 	default:
@@ -2695,6 +2701,38 @@ func deriveUsageError() error {
 
 func evalUsageError() error {
 	return errors.New("usage: agentmem eval <corpus ...|oracle init|sut bind|trial select|trial preregister|attempt preregister|attempt execute|attempt observe|attempt finalize|attempt record|attempt verify|compaction seal|attest|prepare|run|verify> [options]")
+}
+
+func evalCorpusUsageError() error {
+	return errors.New("usage: agentmem eval corpus <baseline|freeze|verify|review-pack|review-queue|agent-assessment> [options]")
+}
+
+func evalAgentAssessmentUsageError() error {
+	return errors.New("usage: agentmem eval corpus agent-assessment <prepare|import-external|run-openai> [options]")
+}
+
+func evalAttemptUsageError() error {
+	return errors.New("usage: agentmem eval attempt <preregister|execute|observe|finalize|record|verify> [options]")
+}
+
+func evalCompactionUsageError() error {
+	return errors.New("usage: agentmem eval compaction seal [options]")
+}
+
+func evalTrialUsageError() error {
+	return errors.New("usage: agentmem eval trial <select|preregister> [options]")
+}
+
+func evalOracleUsageError() error {
+	return errors.New("usage: agentmem eval oracle init [options]")
+}
+
+func evalSUTUsageError() error {
+	return errors.New("usage: agentmem eval sut bind [options]")
+}
+
+func captureHookUsageError() error {
+	return errors.New("usage: agentmem capture hook <codex|claude-code> --root <local-evidence-directory>")
 }
 
 func captureUsageError() error {
