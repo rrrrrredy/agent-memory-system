@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-promotion-event.schema.json",
+  "title": "Agent Memory System memory promotion event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "recorded_at",
+    "device_id",
+    "approver",
+    "request_sha256",
+    "revision",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "memory-promotion-event/v1alpha1"},
+    "event_id": {"type": "string", "pattern": "^promotion-", "minLength": 8},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "device_id": {"type": "string", "minLength": 1},
+    "approver": {"$ref": "memory-promotion-request.schema.json#/$defs/approver"},
+    "request_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "revision": {"$ref": "promoted-memory-revision.schema.json"},
+    "privacy": {"const": "local_only"}
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-corpus-freeze-result.schema.json",
+  "title": "Legacy corpus freeze result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "corpus_id", "manifest_path", "manifest_sha256",
+    "freeze_event_id", "snapshots_appended", "snapshots_reused", "counts",
+    "issues", "reused", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-corpus-freeze-result/v1alpha1"},
+    "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+    "manifest_path": {"type": "string", "minLength": 1},
+    "manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "freeze_event_id": {"type": "string", "pattern": "^evaluation-corpus-[a-f0-9]{64}$"},
+    "snapshots_appended": {"type": "integer", "minimum": 0},
+    "snapshots_reused": {"type": "integer", "minimum": 0},
+    "counts": {"$ref": "legacy-corpus-manifest.schema.json#/$defs/counts"},
+    "issues": {
+      "type": "array",
+      "items": {"$ref": "legacy-corpus-manifest.schema.json#/$defs/issue"}
+    },
+    "reused": {"type": "boolean"},
+    "privacy": {"const": "local_only"}
+  }
+}

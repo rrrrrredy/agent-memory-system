@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/quickstart-fixture.schema.json",
+  "title": "Frozen synthetic quickstart fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "rollout_path", "rollout_sha256", "expected_review_ready", "expected_candidate_id", "expected_candidate_text", "expected_text_sha256", "retrieval_query", "privacy"],
+  "properties": {
+    "schema_version": {"const": "quickstart-fixture/v1alpha1"},
+    "rollout_path": {"type": "string", "pattern": "^[^/\\\\]+\\.jsonl$"},
+    "rollout_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "expected_review_ready": {"const": 1},
+    "expected_candidate_id": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+    "expected_candidate_text": {"type": "string", "minLength": 1},
+    "expected_text_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "retrieval_query": {"type": "string", "minLength": 1},
+    "privacy": {"const": "synthetic_public"}
+  }
+}

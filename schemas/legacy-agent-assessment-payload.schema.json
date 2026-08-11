@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-agent-assessment-payload.schema.json",
+  "title": "Minimal blind Agent assessment payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "payload_id", "payload_content_sha256", "evidence_blocks",
+    "candidate_items", "compaction_items", "artifact_storage", "data_classification"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-agent-assessment-payload/v1alpha1"},
+    "payload_id": {"type": "string", "pattern": "^agent-payload-[a-f0-9]{64}$"},
+    "payload_content_sha256": {"$ref": "#/$defs/sha256"},
+    "evidence_blocks": {
+      "type": "array", "maxItems": 20000,
+      "items": {"$ref": "#/$defs/evidence_block"}
+    },
+    "candidate_items": {
+      "type": "array", "maxItems": 200,
+      "items": {"$ref": "#/$defs/candidate_item"}
+    },
+    "compaction_items": {
+      "type": "array", "maxItems": 200,
+      "items": {"$ref": "#/$defs/compaction_item"}
+    },
+    "artifact_storage": {"const": "local_only"},
+    "data_classification": {"const": "selected_unredacted_evidence"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "block_id": {"type": "string", "pattern": "^blind-evidence-[a-f0-9]{64}$"},
+    "item_id": {"type": "string", "pattern": "^agent-item-[a-f0-9]{64}$"},
+    "unit_id": {"type": "string", "pattern": "^assessment-unit-[a-f0-9]{64}$"},
+    "block_ids": {
+      "type": "array", "uniqueItems": true, "maxItems": 20000,
+      "items": {"$ref": "#/$defs/block_id"}
+    },
+    "evidence_block": {
+      "type": "object", "additionalProperties": false,
+      "required": ["block_id", "order", "role", "text", "untrusted_content"],
+      "properties": {
+        "block_id": {"$ref": "#/$defs/block_id"},
+        "order": {"type": "integer", "minimum": 1, "maximum": 20000},
+        "role": {"enum": ["user", "agent", "tool", "compaction", "system"]},
+        "text": {"type": "string", "maxLength": 65536},
+        "untrusted_content": {"const": true}
+      }
+    },
+    "candidate_item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["item_id", "text", "untrusted_content", "evidence_block_ids"],
+      "properties": {
+        "item_id": {"$ref": "#/$defs/item_id"},
+        "text": {"type": "string", "minLength": 1},
+        "untrusted_content": {"const": true},
+        "evidence_block_ids": {"$ref": "#/$defs/block_ids"}
+      }
+    },
+    "compaction_unit": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "unit_id", "statement", "untrusted_content", "source_evidence_block_ids",
+        "representation_evidence_block_ids"
+      ],
+      "properties": {
+        "unit_id": {"$ref": "#/$defs/unit_id"},
+        "statement": {"type": "string", "minLength": 1},
+        "untrusted_content": {"const": true},
+        "source_evidence_block_ids": {"$ref": "#/$defs/block_ids"},
+        "representation_evidence_block_ids": {"$ref": "#/$defs/block_ids"},
+        "correction_evidence_block_ids": {"$ref": "#/$defs/block_ids"}
+      }
+    },
+    "compaction_item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["item_id", "checkpoint_evidence_block_ids", "units"],
+      "properties": {
+        "item_id": {"$ref": "#/$defs/item_id"},
+        "checkpoint_evidence_block_ids": {"$ref": "#/$defs/block_ids"},
+        "units": {
+          "type": "array", "maxItems": 20,
+          "items": {"$ref": "#/$defs/compaction_unit"}
+        }
+      }
+    }
+  }
+}

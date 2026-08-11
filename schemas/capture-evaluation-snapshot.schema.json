@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/capture-evaluation-snapshot.schema.json",
+  "title": "Frozen capture evaluation denominator",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "run_id", "config_sha256", "audit_event_sha256", "completed_at",
+    "full_reconcile", "sources", "snapshot_sha256", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "capture-evaluation-snapshot/v1alpha1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "config_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "audit_event_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "full_reconcile": {"const": true},
+    "sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}},
+    "snapshot_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "agent", "kind", "source_config_sha256", "inventory_sha256", "items"],
+      "properties": {
+        "source_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+        "agent": {"enum": ["codex", "claude_code", "opencode"]},
+        "kind": {"enum": ["codex_rollouts", "claude_home", "opencode_native", "opencode_events"]},
+        "source_config_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+        "inventory_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+        "items": {"type": "array", "items": {"$ref": "capture-supervisor-inventory.schema.json#/$defs/item"}}
+      }
+    }
+  }
+}

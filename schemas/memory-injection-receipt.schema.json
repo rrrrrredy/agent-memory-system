@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-injection-receipt.schema.json",
+  "title": "Local memory injection receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "injection_id", "retrieval_receipt_id", "recorded_at", "channel",
+    "content", "content_sha256", "content_bytes", "estimated_tokens", "memories", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "memory-injection-receipt/v1alpha1"},
+    "injection_id": {"type": "string", "pattern": "^injection-.+"},
+    "retrieval_receipt_id": {"type": "string", "pattern": "^retrieval-.+"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "channel": {
+      "enum": ["cli", "mcp", "codex_hook", "claude_code_hook", "opencode_plugin", "harness"]
+    },
+    "content": {"type": "string", "minLength": 1},
+    "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "content_bytes": {"type": "integer", "minimum": 1},
+    "estimated_tokens": {"type": "integer", "minimum": 1},
+    "memories": {
+      "type": "array",
+      "items": {"$ref": "memory-retrieval-result.schema.json#/$defs/memory_reference"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "privacy": {"const": "local_only"}
+  }
+}

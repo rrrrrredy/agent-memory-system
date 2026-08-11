@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/candidate-list.schema.json",
+  "title": "Verified candidate list",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "generation", "total", "matching", "returned",
+    "truncated", "candidates", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "candidate-list/v1alpha1"},
+    "generation": {"type": "string", "minLength": 1},
+    "total": {"type": "integer", "minimum": 0},
+    "matching": {"type": "integer", "minimum": 0},
+    "returned": {"type": "integer", "minimum": 0},
+    "truncated": {"type": "boolean"},
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidate", "text_sha256"],
+        "properties": {
+          "candidate": {"$ref": "candidate.schema.json"},
+          "text_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "privacy": {"const": "local_only"}
+  }
+}

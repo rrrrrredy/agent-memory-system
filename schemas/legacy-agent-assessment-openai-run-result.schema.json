@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-agent-assessment-openai-run-result.schema.json",
+  "title": "Controlled OpenAI assessment run result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "authority", "artifact_storage"],
+  "properties": {
+    "schema_version": {"const": "legacy-agent-assessment-openai-run-result/v1alpha1"},
+    "projection_id": {"type": "string", "pattern": "^agent-projection-[a-f0-9]{64}$"},
+    "payload_id": {"type": "string", "pattern": "^agent-payload-[a-f0-9]{64}$"},
+    "attempt_id": {"type": "string", "pattern": "^agent-openai-attempt-[a-f0-9]{64}$"},
+    "attempt_path": {"type": "string", "minLength": 1},
+    "observation_id": {"type": "string", "pattern": "^agent-openai-observation-[a-f0-9]{64}$"},
+    "observation_path": {"type": "string", "minLength": 1},
+    "openai_request_id": {"$ref": "legacy-agent-assessment-openai-observation.schema.json#/$defs/metadata"},
+    "requested_model": {"$ref": "legacy-agent-assessment-openai-observation.schema.json#/$defs/metadata"},
+    "observed_model": {"$ref": "legacy-agent-assessment-openai-observation.schema.json#/$defs/metadata"},
+    "assessment": {"$ref": "legacy-agent-assessment-result.schema.json"},
+    "authority": {"const": "provisional_only"},
+    "artifact_storage": {"const": "local_only"}
+  },
+  "dependentRequired": {
+    "payload_id": ["projection_id"],
+    "attempt_id": ["projection_id", "payload_id", "attempt_path", "requested_model"],
+    "attempt_path": ["attempt_id"],
+    "observation_id": ["attempt_id", "observation_path"],
+    "observation_path": ["observation_id"],
+    "assessment": ["observation_id", "observed_model"]
+  }
+}

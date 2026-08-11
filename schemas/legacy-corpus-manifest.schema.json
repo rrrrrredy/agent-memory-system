@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-corpus-manifest.schema.json",
+  "title": "Frozen legacy evaluation corpus manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "corpus_id", "corpus_content_sha256", "name", "created_at",
+    "source_root_sha256", "artifacts", "rollouts", "counts", "issues", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-corpus-manifest/v1alpha2"},
+    "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+    "corpus_content_sha256": {"$ref": "#/$defs/sha256"},
+    "name": {"$ref": "#/$defs/identifier"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "source_root_sha256": {"$ref": "#/$defs/sha256"},
+    "index_entry_limit": {"type": "integer", "minimum": 1},
+    "source_ledger_last_record_hash": {"$ref": "#/$defs/sha256"},
+    "artifacts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifact"},
+      "minItems": 1
+    },
+    "rollouts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/rollout"}
+    },
+    "counts": {"$ref": "#/$defs/counts"},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "identifier": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,160}$"},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id", "role", "relative_path", "source_path_sha256",
+        "snapshot_event_id", "blob"
+      ],
+      "properties": {
+        "artifact_id": {"type": "string", "pattern": "^legacy-artifact-[a-f0-9]{64}$"},
+        "role": {"enum": ["legacy_index", "legacy_card", "legacy_latest_card"]},
+        "relative_path": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {"pattern": "^[^/]"},
+            {"not": {"pattern": "\\\\"}},
+            {"not": {"pattern": "(^|/)\\.\\.(/|$)"}}
+          ]
+        },
+        "source_path_sha256": {"$ref": "#/$defs/sha256"},
+        "snapshot_event_id": {
+          "type": "string",
+          "pattern": "^legacy-context-journal-snapshot-[a-f0-9]{64}$"
+        },
+        "blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"}
+      }
+    },
+    "byte_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "integer", "minimum": 0},
+        "end": {"type": "integer", "minimum": 0}
+      }
+    },
+    "rollout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_path_sha256", "session_ids", "index_references", "status",
+        "projected_events", "incomplete_projected_events", "gap_events"
+      ],
+      "properties": {
+        "source_path_sha256": {"$ref": "#/$defs/sha256"},
+        "session_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "index_references": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["captured", "partial", "missing"]},
+        "snapshot_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "missing_gap_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "snapshot_blobs": {
+          "type": "array",
+          "items": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"}
+        },
+        "covered_ranges": {"type": "array", "items": {"$ref": "#/$defs/byte_range"}},
+        "projected_events": {"type": "integer", "minimum": 0},
+        "incomplete_projected_events": {"type": "integer", "minimum": 0},
+        "gap_events": {"type": "integer", "minimum": 0}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index_entries", "cards", "indexed_cards", "unindexed_cards", "missing_cards",
+        "unique_sessions", "rollout_references", "captured_rollouts", "partial_rollouts",
+        "missing_rollouts", "card_bytes", "rollout_snapshot_bytes",
+        "incomplete_projected_events", "projection_gap_events", "cards_with_latest_user",
+        "cards_with_latest_assistant"
+      ],
+      "properties": {
+        "index_entries": {"type": "integer", "minimum": 0},
+        "cards": {"type": "integer", "minimum": 0},
+        "indexed_cards": {"type": "integer", "minimum": 0},
+        "unindexed_cards": {"type": "integer", "minimum": 0},
+        "missing_cards": {"type": "integer", "minimum": 0},
+        "unique_sessions": {"type": "integer", "minimum": 0},
+        "rollout_references": {"type": "integer", "minimum": 0},
+        "captured_rollouts": {"type": "integer", "minimum": 0},
+        "partial_rollouts": {"type": "integer", "minimum": 0},
+        "missing_rollouts": {"type": "integer", "minimum": 0},
+        "accounted_missing_rollouts": {"type": "integer", "minimum": 0},
+        "unaccounted_missing_rollouts": {"type": "integer", "minimum": 0},
+        "card_bytes": {"type": "integer", "minimum": 0},
+        "rollout_snapshot_bytes": {"type": "integer", "minimum": 0},
+        "incomplete_projected_events": {"type": "integer", "minimum": 0},
+        "projection_gap_events": {"type": "integer", "minimum": 0},
+        "cards_with_latest_user": {"type": "integer", "minimum": 0},
+        "cards_with_latest_assistant": {"type": "integer", "minimum": 0}
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "artifact_id": {"type": "string", "minLength": 1},
+        "source_path_sha256": {"$ref": "#/$defs/sha256"},
+        "count": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

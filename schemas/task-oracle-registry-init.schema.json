@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/task-oracle-registry-init.schema.json",
+  "title": "Task oracle registry initialization result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "file", "entry_sha256", "privacy"],
+  "properties": {
+    "schema_version": {"const": "task-oracle-registry-init/v1alpha1"},
+    "file": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "entry_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "privacy": {"const": "local_only"}
+  }
+}

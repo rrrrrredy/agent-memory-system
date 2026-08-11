@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/candidate-review-request.schema.json",
+  "title": "Agent Memory System candidate review request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "reviewer", "transitions"],
+  "properties": {
+    "schema_version": {"const": "candidate-review-request/v1alpha1"},
+    "reviewer": {"$ref": "#/$defs/reviewer"},
+    "conflict_group_id": {
+      "type": "string",
+      "pattern": "^candidate-conflict-[a-f0-9]{64}$"
+    },
+    "transitions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/transition_request"},
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"enum": ["caller_attestation", "synthetic_test", "human"]},
+        "id": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
+    "status": {
+      "enum": ["pending", "validated", "rejected", "quarantined"]
+    },
+    "action": {
+      "enum": ["validate", "reject", "quarantine", "reopen"]
+    },
+    "basis": {
+      "enum": [
+        "explicit_remember",
+        "user_correction",
+        "stable_repetition",
+        "outcome_evidence",
+        "explicit_user_confirmation"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {"enum": ["global", "agent", "repository", "project", "task"]},
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^[^\\r\\n]+$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "global"}}, "required": ["kind"]},
+          "then": {"properties": {"value": {"const": "*"}}}
+        },
+        {
+          "if": {"properties": {"kind": {"const": "agent"}}, "required": ["kind"]},
+          "then": {
+            "properties": {
+              "value": {"enum": ["codex", "claude_code", "opencode", "unknown"]}
+            }
+          }
+        }
+      ]
+    },
+    "transition_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "candidate_content_sha256",
+        "expected_status",
+        "action",
+        "reason"
+      ],
+      "properties": {
+        "candidate_id": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+        "candidate_content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "expected_status": {"$ref": "#/$defs/status"},
+        "action": {"$ref": "#/$defs/action"},
+        "scope": {"$ref": "#/$defs/scope"},
+        "basis": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/basis"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "evidence_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "reason": {"type": "string", "minLength": 1, "maxLength": 16384}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"action": {"const": "validate"}}, "required": ["action"]},
+          "then": {"required": ["scope", "basis"]}
+        },
+        {
+          "if": {
+            "properties": {"action": {"enum": ["reject", "quarantine", "reopen"]}},
+            "required": ["action"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required": ["scope"]},
+                {"required": ["basis"]},
+                {"required": ["evidence_event_ids"]}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

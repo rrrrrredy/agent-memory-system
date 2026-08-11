@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/public-tree-allowlist.schema.json",
+  "title": "Exact synthetic-content allowlist",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "public_identities", "entries", "privacy"],
+  "properties": {
+    "schema_version": {"const": "public-tree-allowlist/v1alpha1"},
+    "public_identities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "format": "email"}
+    },
+    "entries": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "reason"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "pattern": "^[^\\\\].*"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "privacy": {"const": "synthetic_public"}
+  }
+}

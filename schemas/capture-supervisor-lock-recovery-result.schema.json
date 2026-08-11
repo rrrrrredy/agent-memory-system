@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/capture-supervisor-lock-recovery-result.schema.json",
+  "title": "Capture supervisor lock recovery result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "lock_cleared", "privacy"],
+  "properties": {
+    "schema_version": {"const": "capture-supervisor-lock-recovery-result/v1alpha1"},
+    "lock_cleared": {"type": "boolean"},
+    "privacy": {"const": "local_only"}
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/portable-memory-export-result.schema.json",
+  "title": "Portable memory export result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "memories_selected", "revisions_projected", "revisions_written", "revisions_unchanged", "files_written", "privacy"],
+  "properties": {
+    "schema_version": {"const": "portable-memory-export-result/v1alpha1"},
+    "memories_selected": {"type": "integer", "minimum": 0},
+    "revisions_projected": {"type": "integer", "minimum": 0},
+    "revisions_written": {"type": "integer", "minimum": 0},
+    "revisions_unchanged": {"type": "integer", "minimum": 0},
+    "files_written": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "privacy": {"const": "private_git"}
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-regression-review-queue.schema.json",
+  "title": "Local legacy regression review queue",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "queue_id", "pack_id", "pack_sha256", "corpus_id",
+    "candidate_generation", "episode_generation", "candidate_limit",
+    "compaction_limit", "candidate_items", "compaction_items", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-regression-review-queue/v1alpha1"},
+    "queue_id": {"type": "string", "pattern": "^review-queue-[a-f0-9]{64}$"},
+    "pack_id": {"type": "string", "pattern": "^review-pack-[a-f0-9]{64}$"},
+    "pack_sha256": {"$ref": "legacy-regression-review-pack.schema.json#/$defs/sha256"},
+    "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+    "candidate_generation": {"$ref": "legacy-regression-review-pack.schema.json#/$defs/identifier"},
+    "episode_generation": {"$ref": "legacy-regression-review-pack.schema.json#/$defs/identifier"},
+    "candidate_limit": {"type": "integer", "minimum": 1, "maximum": 200},
+    "compaction_limit": {"type": "integer", "minimum": 1, "maximum": 200},
+    "candidate_items": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/candidate_item"},
+      "maxItems": 200
+    },
+    "compaction_items": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/compaction_item"},
+      "maxItems": 200
+    },
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "item_id": {"type": "string", "pattern": "^review-item-[a-f0-9]{64}$"},
+    "candidate_stratum": {
+      "enum": [
+        "explicit_remember", "user_correction", "stable_repetition",
+        "compaction_correction", "semantic_conflict", "untrusted_instruction"
+      ]
+    },
+    "compaction_stratum": {
+      "enum": ["drift_evidence", "at_risk", "preserved", "insufficient_evidence"]
+    },
+    "candidate_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "stratum", "sample"],
+      "properties": {
+        "item_id": {"$ref": "#/$defs/item_id"},
+        "stratum": {"$ref": "#/$defs/candidate_stratum"},
+        "sample": {"$ref": "legacy-regression-review-pack.schema.json#/$defs/candidate_sample"}
+      }
+    },
+    "compaction_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "stratum", "sample"],
+      "properties": {
+        "item_id": {"$ref": "#/$defs/item_id"},
+        "stratum": {"$ref": "#/$defs/compaction_stratum"},
+        "sample": {"$ref": "legacy-regression-review-pack.schema.json#/$defs/compaction_sample"}
+      }
+    }
+  }
+}

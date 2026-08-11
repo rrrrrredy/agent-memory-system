@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/candidate-review-record.schema.json",
+  "title": "Agent Memory System candidate review record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sequence",
+    "event",
+    "previous_record_sha256",
+    "record_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "candidate-review-record/v1alpha1"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "event": {"$ref": "candidate-review-event.schema.json"},
+    "previous_record_sha256": {
+      "type": "string",
+      "pattern": "^$|^[a-f0-9]{64}$"
+    },
+    "record_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

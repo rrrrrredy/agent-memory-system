@@ -1,0 +1,11 @@
+{
+  "schema_version": "quickstart-fixture/v1alpha1",
+  "rollout_path": "rollout-2026-08-11T00-00-00-11111111-1111-1111-1111-111111111111.jsonl",
+  "rollout_sha256": "257896667332d8cb523750aafdad104d51818557994aee658d09e68d9dc03887",
+  "expected_review_ready": 1,
+  "expected_candidate_id": "candidate-bce9702c4e97b0b5e73a9a7ab8c28e0568c1dad926f640f6fcd8628a2e135db6",
+  "expected_candidate_text": "Please remember that generated reports must stay local",
+  "expected_text_sha256": "6b260d90c96beb17eb62fd68fd7a7f7baa6475a70107e8630ae3206c480009bf",
+  "retrieval_query": "generated reports local",
+  "privacy": "synthetic_public"
+}

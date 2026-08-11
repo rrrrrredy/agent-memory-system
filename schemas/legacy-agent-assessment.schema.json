@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-agent-assessment.schema.json",
+  "title": "Provisional Agent assessment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "assessment_id", "assessment_content_sha256", "projection_id",
+    "projection_content_sha256", "projection_file_sha256", "payload_id",
+    "payload_content_sha256", "payload_file_sha256", "assessor", "harness",
+    "assessed_at", "authority", "candidate_assessments", "compaction_assessments",
+    "artifact_storage"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-agent-assessment/v1alpha1"},
+    "assessment_id": {"type": "string", "pattern": "^agent-assessment-[a-f0-9]{64}$"},
+    "assessment_content_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "projection_id": {"type": "string", "pattern": "^agent-projection-[a-f0-9]{64}$"},
+    "projection_content_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "projection_file_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "payload_id": {"type": "string", "pattern": "^agent-payload-[a-f0-9]{64}$"},
+    "payload_content_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "payload_file_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "assessor": {"oneOf": [{"$ref": "#/$defs/external_assessor"}, {"$ref": "#/$defs/controlled_assessor"}]},
+    "harness": {"oneOf": [{"$ref": "#/$defs/external_harness"}, {"$ref": "#/$defs/controlled_harness"}]},
+    "assessed_at": {"type": "string", "format": "date-time"},
+    "authority": {"const": "provisional_only"},
+    "candidate_assessments": {
+      "type": "array",
+      "items": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/candidate"},
+      "maxItems": 200
+    },
+    "compaction_assessments": {
+      "type": "array",
+      "items": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/compaction"},
+      "maxItems": 4000
+    },
+    "artifact_storage": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["assessor"],
+        "properties": {
+          "assessor": {
+            "required": ["provenance"],
+            "properties": {"provenance": {"const": "external_claim"}}
+          }
+        }
+      },
+      "then": {"properties": {"harness": {"$ref": "#/$defs/external_harness"}}},
+      "else": {"properties": {"harness": {"$ref": "#/$defs/controlled_harness"}}}
+    }
+  ],
+  "$defs": {
+    "metadata": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\r\\n]+$"},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "external_assessor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "id", "provenance", "claimed_provider", "claimed_model"],
+      "properties": {
+        "kind": {"const": "agent"},
+        "id": {"$ref": "#/$defs/metadata"},
+        "provenance": {"const": "external_claim"},
+        "claimed_provider": {"$ref": "#/$defs/metadata"},
+        "claimed_model": {"$ref": "#/$defs/metadata"}
+      }
+    },
+    "controlled_assessor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "id", "provenance", "provider", "requested_model", "observed_model"],
+      "properties": {
+        "kind": {"const": "agent"},
+        "id": {"const": "openai-responses"},
+        "provenance": {"const": "controlled_observation"},
+        "provider": {"const": "openai"},
+        "requested_model": {"$ref": "#/$defs/metadata"},
+        "observed_model": {"$ref": "#/$defs/metadata"}
+      }
+    },
+    "external_harness": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "version", "prompt_sha256", "source", "isolation_status", "tools_registered",
+        "data_disclosure_claim", "extracted_submission_sha256"
+      ],
+      "properties": {
+        "version": {"$ref": "#/$defs/metadata"},
+        "prompt_sha256": {"$ref": "#/$defs/sha256"},
+        "source": {"const": "external_submission"},
+        "isolation_status": {"const": "unverified_external"},
+        "tools_registered": {"type": "null"},
+        "data_disclosure_claim": {"enum": ["remote", "local", "unknown"]},
+        "extracted_submission_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "controlled_harness": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "version", "prompt_sha256", "source", "isolation_status", "tools_registered",
+        "data_disclosure", "extracted_submission_sha256", "attempt_id",
+        "attempt_content_sha256", "observation_id", "observation_content_sha256"
+      ],
+      "properties": {
+        "version": {"const": "controlled-openai-responses/v1alpha1"},
+        "prompt_sha256": {"$ref": "#/$defs/sha256"},
+        "source": {"const": "controlled_openai_responses"},
+        "isolation_status": {"const": "request_policy_observed"},
+        "tools_registered": {"const": false},
+        "data_disclosure": {"const": "remote"},
+        "extracted_submission_sha256": {"$ref": "#/$defs/sha256"},
+        "attempt_id": {"type": "string", "pattern": "^agent-openai-attempt-[a-f0-9]{64}$"},
+        "attempt_content_sha256": {"$ref": "#/$defs/sha256"},
+        "observation_id": {"type": "string", "pattern": "^agent-openai-observation-[a-f0-9]{64}$"},
+        "observation_content_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

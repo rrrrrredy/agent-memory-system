@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/learning-evaluation-verification.schema.json",
+  "title": "Continuous-learning evaluation verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "suite_id", "run_id", "cases_checked",
+    "references_checked", "issues", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "learning-evaluation-verification/v1alpha1"},
+    "suite_id": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,160}$"},
+    "run_id": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,160}$"},
+    "cases_checked": {"type": "integer", "minimum": 0},
+    "references_checked": {"type": "integer", "minimum": 0},
+    "issues": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "privacy": {"const": "local_only"}
+  }
+}

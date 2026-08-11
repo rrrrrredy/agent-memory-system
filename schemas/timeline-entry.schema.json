@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/timeline-entry.schema.json",
+  "title": "Agent Memory System timeline entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sequence",
+    "episode_id",
+    "event_id",
+    "kind",
+    "observed_at",
+    "recorded_at",
+    "source",
+    "completeness"
+  ],
+  "properties": {
+    "schema_version": {"const": "timeline-entry/v1alpha1"},
+    "sequence": {"type": "integer", "minimum": 0},
+    "episode_id": {"type": "string", "pattern": "^episode-[a-f0-9]{64}$"},
+    "event_id": {"type": "string", "minLength": 1},
+    "kind": {"$ref": "evidence-event.schema.json#/$defs/event_kind"},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "source": {"$ref": "evidence-event.schema.json#/$defs/source"},
+    "completeness": {"$ref": "evidence-event.schema.json#/$defs/completeness"},
+    "causality": {"$ref": "evidence-event.schema.json#/$defs/causality"},
+    "reasoning_visibility": {
+      "enum": ["raw_exposed", "summary_only", "encrypted_opaque", "not_exposed", "not_applicable"]
+    }
+  }
+}

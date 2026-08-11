@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/sensitive-content-scan.schema.json",
+  "title": "Agent Memory System sensitive-content scan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scanner_version", "content_sha256", "bytes", "findings"],
+  "properties": {
+    "schema_version": {"const": "sensitive-content-scan/v1alpha1"},
+    "scanner_version": {"const": "deterministic/v1alpha1"},
+    "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "bytes": {"type": "integer", "minimum": 0},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_id",
+        "detector",
+        "category",
+        "start_byte",
+        "end_byte",
+        "match_sha256"
+      ],
+      "properties": {
+        "finding_id": {"type": "string", "pattern": "^finding-[a-f0-9]{64}$"},
+        "detector": {"type": "string", "minLength": 1},
+        "category": {
+          "enum": [
+            "credential",
+            "private_key",
+            "local_path",
+            "personal_identifier",
+            "opaque_identifier",
+            "high_entropy"
+          ]
+        },
+        "start_byte": {"type": "integer", "minimum": 0},
+        "end_byte": {"type": "integer", "minimum": 1},
+        "match_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_byte", "end_byte", "source_sha256", "replacement"],
+      "properties": {
+        "start_byte": {"type": "integer", "minimum": 0},
+        "end_byte": {"type": "integer", "minimum": 1},
+        "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "replacement": {
+          "enum": [
+            "[REDACTED:credential]",
+            "[REDACTED:private-key]",
+            "[REDACTED:path]",
+            "[REDACTED:personal]",
+            "[REDACTED:identifier]",
+            "[REDACTED:secret]"
+          ]
+        }
+      }
+    }
+  }
+}

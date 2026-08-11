@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/agentmem-candidate-acceptance.schema.json",
+  "title": "Hosted release candidate acceptance receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "os", "runner_arch", "archive", "archive_sha256", "version", "quickstart"],
+  "properties": {
+    "schema_version": {"const": "agentmem-candidate-acceptance/v1alpha1"},
+    "os": {"enum": ["windows", "macos"]},
+    "runner_arch": {"type": "string", "minLength": 1},
+    "archive": {"type": "string", "pattern": "^agentmem_v[^/]+_(?:windows|darwin)_(?:amd64|arm64)\\.(?:zip|tar\\.gz)$"},
+    "archive_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "version": {"$ref": "agent-memory-version.schema.json"},
+    "quickstart": {"$ref": "quickstart-smoke.schema.json"}
+  }
+}

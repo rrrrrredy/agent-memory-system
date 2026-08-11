@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-promotion-request.schema.json",
+  "title": "Agent Memory System memory promotion request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "approver", "action", "reason"],
+  "properties": {
+    "schema_version": {"const": "memory-promotion-request/v1alpha1"},
+    "approver": {"$ref": "#/$defs/approver"},
+    "action": {"enum": ["promote", "supersede", "revoke"]},
+    "memory_id": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"},
+    "expected_revision_id": {
+      "type": "string",
+      "pattern": "^memory-revision-[a-f0-9]{64}$"
+    },
+    "candidate": {"$ref": "#/$defs/candidate_reference"},
+    "redactions": {
+      "type": "array",
+      "items": {"$ref": "sensitive-content-scan.schema.json#/$defs/redaction"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "expected_text_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 16384}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "promote"}}, "required": ["action"]},
+      "then": {
+        "required": ["candidate", "expected_text_sha256"],
+        "not": {
+          "anyOf": [
+            {"required": ["memory_id"]},
+            {"required": ["expected_revision_id"]}
+          ]
+        }
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "supersede"}}, "required": ["action"]},
+      "then": {
+        "required": ["memory_id", "expected_revision_id", "candidate", "expected_text_sha256"]
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "revoke"}}, "required": ["action"]},
+      "then": {
+        "required": ["memory_id", "expected_revision_id"],
+        "not": {
+          "anyOf": [
+            {"required": ["candidate"]},
+            {"required": ["redactions"]},
+            {"required": ["expected_text_sha256"]}
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "approver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"enum": ["caller_attestation", "synthetic_test", "human"]},
+        "id": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
+    "candidate_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generation",
+        "candidate_id",
+        "candidate_content_sha256",
+        "expected_review_record_sha256"
+      ],
+      "properties": {
+        "generation": {"type": "string", "minLength": 1},
+        "candidate_id": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+        "candidate_content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "expected_review_record_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}

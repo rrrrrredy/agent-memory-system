@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/capture-supervisor-status.schema.json",
+  "title": "Capture supervisor status",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "configured", "audit_events_checked", "runs_completed", "run_incomplete", "operation_locked", "sources", "integrity_ready", "capture_ready", "ready", "issues", "warnings", "privacy"],
+  "properties": {
+    "schema_version": {"const": "capture-supervisor-status/v1alpha1"},
+    "configured": {"type": "boolean"},
+    "config_sha256": {"$ref": "#/$defs/hash"},
+    "audit_events_checked": {"type": "integer", "minimum": 0},
+    "runs_completed": {"type": "integer", "minimum": 0},
+    "last_run_id": {"type": "string", "minLength": 1},
+    "last_run_started_at": {"type": "string", "format": "date-time"},
+    "last_run_finished_at": {"type": "string", "format": "date-time"},
+    "last_run_outcome": {"type": "string", "minLength": 1},
+    "run_incomplete": {"type": "boolean"},
+    "operation_locked": {"type": "boolean"},
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/sourceStatus"}},
+    "integrity_ready": {"type": "boolean"},
+    "capture_ready": {"type": "boolean"},
+    "ready": {"type": "boolean"},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "warnings": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "sourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "agent", "kind", "required"],
+      "properties": {
+        "source_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+        "agent": {"enum": ["codex", "claude_code", "opencode"]},
+        "kind": {"enum": ["codex_rollouts", "claude_home", "opencode_native", "opencode_events"]},
+        "required": {"type": "boolean"},
+        "last_run_id": {"type": "string", "minLength": 1},
+        "config_sha256": {"$ref": "#/$defs/hash"},
+        "last_attempt_at": {"type": "string", "format": "date-time"},
+        "last_success_at": {"type": "string", "format": "date-time"},
+        "last_outcome": {"enum": ["success", "partial", "failed", "skipped"]},
+        "last_error_code": {"type": "string", "minLength": 1}
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "source_id": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "recover_by": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

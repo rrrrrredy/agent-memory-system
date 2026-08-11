@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/capture-reconciliation.schema.json",
+  "title": "Agent capture reconciliation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "agent", "gaps_appended", "issues", "privacy"],
+  "properties": {
+    "schema_version": {"const": "capture-reconciliation/v1alpha1"},
+    "agent": {"enum": ["codex", "claude_code"]},
+    "hook_spool": {"$ref": "#/$defs/importResult"},
+    "codex": {"$ref": "#/$defs/importResult"},
+    "claude_code": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transcripts", "prompt_history", "companion_files", "warnings"],
+      "properties": {
+        "transcripts": {"$ref": "#/$defs/importResult"},
+        "prompt_history": {"$ref": "#/$defs/importResult"},
+        "companion_files": {"$ref": "#/$defs/fileSnapshots"},
+        "warnings": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "gaps_appended": {"type": "integer", "minimum": 0},
+    "issues": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "privacy": {"const": "local_only"}
+  },
+  "oneOf": [
+    {"required": ["codex"], "not": {"required": ["claude_code"]}},
+    {"required": ["claude_code"], "not": {"required": ["codex"]}}
+  ],
+  "$defs": {
+    "importResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "files_examined",
+        "files_changed",
+        "source_segments",
+        "events_appended",
+        "events_skipped",
+        "gaps_appended",
+        "bytes_captured",
+        "kinds"
+      ],
+      "properties": {
+        "schema_version": {"const": "agent-history-import-result/v1alpha1"},
+        "files_examined": {"type": "integer", "minimum": 0},
+        "files_changed": {"type": "integer", "minimum": 0},
+        "source_segments": {"type": "integer", "minimum": 0},
+        "events_appended": {"type": "integer", "minimum": 0},
+        "events_skipped": {"type": "integer", "minimum": 0},
+        "gaps_appended": {"type": "integer", "minimum": 0},
+        "bytes_captured": {"type": "integer", "minimum": 0},
+        "kinds": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "fileSnapshots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files_examined", "snapshots_appended", "snapshots_skipped", "gaps_appended", "bytes_read"],
+      "properties": {
+        "files_examined": {"type": "integer", "minimum": 0},
+        "snapshots_appended": {"type": "integer", "minimum": 0},
+        "snapshots_skipped": {"type": "integer", "minimum": 0},
+        "gaps_appended": {"type": "integer", "minimum": 0},
+        "bytes_read": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

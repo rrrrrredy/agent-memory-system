@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/learning-evaluation-attestation.schema.json",
+  "title": "Evaluation case attestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "attestation_id", "case_id", "category", "agent",
+    "attestor", "attested_at", "reason"
+  ],
+  "properties": {
+    "schema_version": {"const": "learning-evaluation-attestation/v1alpha2"},
+    "attestation_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "case_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "category": {
+      "enum": [
+        "capture_coverage", "false_memory", "repeated_correction",
+        "compaction_drift", "retrieval_cost", "paired_outcome"
+      ]
+    },
+    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "attestor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"enum": ["human", "harness"]},
+        "id": {"type": "string", "minLength": 1}
+      }
+    },
+    "attested_at": {"type": "string", "format": "date-time"},
+    "reason": {"type": "string", "minLength": 1},
+    "capture": {"$ref": "learning-evaluation-input.schema.json#/$defs/capture"},
+    "memory": {"$ref": "learning-evaluation-input.schema.json#/$defs/memory"},
+    "correction": {"$ref": "learning-evaluation-input.schema.json#/$defs/correction"},
+    "compaction": {"type": "object", "additionalProperties": false, "required": ["checkpoint_id", "expected"], "properties": {"checkpoint_id": {"type": "string", "minLength": 1}, "expected": {"enum": ["preserved", "drift", "insufficient_evidence"]}}},
+    "retrieval": {"$ref": "learning-evaluation-input.schema.json#/$defs/retrieval"},
+    "paired_outcome": {"$ref": "learning-evaluation-input.schema.json#/$defs/paired_outcome"}
+  },
+  "oneOf": [
+    {"required": ["capture"], "properties": {"category": {"const": "capture_coverage"}}},
+    {
+      "required": ["memory"],
+      "properties": {
+        "category": {"const": "false_memory"},
+        "attestor": {"properties": {"kind": {"const": "human"}}}
+      }
+    },
+    {"required": ["correction"], "properties": {"category": {"const": "repeated_correction"}}},
+    {
+      "required": ["compaction"],
+      "properties": {
+        "category": {"const": "compaction_drift"},
+        "attestor": {"properties": {"kind": {"const": "human"}}}
+      }
+    },
+    {"required": ["retrieval"], "properties": {"category": {"const": "retrieval_cost"}}},
+    {"required": ["paired_outcome"], "properties": {"category": {"const": "paired_outcome"}}}
+  ]
+}

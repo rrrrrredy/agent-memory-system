@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/agentmem-required-checks.schema.json",
+  "title": "Canonical CI run receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "workflow", "jobs"],
+  "properties": {
+    "schema_version": {"const": "agentmem-required-checks/v1alpha1"},
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "run_id", "run_attempt", "event", "head_branch", "head_sha", "html_url"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "path": {"const": ".github/workflows/ci.yml"},
+        "run_id": {"type": "integer", "minimum": 1},
+        "run_attempt": {"type": "integer", "minimum": 1},
+        "event": {"const": "push"},
+        "head_branch": {"const": "main"},
+        "head_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "html_url": {"type": "string", "format": "uri", "pattern": "^https://github\\.com/"}
+      }
+    },
+    "jobs": {
+      "type": "array",
+      "minItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "conclusion", "html_url", "head_sha", "run_id"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "name": {"type": "string", "minLength": 1},
+          "status": {"const": "completed"},
+          "conclusion": {"const": "success"},
+          "html_url": {"type": "string", "format": "uri", "pattern": "^https://github\\.com/"},
+          "head_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+          "run_id": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}

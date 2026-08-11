@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/builtin-evidence-score-criteria.schema.json",
+  "title": "Blind builtin evidence-score criteria",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "allowed_event_orders", "results", "users", "pass_threshold"],
+  "properties": {
+    "schema_version": {"const": "builtin-evidence-score-criteria/v1"},
+    "allowed_event_orders": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "array", "minItems": 1,
+        "items": {"$ref": "#/$defs/event_expectation"}
+      }
+    },
+    "results": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["payload_sha256", "label"],
+        "properties": {
+          "payload_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+          "label": {"enum": ["success", "error", "neutral"]}
+        }
+      }
+    },
+    "users": {
+      "type": "array", "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["payload_sha256", "label"],
+        "properties": {
+          "payload_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+          "label": {"enum": ["correction", "not_correction"]}
+        }
+      }
+    },
+    "pass_threshold": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "$defs": {
+    "event_expectation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "payload_sha256"],
+      "properties": {
+        "kind": {"enum": ["tool_result", "file_change", "user_message"]},
+        "payload_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"}
+      }
+    }
+  }
+}

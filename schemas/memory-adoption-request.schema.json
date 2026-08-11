@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-adoption-request.schema.json",
+  "title": "Memory adoption and outcome request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "reporter", "retrieval_receipt_id", "items"],
+  "properties": {
+    "schema_version": {"const": "memory-adoption-request/v1alpha1"},
+    "reporter": {"$ref": "#/$defs/reporter"},
+    "retrieval_receipt_id": {"type": "string", "pattern": "^retrieval-.+"},
+    "injection_id": {"type": "string", "pattern": "^injection-.+"},
+    "items": {"type": "array", "items": {"$ref": "#/$defs/item"}, "minItems": 1, "uniqueItems": true},
+    "outcome_evidence_event_ids": {
+      "type": "array",
+      "description": "Complete, hash-verified tool_result or file_change events; Agent messages are not outcome evidence.",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["reporter", "items"],
+        "properties": {
+          "reporter": {
+            "required": ["kind"],
+            "properties": {"kind": {"enum": ["agent", "harness"]}}
+          },
+          "items": {
+            "contains": {
+              "required": ["outcome"],
+              "properties": {"outcome": {"enum": ["helpful", "neutral", "harmful"]}}
+            }
+          }
+        }
+      },
+      "then": {
+        "required": ["outcome_evidence_event_ids"],
+        "properties": {"outcome_evidence_event_ids": {"minItems": 1}}
+      }
+    }
+  ],
+  "$defs": {
+    "reporter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"enum": ["human", "agent", "harness"]},
+        "id": {"type": "string", "minLength": 1}
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memory_id", "revision_id", "adoption", "outcome", "reason"],
+      "properties": {
+        "memory_id": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"},
+        "revision_id": {"type": "string", "pattern": "^portable-revision-[a-f0-9]{64}$"},
+        "adoption": {"enum": ["adopted", "not_adopted", "unknown"]},
+        "outcome": {"enum": ["helpful", "neutral", "harmful", "unknown"]},
+        "reason": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["adoption"],
+            "properties": {"adoption": {"enum": ["not_adopted", "unknown"]}}
+          },
+          "then": {
+            "required": ["outcome"],
+            "properties": {"outcome": {"const": "unknown"}}
+          }
+        }
+      ]
+    }
+  }
+}

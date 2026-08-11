@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-regression-review-pack.schema.json",
+  "title": "Local legacy regression review pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "pack_id", "corpus_id", "corpus_content_sha256",
+    "candidate_generation", "candidate_manifest_sha256", "candidates_sha256",
+    "episode_generation", "episodes_sha256", "source_evidence_prefix",
+    "sample_per_stratum", "corpus_counts", "candidate_population",
+    "compaction_population", "candidate_samples", "compaction_samples", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-regression-review-pack/v1alpha2"},
+    "pack_id": {"type": "string", "pattern": "^review-pack-[a-f0-9]{64}$"},
+    "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+    "corpus_content_sha256": {"$ref": "#/$defs/sha256"},
+    "candidate_generation": {"$ref": "#/$defs/identifier"},
+    "candidate_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "candidates_sha256": {"$ref": "#/$defs/sha256"},
+    "episode_generation": {"$ref": "#/$defs/identifier"},
+    "episodes_sha256": {"$ref": "#/$defs/sha256"},
+    "source_evidence_prefix": {"$ref": "#/$defs/evidence_prefix"},
+    "sample_per_stratum": {"type": "integer", "minimum": 1, "maximum": 200},
+    "corpus_counts": {"$ref": "legacy-corpus-manifest.schema.json#/$defs/counts"},
+    "candidate_population": {"$ref": "#/$defs/candidate_population"},
+    "compaction_population": {"$ref": "#/$defs/compaction_population"},
+    "candidate_samples": {"$ref": "#/$defs/candidate_samples"},
+    "compaction_samples": {"$ref": "#/$defs/compaction_samples"},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "identifier": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,160}$"},
+    "evidence_prefix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Records", "LastRecordHash"],
+      "properties": {
+        "Records": {"type": "integer", "minimum": 1},
+        "LastRecordHash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "candidate_population": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "explicit_remember", "user_correction", "stable_repetition",
+        "compaction_correction", "semantic_conflict", "untrusted_instruction"
+      ],
+      "properties": {
+        "explicit_remember": {"type": "integer", "minimum": 0},
+        "user_correction": {"type": "integer", "minimum": 0},
+        "stable_repetition": {"type": "integer", "minimum": 0},
+        "compaction_correction": {"type": "integer", "minimum": 0},
+        "semantic_conflict": {"type": "integer", "minimum": 0},
+        "untrusted_instruction": {"type": "integer", "minimum": 0}
+      }
+    },
+    "compaction_population": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["drift_evidence", "at_risk", "preserved", "insufficient_evidence"],
+      "properties": {
+        "drift_evidence": {"type": "integer", "minimum": 0},
+        "at_risk": {"type": "integer", "minimum": 0},
+        "preserved": {"type": "integer", "minimum": 0},
+        "insufficient_evidence": {"type": "integer", "minimum": 0}
+      }
+    },
+    "candidate_samples": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "explicit_remember", "user_correction", "stable_repetition",
+        "compaction_correction", "semantic_conflict", "untrusted_instruction"
+      ],
+      "properties": {
+        "explicit_remember": {"$ref": "#/$defs/candidate_sample_array"},
+        "user_correction": {"$ref": "#/$defs/candidate_sample_array"},
+        "stable_repetition": {"$ref": "#/$defs/candidate_sample_array"},
+        "compaction_correction": {"$ref": "#/$defs/candidate_sample_array"},
+        "semantic_conflict": {"$ref": "#/$defs/candidate_sample_array"},
+        "untrusted_instruction": {"$ref": "#/$defs/candidate_sample_array"}
+      }
+    },
+    "compaction_samples": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["drift_evidence", "at_risk", "preserved", "insufficient_evidence"],
+      "properties": {
+        "drift_evidence": {"$ref": "#/$defs/compaction_sample_array"},
+        "at_risk": {"$ref": "#/$defs/compaction_sample_array"},
+        "preserved": {"$ref": "#/$defs/compaction_sample_array"},
+        "insufficient_evidence": {"$ref": "#/$defs/compaction_sample_array"}
+      }
+    },
+    "candidate_sample_array": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/candidate_sample"},
+      "maxItems": 200
+    },
+    "compaction_sample_array": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/compaction_sample"},
+      "maxItems": 200
+    },
+    "candidate_sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selection_rank_sha256", "candidate_id", "candidate_content_sha256",
+        "semantic_key_sha256", "kind", "text", "polarity", "scope",
+        "corpus_support_types", "global_support_types", "corpus_observations",
+        "global_episode_count", "global_evidence_event_count", "first_seen_at",
+        "last_seen_at", "validation", "requires_explicit_rule_change_approval", "privacy"
+      ],
+      "properties": {
+        "selection_rank_sha256": {"$ref": "#/$defs/sha256"},
+        "candidate_id": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+        "candidate_content_sha256": {"$ref": "#/$defs/sha256"},
+        "semantic_key_sha256": {"$ref": "#/$defs/sha256"},
+        "kind": {"enum": ["constraint", "correction", "directive"]},
+        "text": {"type": "string", "minLength": 1},
+        "polarity": {"enum": ["affirmative", "prohibitive", "unknown"]},
+        "scope": {"$ref": "candidate.schema.json#/$defs/scope"},
+        "corpus_support_types": {
+          "type": "array",
+          "items": {"$ref": "candidate.schema.json#/$defs/support_type"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "global_support_types": {
+          "type": "array",
+          "items": {"$ref": "candidate.schema.json#/$defs/support_type"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "corpus_observations": {
+          "type": "array",
+          "items": {"$ref": "candidate.schema.json#/$defs/observation"},
+          "minItems": 1
+        },
+        "global_episode_count": {"type": "integer", "minimum": 1},
+        "global_evidence_event_count": {"type": "integer", "minimum": 1},
+        "first_seen_at": {"type": "string", "format": "date-time"},
+        "last_seen_at": {"type": "string", "format": "date-time"},
+        "validation": {"$ref": "candidate.schema.json#/$defs/validation"},
+        "conflict_group_id": {"type": "string", "pattern": "^candidate-conflict-[a-f0-9]{64}$"},
+        "conflicting_candidate_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "related_candidate_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "requires_explicit_rule_change_approval": {"type": "boolean"},
+        "privacy": {"const": "local_only"}
+      }
+    },
+    "compaction_sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selection_rank_sha256", "episode_id", "agent", "checkpoint_id", "event_ids",
+        "observed_at", "representation_available", "status", "total_checks",
+        "check_population", "checks", "privacy"
+      ],
+      "properties": {
+        "selection_rank_sha256": {"$ref": "#/$defs/sha256"},
+        "episode_id": {"type": "string", "pattern": "^episode-[a-f0-9]{64}$"},
+        "agent": {"const": "codex"},
+        "checkpoint_id": {"type": "string", "minLength": 1},
+        "event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "observed_at": {"type": "string", "format": "date-time"},
+        "representation_event_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "representation_available": {"type": "boolean"},
+        "status": {"enum": ["preserved", "drift_evidence", "at_risk", "insufficient_evidence"]},
+        "issues": {
+          "type": "array",
+          "items": {"$ref": "episode.schema.json#/$defs/issue"}
+        },
+        "total_checks": {"type": "integer", "minimum": 0},
+        "check_population": {"$ref": "#/$defs/check_population"},
+        "checks": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/compaction_check"},
+          "maxItems": 20
+        },
+        "privacy": {"const": "local_only"}
+      }
+    },
+    "check_population": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preserved", "correction_after_compaction", "missing_from_representation"],
+      "properties": {
+        "preserved": {"type": "integer", "minimum": 0},
+        "correction_after_compaction": {"type": "integer", "minimum": 0},
+        "missing_from_representation": {"type": "integer", "minimum": 0}
+      }
+    },
+    "compaction_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selection_rank_sha256", "check"],
+      "properties": {
+        "selection_rank_sha256": {"$ref": "#/$defs/sha256"},
+        "check": {"$ref": "episode.schema.json#/$defs/continuity_check"},
+        "statement": {"$ref": "episode.schema.json#/$defs/statement"}
+      }
+    }
+  }
+}

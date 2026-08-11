@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/capture-supervisor-run-result.schema.json",
+  "title": "Capture supervisor run result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "started_at", "finished_at", "outcome", "full_reconcile", "sources", "audit_sequence", "privacy"],
+  "properties": {
+    "schema_version": {"const": "capture-supervisor-run-result/v1alpha1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "outcome": {"enum": ["success", "partial", "failed", "canceled"]},
+    "full_reconcile": {"type": "boolean"},
+    "sources": {"type": "array", "items": {"$ref": "capture-supervisor-source-result.schema.json"}},
+    "audit_sequence": {"type": "integer", "minimum": 1},
+    "privacy": {"const": "local_only"}
+  }
+}

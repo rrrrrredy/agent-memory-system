@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/opencode-runtime-smoke.schema.json",
+  "title": "Hosted OpenCode runtime smoke receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "runtime_version", "native_events_captured", "native_session_event_type", "native_session_id_sha256", "native_session_event_sha256", "evidence_events_appended", "evidence_ready", "provider_model_invoked"],
+  "properties": {
+    "schema_version": {"const": "opencode-runtime-smoke/v1alpha1"},
+    "runtime_version": {"type": "string", "minLength": 1},
+    "native_events_captured": {"type": "integer", "minimum": 1},
+    "native_session_event_type": {"enum": ["session.created", "session.updated"]},
+    "native_session_id_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "native_session_event_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "evidence_events_appended": {"type": "integer", "minimum": 1},
+    "evidence_ready": {"const": true},
+    "provider_model_invoked": {"const": false}
+  }
+}

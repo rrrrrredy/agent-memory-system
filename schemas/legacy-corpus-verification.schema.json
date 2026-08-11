@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-corpus-verification.schema.json",
+  "title": "Legacy corpus verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "corpus_id", "artifacts_checked", "rollouts_checked",
+    "snapshot_events_checked", "issues", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-corpus-verification/v1alpha1"},
+    "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+    "artifacts_checked": {"type": "integer", "minimum": 0},
+    "rollouts_checked": {"type": "integer", "minimum": 0},
+    "snapshot_events_checked": {"type": "integer", "minimum": 0},
+    "missing_gap_events_checked": {"type": "integer", "minimum": 0},
+    "issues": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "privacy": {"const": "local_only"}
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/task-oracle-replay-input.schema.json",
+  "title": "Task oracle replay input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "task_id", "attempt_id", "condition", "task_spec",
+    "acceptance_criteria", "execution_config", "ordered_events", "result_events", "user_messages", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "task-oracle-replay-input/v1alpha2"},
+    "task_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "attempt_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "condition": {"enum": ["baseline", "memory"]},
+    "task_spec": {"$ref": "#/$defs/base64_bytes"},
+    "acceptance_criteria": {"$ref": "#/$defs/base64_bytes"},
+    "execution_config": {"$ref": "#/$defs/base64_bytes"},
+    "ordered_events": {
+      "type": "array", "minItems": 1, "items": {"$ref": "#/$defs/event"}
+    },
+    "result_events": {
+      "type": "array", "minItems": 1, "items": {"$ref": "#/$defs/event"}
+    },
+    "user_messages": {
+      "type": "array", "items": {"$ref": "#/$defs/event"}
+    },
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "base64_bytes": {
+      "type": "string",
+      "contentEncoding": "base64"
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "kind", "payload", "record_hash"],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1},
+        "kind": {"$ref": "evidence-event.schema.json#/$defs/event_kind"},
+        "payload": {"$ref": "#/$defs/base64_bytes"},
+        "record_hash": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"}
+      }
+    }
+  }
+}

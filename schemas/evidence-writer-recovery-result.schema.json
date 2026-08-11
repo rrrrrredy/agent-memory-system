@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/evidence-writer-recovery-result.schema.json",
+  "title": "Evidence writer recovery result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "writer_lock_cleared", "verification", "privacy"],
+  "properties": {
+    "schema_version": {"const": "evidence-writer-recovery-result/v1alpha1"},
+    "writer_lock_cleared": {"type": "boolean"},
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records_checked", "blobs_checked", "issues"],
+      "properties": {
+        "records_checked": {"type": "integer", "minimum": 0},
+        "blobs_checked": {"type": "integer", "minimum": 0},
+        "last_record_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "issues": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "privacy": {"const": "local_only"}
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/capture-supervisor-config.schema.json",
+  "title": "Local capture supervisor configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "interval_seconds", "full_reconcile_every_runs", "source_timeout_seconds", "sources", "privacy"],
+  "properties": {
+    "schema_version": {"const": "capture-supervisor-config/v1alpha1"},
+    "interval_seconds": {"type": "integer", "minimum": 5, "maximum": 86400},
+    "full_reconcile_every_runs": {"type": "integer", "minimum": 1, "maximum": 10000},
+    "source_timeout_seconds": {"type": "integer", "minimum": 10, "maximum": 86400},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {"$ref": "#/$defs/source"},
+      "contains": {"type": "object", "properties": {"required": {"const": true}}, "required": ["required"]},
+      "minContains": 1
+    },
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "agent", "kind", "required"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+        "agent": {"enum": ["codex", "claude_code", "opencode"]},
+        "kind": {"enum": ["codex_rollouts", "claude_home", "opencode_native", "opencode_events"]},
+        "required": {"type": "boolean"},
+        "path": {"type": "string", "minLength": 1},
+        "binary_path": {"type": "string", "minLength": 1},
+        "staging_root": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "codex_rollouts"}}, "required": ["kind"]},
+          "then": {
+            "properties": {"agent": {"const": "codex"}},
+            "required": ["path"],
+            "not": {"anyOf": [{"required": ["binary_path"]}, {"required": ["staging_root"]}]}
+          }
+        },
+        {
+          "if": {"properties": {"kind": {"const": "claude_home"}}, "required": ["kind"]},
+          "then": {
+            "properties": {"agent": {"const": "claude_code"}},
+            "required": ["path"],
+            "not": {"anyOf": [{"required": ["binary_path"]}, {"required": ["staging_root"]}]}
+          }
+        },
+        {
+          "if": {"properties": {"kind": {"const": "opencode_events"}}, "required": ["kind"]},
+          "then": {
+            "properties": {"agent": {"const": "opencode"}},
+            "required": ["path"],
+            "not": {"anyOf": [{"required": ["binary_path"]}, {"required": ["staging_root"]}]}
+          }
+        },
+        {
+          "if": {"properties": {"kind": {"const": "opencode_native"}}, "required": ["kind"]},
+          "then": {
+            "properties": {"agent": {"const": "opencode"}},
+            "required": ["binary_path", "staging_root"],
+            "not": {"required": ["path"]}
+          }
+        }
+      ]
+    }
+  }
+}

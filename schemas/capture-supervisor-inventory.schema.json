@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/capture-supervisor-inventory.schema.json",
+  "title": "Hashed local capture source inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "source_id", "source_config_sha256", "agent", "kind", "phase", "observed_at", "status", "items", "available", "missing", "unreadable", "unverified", "coverage", "inventory_sha256", "privacy"],
+  "properties": {
+    "schema_version": {"const": "capture-supervisor-inventory/v1alpha1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "source_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "source_config_sha256": {"$ref": "#/$defs/hash"},
+    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "kind": {"enum": ["codex_rollouts", "claude_home", "opencode_native", "opencode_events"]},
+    "phase": {"enum": ["pre_capture", "post_capture"]},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["available", "partial", "missing", "unreadable", "unverified", "empty"]},
+    "items": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+    "available": {"type": "integer", "minimum": 0},
+    "missing": {"type": "integer", "minimum": 0},
+    "unreadable": {"type": "integer", "minimum": 0},
+    "unverified": {"type": "integer", "minimum": 0},
+    "coverage": {"const": "locally_observable_only"},
+    "inventory_sha256": {"$ref": "#/$defs/hash"},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "codex_rollouts"}}, "required": ["kind"]},
+      "then": {"properties": {"agent": {"const": "codex"}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "claude_home"}}, "required": ["kind"]},
+      "then": {"properties": {"agent": {"const": "claude_code"}}}
+    },
+    {
+      "if": {"properties": {"kind": {"enum": ["opencode_native", "opencode_events"]}}, "required": ["kind"]},
+      "then": {"properties": {"agent": {"const": "opencode"}}}
+    }
+  ],
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity_sha256", "type", "status"],
+      "properties": {
+        "identity_sha256": {"$ref": "#/$defs/hash"},
+        "type": {"enum": ["file", "session", "source"]},
+        "status": {"enum": ["available", "missing", "permission_denied", "unreadable", "unverified", "link_rejected", "git_boundary_rejected", "not_regular_source", "not_regular_file"]},
+        "content_sha256": {"$ref": "#/$defs/hash"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "modified_at": {"type": "string", "format": "date-time"},
+        "last_seen_run_id": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"type": {"const": "file"}, "status": {"const": "available"}},
+            "required": ["type", "status"]
+          },
+          "then": {"required": ["content_sha256", "bytes", "modified_at"]}
+        },
+        {
+          "if": {"properties": {"type": {"const": "source"}}, "required": ["type"]},
+          "then": {"properties": {"status": {"not": {"const": "available"}}}}
+        }
+      ]
+    }
+  }
+}

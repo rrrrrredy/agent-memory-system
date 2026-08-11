@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-retrieval-result.schema.json",
+  "title": "Promoted memory retrieval result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "receipt_id", "status", "selector_sha256", "repository_issues",
+    "active_memories", "applicable_memories", "selected", "selected_estimated_tokens",
+    "selected_bytes", "token_budget", "byte_budget", "exclusions", "context_gaps", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "memory-retrieval-result/v1alpha1"},
+    "receipt_id": {"type": "string", "pattern": "^retrieval-.+"},
+    "status": {"enum": ["completed", "blocked"]},
+    "selector_sha256": {"$ref": "#/$defs/sha256"},
+    "repository_state_sha256": {"$ref": "#/$defs/sha256"},
+    "repository_issues": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "active_memories": {"type": "integer", "minimum": 0},
+    "applicable_memories": {"type": "integer", "minimum": 0},
+    "selected": {"type": "array", "items": {"$ref": "#/$defs/match"}, "maxItems": 20},
+    "selected_estimated_tokens": {"type": "integer", "minimum": 0},
+    "selected_bytes": {"type": "integer", "minimum": 0},
+    "token_budget": {"type": "integer", "minimum": 1, "maximum": 4096},
+    "byte_budget": {"type": "integer", "minimum": 1, "maximum": 65536},
+    "exclusions": {"$ref": "#/$defs/exclusions"},
+    "context_gaps": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "memory_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memory_id", "revision_id"],
+      "properties": {
+        "memory_id": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"},
+        "revision_id": {"type": "string", "pattern": "^portable-revision-[a-f0-9]{64}$"}
+      }
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "memory_id", "revision_id", "kind", "scope_kind", "scope_value", "evidence_basis",
+        "text", "text_sha256", "score", "matched_terms", "estimated_tokens", "bytes",
+        "scope_specificity", "selection_rationale"
+      ],
+      "properties": {
+        "memory_id": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"},
+        "revision_id": {"type": "string", "pattern": "^portable-revision-[a-f0-9]{64}$"},
+        "kind": {"enum": ["constraint", "correction", "directive"]},
+        "scope_kind": {"enum": ["global", "agent", "repository", "project", "task"]},
+        "scope_value": {"type": "string", "minLength": 1},
+        "evidence_basis": {
+          "type": "array",
+          "items": {"$ref": "candidate-review-request.schema.json#/$defs/basis"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "text": {"type": "string", "minLength": 1},
+        "text_sha256": {"$ref": "#/$defs/sha256"},
+        "score": {"type": "integer", "minimum": 1},
+        "matched_terms": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "estimated_tokens": {"type": "integer", "minimum": 1},
+        "bytes": {"type": "integer", "minimum": 1},
+        "scope_specificity": {"type": "integer", "minimum": 1, "maximum": 5},
+        "selection_rationale": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+      }
+    },
+    "exclusions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_mismatch", "no_lexical_match", "result_limit", "token_budget", "byte_budget"],
+      "properties": {
+        "scope_mismatch": {"type": "integer", "minimum": 0},
+        "no_lexical_match": {"type": "integer", "minimum": 0},
+        "result_limit": {"type": "integer", "minimum": 0},
+        "token_budget": {"type": "integer", "minimum": 0},
+        "byte_budget": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

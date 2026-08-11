@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/agent-execution-input.schema.json",
+  "title": "Exact input passed to a supervised Agent adapter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "challenge", "agent", "provider", "model", "system_prompt", "tool_registry",
+    "execution_config", "task_spec", "memory_references", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "agent-execution-input/v1alpha1"},
+    "challenge": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "provider": {"type": "string", "minLength": 1},
+    "model": {"type": "string", "minLength": 1},
+    "system_prompt": {"type": "string", "contentEncoding": "base64"},
+    "tool_registry": {"type": "string", "contentEncoding": "base64"},
+    "execution_config": {"type": "string", "contentEncoding": "base64"},
+    "task_spec": {"type": "string", "contentEncoding": "base64"},
+    "memory_context": {"type": "string", "minLength": 1},
+    "memory_references": {
+      "type": "array", "uniqueItems": true,
+      "items": {"$ref": "memory-retrieval-result.schema.json#/$defs/memory_reference"}
+    },
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"memory_references": {"maxItems": 0}}, "required": ["memory_references"]},
+      "then": {
+        "properties": {"memory_context": false}
+      }
+    },
+    {
+      "if": {"properties": {"memory_references": {"minItems": 1}}, "required": ["memory_references"]},
+      "then": {
+        "required": ["memory_context"]
+      }
+    }
+  ]
+}

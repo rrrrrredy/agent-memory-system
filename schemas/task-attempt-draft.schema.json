@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/task-attempt-draft.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "task_id", "attempt_id", "agent", "semantic_key_sha256", "condition", "privacy"],
+  "properties": {
+    "schema_version": {"const": "task-attempt-draft/v1alpha1"},
+    "task_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "attempt_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "semantic_key_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "condition": {"enum": ["baseline", "memory"]},
+    "privacy": {"const": "local_only"}
+  }
+}

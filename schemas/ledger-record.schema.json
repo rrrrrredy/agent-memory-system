@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/ledger-record.schema.json",
+  "title": "Agent Memory System ledger record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event", "previous_record_hash", "record_hash"],
+  "properties": {
+    "event": {
+      "$ref": "evidence-event.schema.json"
+    },
+    "previous_record_hash": {
+      "type": "string",
+      "pattern": "^$|^[a-f0-9]{64}$"
+    },
+    "record_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

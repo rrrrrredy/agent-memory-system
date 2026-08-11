@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/evidence-backup-manifest.schema.json",
+  "title": "Encrypted local evidence backup manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "backup_id", "created_at", "source_device_id", "source_records", "files", "total_files", "total_bytes", "archive_format", "encryption", "privacy"],
+  "properties": {
+    "schema_version": {"const": "evidence-backup-manifest/v1alpha1"},
+    "backup_id": {"type": "string", "pattern": "^backup-[a-f0-9]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "source_device_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "source_records": {"type": "integer", "minimum": 0},
+    "source_last_record_hash": {"$ref": "#/$defs/hash"},
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/file"}
+    },
+    "total_files": {"type": "integer", "minimum": 1},
+    "total_bytes": {"type": "integer", "minimum": 0},
+    "archive_format": {"const": "tar+gzip+age"},
+    "encryption": {"const": "age-v1-native"},
+    "privacy": {"const": "encrypted_local_evidence"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"source_records": {"minimum": 1}}},
+      "then": {"required": ["source_last_record_hash"]}
+    }
+  ],
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 8192},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

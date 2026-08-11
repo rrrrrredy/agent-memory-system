@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/task-execution-failure.schema.json",
+  "title": "Canonical supervised task execution failure",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "message"],
+  "properties": {
+    "schema_version": {"const": "task-execution-failure/v1alpha1"},
+    "kind": {"enum": ["timeout", "start_error", "process_exit", "empty_output"]},
+    "message": {"type": "string", "minLength": 1},
+    "stdout_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "stderr_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"}
+  }
+}

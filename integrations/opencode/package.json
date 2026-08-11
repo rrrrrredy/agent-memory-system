@@ -1,0 +1,15 @@
+{
+  "name": "agent-memory-system-opencode-integrations",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "test": "node --test crash-safe-jsonl.test.mjs opencode-retrieval.test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.18.11",
+    "@types/node": "26.1.2",
+    "typescript": "7.0.2"
+  }
+}

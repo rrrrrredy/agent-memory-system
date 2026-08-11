@@ -1,0 +1,302 @@
+name: release-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact SemVer release label, for example v0.1.0
+        required: true
+        default: v0.1.0
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  STAGING_ARTIFACT: agentmem-staging-${{ inputs.version }}-${{ github.sha }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Bind candidate to protected main
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${VERSION}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Version must be SemVer without build metadata." >&2
+            exit 1
+          fi
+          test "${GITHUB_REF}" = "refs/heads/main" || {
+            echo "Release builds must be dispatched from main." >&2
+            exit 1
+          }
+          git fetch --force --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "${GITHUB_SHA}" = "$(git rev-parse refs/remotes/origin/main)" || {
+            echo "Workflow commit is not the current origin/main head." >&2
+            exit 1
+          }
+          grep -Fqx "## [${VERSION#v}] - Unreleased" CHANGELOG.md || {
+            echo "CHANGELOG.md does not declare this exact release version." >&2
+            exit 1
+          }
+      - name: Verify one canonical CI push run for the exact commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p .release
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&per_page=100" \
+            > .release/ci-runs-response.json
+          jq --arg sha "${GITHUB_SHA}" \
+            '[.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .event == "push")]
+             | sort_by(.run_number,.run_attempt,.id) | last
+             | select(.conclusion == "success" and .status == "completed")' \
+            .release/ci-runs-response.json > .release/ci-run.json
+          run_id="$(jq -er '.id' .release/ci-run.json)"
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?filter=latest&per_page=100" \
+            > .release/ci-jobs-response.json
+          jq '[.jobs[] | {id,name,status,conclusion,html_url,head_sha,run_id}] | sort_by(.name,.id)' \
+            .release/ci-jobs-response.json > .release/ci-jobs.json
+          required=(
+            "test (ubuntu-latest)"
+            "test (windows-latest)"
+            "test (macos-latest)"
+            "race"
+            "fuzz-smoke"
+            "opencode-runtime"
+            "public-tree-privacy"
+          )
+          for name in "${required[@]}"; do
+            jq -e --arg name "${name}" \
+              '[.[] | select(.name == $name)] | length == 1 and .[0].status == "completed" and .[0].conclusion == "success" and .[0].head_sha == env.GITHUB_SHA' \
+              .release/ci-jobs.json >/dev/null || {
+                echo "Canonical CI run is missing a unique successful job: ${name}" >&2
+                exit 1
+              }
+          done
+          jq -n --slurpfile run .release/ci-run.json --slurpfile jobs .release/ci-jobs.json \
+            '{schema_version:"agentmem-required-checks/v1alpha1",workflow:{id:$run[0].workflow_id,path:".github/workflows/ci.yml",run_id:$run[0].id,run_attempt:$run[0].run_attempt,event:$run[0].event,head_branch:$run[0].head_branch,head_sha:$run[0].head_sha,html_url:$run[0].html_url},jobs:$jobs[0]}' \
+            > .release/required-checks.json
+      - name: Verify public tree and fetched history
+        run: |
+          git fetch --force origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+          go run ./cmd/public-tree-check --root . --history
+      - name: Build candidate archives
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p dist
+          for target in windows/amd64 windows/arm64 darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            name="agentmem_${VERSION}_${goos}_${goarch}"
+            directory="dist/${name}"
+            mkdir -p "${directory}"
+            binary="agentmem"
+            if [ "${goos}" = "windows" ]; then
+              binary="agentmem.exe"
+            fi
+            GOOS="${goos}" GOARCH="${goarch}" go build \
+              -trimpath -buildvcs=false \
+              -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${GITHUB_SHA} -X main.buildDate=${build_date}" \
+              -o "${directory}/${binary}" ./cmd/agentmem
+            cp LICENSE README.md "${directory}/"
+            git archive HEAD docs schemas integrations scripts examples | tar -x -C "${directory}"
+            for capability in adapters/*/CAPABILITIES.md; do
+              install -D "${capability}" "${directory}/${capability}"
+            done
+            if [ "${goos}" = "windows" ]; then
+              (cd "${directory}" && zip -q -r "../${name}.zip" .)
+            else
+              tar -C "${directory}" -czf "dist/${name}.tar.gz" .
+            fi
+          done
+          (cd dist && sha256sum ./*.zip ./*.tar.gz > SHA256SUMS)
+          cp .release/required-checks.json dist/REQUIRED_CHECKS.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ${{ env.STAGING_ARTIFACT }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 2
+
+  accept-windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: ${{ env.STAGING_ARTIFACT }}
+          path: candidate
+      - name: Verify and exercise exact Windows archive
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $asset = "agentmem_${env:VERSION}_windows_amd64.zip"
+          $archive = Join-Path 'candidate' $asset
+          $line = @(Get-Content -LiteralPath 'candidate/SHA256SUMS' | Where-Object { $_ -match "^[a-f0-9]{64}\s+\*?(?:\./)?$([regex]::Escape($asset))$" })
+          if ($line.Count -ne 1) { throw "checksum entry is missing or duplicated for $asset" }
+          $expected = ([regex]::Match($line[0], '^[a-f0-9]{64}')).Value
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "checksum mismatch for $asset" }
+          Expand-Archive -LiteralPath $archive -DestinationPath extracted
+          $binary = (Resolve-Path 'extracted/agentmem.exe').Path
+          $versionOutput = (& $binary version | ConvertFrom-Json)
+          if ($versionOutput.version -ne $env:VERSION -or $versionOutput.commit -ne $env:GITHUB_SHA) {
+            throw 'candidate version metadata is not bound to the release commit'
+          }
+          $quickstart = (& ./scripts/quickstart-smoke.ps1 -BinaryPath $binary | ConvertFrom-Json)
+          if ($quickstart.selected_memories -ne 1) { throw 'candidate quickstart did not retrieve the promoted memory' }
+          [ordered]@{
+            schema_version = 'agentmem-candidate-acceptance/v1alpha1'
+            os = 'windows'
+            runner_arch = $env:RUNNER_ARCH
+            archive = $asset
+            archive_sha256 = $actual
+            version = $versionOutput
+            quickstart = $quickstart
+          } | ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8NoBOM -LiteralPath acceptance-windows.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: acceptance-windows-${{ github.sha }}
+          path: acceptance-windows.json
+          if-no-files-found: error
+          retention-days: 2
+
+  accept-macos:
+    needs: build
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: ${{ env.STAGING_ARTIFACT }}
+          path: candidate
+      - name: Verify and exercise exact macOS archive
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            arm64) arch=arm64 ;;
+            x86_64) arch=amd64 ;;
+            *) echo "unsupported hosted macOS architecture" >&2; exit 1 ;;
+          esac
+          asset="agentmem_${VERSION}_darwin_${arch}.tar.gz"
+          expected="$(awk -v file="${asset}" '$2 == file || $2 == "./" file || $2 == "*" file {print $1}' candidate/SHA256SUMS)"
+          test -n "${expected}" && test "$(printf '%s\n' "${expected}" | wc -l | tr -d ' ')" = 1
+          actual="$(shasum -a 256 "candidate/${asset}" | awk '{print $1}')"
+          test "${actual}" = "${expected}"
+          mkdir extracted
+          tar -xzf "candidate/${asset}" -C extracted
+          binary="$(pwd)/extracted/agentmem"
+          chmod 0755 "${binary}"
+          version_output="$("${binary}" version)"
+          printf '%s\n' "${version_output}" | jq -e --arg version "${VERSION}" --arg commit "${GITHUB_SHA}" '.version == $version and .commit == $commit' >/dev/null
+          quickstart="$(AGENTMEM_BINARY="${binary}" sh ./scripts/quickstart-smoke.sh)"
+          printf '%s\n' "${quickstart}" | jq -e '.selected_memories == 1' >/dev/null
+          jq -n --arg os macos --arg runner_arch "${RUNNER_ARCH}" --arg archive "${asset}" --arg archive_sha256 "${actual}" \
+            --argjson version "${version_output}" --argjson quickstart "${quickstart}" \
+            '{schema_version:"agentmem-candidate-acceptance/v1alpha1",os:$os,runner_arch:$runner_arch,archive:$archive,archive_sha256:$archive_sha256,version:$version,quickstart:$quickstart}' \
+            > acceptance-macos.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: acceptance-macos-${{ github.sha }}
+          path: acceptance-macos.json
+          if-no-files-found: error
+          retention-days: 2
+
+  publish-candidate:
+    needs: [build, accept-windows, accept-macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: ${{ env.STAGING_ARTIFACT }}
+          path: candidate
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: acceptance-windows-${{ github.sha }}
+          path: acceptance
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: acceptance-macos-${{ github.sha }}
+          path: acceptance
+      - name: Seal candidate provenance after hosted acceptance
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          observed_main="$(git rev-parse refs/remotes/origin/main)"
+          test "${observed_main}" = "${GITHUB_SHA}" || {
+            echo "main changed while the candidate was being accepted" >&2
+            exit 1
+          }
+          cp acceptance/acceptance-windows.json candidate/ACCEPTANCE-WINDOWS.json
+          cp acceptance/acceptance-macos.json candidate/ACCEPTANCE-MACOS.json
+          sums_sha256="$(sha256sum candidate/SHA256SUMS | cut -d' ' -f1)"
+          checks_sha256="$(sha256sum candidate/REQUIRED_CHECKS.json | cut -d' ' -f1)"
+          windows_sha256="$(sha256sum candidate/ACCEPTANCE-WINDOWS.json | cut -d' ' -f1)"
+          macos_sha256="$(sha256sum candidate/ACCEPTANCE-MACOS.json | cut -d' ' -f1)"
+          jq -n \
+            --arg schema_version "agentmem-release-provenance/v1alpha1" \
+            --arg version "${VERSION}" \
+            --arg commit "${GITHUB_SHA}" \
+            --arg observed_main "${observed_main}" \
+            --arg ref "${GITHUB_REF}" \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg workflow_run_id "${GITHUB_RUN_ID}" \
+            --arg sha256sums_sha256 "${sums_sha256}" \
+            --arg required_checks_sha256 "${checks_sha256}" \
+            --arg windows_acceptance_sha256 "${windows_sha256}" \
+            --arg macos_acceptance_sha256 "${macos_sha256}" \
+            --slurpfile required_checks candidate/REQUIRED_CHECKS.json \
+            --slurpfile windows_acceptance candidate/ACCEPTANCE-WINDOWS.json \
+            --slurpfile macos_acceptance candidate/ACCEPTANCE-MACOS.json \
+            '{schema_version:$schema_version,version:$version,commit:$commit,observed_main:$observed_main,ref:$ref,repository:$repository,workflow_run_id:$workflow_run_id,sha256sums_sha256:$sha256sums_sha256,required_checks_sha256:$required_checks_sha256,windows_acceptance_sha256:$windows_acceptance_sha256,macos_acceptance_sha256:$macos_acceptance_sha256,required_checks:$required_checks[0],hosted_acceptance:[$windows_acceptance[0],$macos_acceptance[0]]}' \
+            > candidate/PROVENANCE.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: agentmem-${{ inputs.version }}-${{ github.sha }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14

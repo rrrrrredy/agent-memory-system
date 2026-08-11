@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/portable-population-snapshot.schema.json",
+  "title": "Frozen portable memory population",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "active_revision_ids", "revisions", "privacy"],
+  "properties": {
+    "schema_version": {"const": "portable-population-snapshot/v1alpha1"},
+    "active_revision_ids": {
+      "type": "array", "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^portable-revision-[a-f0-9]{64}$"}
+    },
+    "revisions": {
+      "type": "array", "uniqueItems": true,
+      "items": {"$ref": "portable-memory-revision.schema.json"}
+    },
+    "privacy": {"const": "local_only"}
+  }
+}

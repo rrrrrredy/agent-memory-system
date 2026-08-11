@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/task-attempt-verification.schema.json",
+  "title": "Task attempt replay verification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "receipt_id", "events_checked", "issues", "privacy"],
+  "properties": {
+    "schema_version": {"const": "task-attempt-verification/v1alpha1"},
+    "receipt_id": {"type": "string", "pattern": "^task-attempt-[a-f0-9]{64}$"},
+    "events_checked": {"type": "integer", "minimum": 0},
+    "issues": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "privacy": {"const": "local_only"}
+  }
+}

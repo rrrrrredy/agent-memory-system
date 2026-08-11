@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-agent-assessment-projection-result.schema.json",
+  "title": "Local Agent assessment preparation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "projection_id", "projection_path", "payload_id", "payload_path", "queue_id",
+    "candidate_items", "compaction_items", "compaction_units",
+    "evidence_blocks", "reused", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-agent-assessment-projection-result/v1alpha1"},
+    "projection_id": {"type": "string", "pattern": "^agent-projection-[a-f0-9]{64}$"},
+    "projection_path": {"type": "string", "minLength": 1},
+    "payload_id": {"type": "string", "pattern": "^agent-payload-[a-f0-9]{64}$"},
+    "payload_path": {"type": "string", "minLength": 1},
+    "queue_id": {"type": "string", "pattern": "^review-queue-[a-f0-9]{64}$"},
+    "candidate_items": {"type": "integer", "minimum": 0, "maximum": 200},
+    "compaction_items": {"type": "integer", "minimum": 0, "maximum": 200},
+    "compaction_units": {"type": "integer", "minimum": 0, "maximum": 4000},
+    "evidence_blocks": {"type": "integer", "minimum": 0, "maximum": 20000},
+    "reused": {"type": "boolean"},
+    "privacy": {"const": "local_only"}
+  }
+}

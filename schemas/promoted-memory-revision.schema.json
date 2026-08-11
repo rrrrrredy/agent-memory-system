@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/promoted-memory-revision.schema.json",
+  "title": "Agent Memory System promoted memory revision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "memory_id",
+    "revision_id",
+    "action",
+    "status",
+    "kind",
+    "scope",
+    "requires_explicit_rule_change_approval",
+    "rule_change_authorization",
+    "recorded_at",
+    "origin_device_id",
+    "approver_id",
+    "reason",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "promoted-memory-revision/v1alpha1"},
+    "memory_id": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"},
+    "revision_id": {"type": "string", "pattern": "^memory-revision-[a-f0-9]{64}$"},
+    "parent_revision_id": {
+      "type": "string",
+      "pattern": "^memory-revision-[a-f0-9]{64}$"
+    },
+    "action": {"enum": ["promote", "supersede", "revoke"]},
+    "status": {"enum": ["active", "revoked"]},
+    "kind": {"enum": ["constraint", "correction", "directive"]},
+    "text": {"type": "string", "minLength": 1},
+    "text_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "scope": {"$ref": "candidate-review-request.schema.json#/$defs/scope"},
+    "source": {"$ref": "#/$defs/source"},
+    "scan": {"$ref": "#/$defs/scan_attestation"},
+    "requires_explicit_rule_change_approval": {"type": "boolean"},
+    "rule_change_authorization": {"const": "not_granted"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "origin_device_id": {"type": "string", "minLength": 1},
+    "approver_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 16384},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"action": {"enum": ["promote", "supersede"]}},
+        "required": ["action"]
+      },
+      "then": {
+        "required": ["text", "text_sha256", "source", "scan"],
+        "properties": {"status": {"const": "active"}}
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "promote"}}, "required": ["action"]},
+      "then": {"not": {"required": ["parent_revision_id"]}}
+    },
+    {
+      "if": {"properties": {"action": {"const": "supersede"}}, "required": ["action"]},
+      "then": {"required": ["parent_revision_id"]}
+    },
+    {
+      "if": {"properties": {"action": {"const": "revoke"}}, "required": ["action"]},
+      "then": {
+        "required": ["parent_revision_id"],
+        "properties": {"status": {"const": "revoked"}},
+        "not": {
+          "anyOf": [
+            {"required": ["text"]},
+            {"required": ["text_sha256"]},
+            {"required": ["source"]},
+            {"required": ["scan"]}
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_generation",
+        "candidates_sha256",
+        "candidate_id",
+        "candidate_content_sha256",
+        "semantic_key_sha256",
+        "review_event_id",
+        "review_record_sha256",
+        "review_scope",
+        "review_basis"
+      ],
+      "properties": {
+        "candidate_generation": {"type": "string", "minLength": 1},
+        "candidates_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "candidate_id": {"type": "string", "pattern": "^candidate-[a-f0-9]{64}$"},
+        "candidate_content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "semantic_key_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "review_event_id": {"type": "string", "pattern": "^review-", "minLength": 8},
+        "review_record_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "review_scope": {"$ref": "candidate-review-request.schema.json#/$defs/scope"},
+        "review_basis": {
+          "type": "array",
+          "items": {"$ref": "candidate-review-request.schema.json#/$defs/basis"},
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "scan_attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scanner_version",
+        "source_text_sha256",
+        "finding_ids",
+        "redactions",
+        "redacted_text_sha256"
+      ],
+      "properties": {
+        "scanner_version": {"const": "deterministic/v1alpha1"},
+        "source_text_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "finding_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^finding-[a-f0-9]{64}$"},
+          "uniqueItems": true
+        },
+        "redactions": {
+          "type": "array",
+          "items": {"$ref": "sensitive-content-scan.schema.json#/$defs/redaction"},
+          "uniqueItems": true
+        },
+        "redacted_text_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}

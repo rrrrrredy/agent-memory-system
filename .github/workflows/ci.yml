@@ -1,0 +1,170 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+        with:
+          version: 11.20.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: integrations/opencode/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+        working-directory: integrations/opencode
+      - run: go test ./...
+      - run: go vet ./...
+      - run: go build ./cmd/agentmem
+      - name: Verify PowerShell quickstart lifecycle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/quickstart-smoke.ps1
+      - name: Verify POSIX quickstart lifecycle
+        if: runner.os != 'Windows'
+        shell: bash
+        run: sh ./scripts/quickstart-smoke.sh
+      - name: Test Windows install and upgrade
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-install.ps1
+      - name: Test macOS install and upgrade
+        if: runner.os == 'macOS'
+        shell: bash
+        run: sh ./scripts/test-install.sh
+      - run: pnpm test
+        working-directory: integrations/opencode
+      - run: pnpm typecheck
+        working-directory: integrations/opencode
+      - name: Check macOS installer syntax
+        if: runner.os != 'Windows'
+        run: sh -n scripts/install.sh
+      - name: Check Windows installer syntax
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/install.ps1'), [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+  public-tree-privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Fetch published branches, tags, and the current pull request
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git fetch --force origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+          if [ -n "${PR_NUMBER}" ]; then
+            git fetch --force origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pull/${PR_NUMBER}/head" "+refs/pull/${PR_NUMBER}/merge:refs/remotes/pull/${PR_NUMBER}/merge"
+          fi
+      - name: Reject private data and machine traces from the public tree and history
+        run: go run ./cmd/public-tree-check --root . --history
+
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Race-test stateful safety boundaries
+        run: >-
+          go test -race
+          ./internal/ledger
+          ./internal/review
+          ./internal/promotion
+          ./internal/portable
+          ./internal/retrieval
+          ./internal/capturesupervisor
+
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Fuzz secret scanning invariants
+        run: >-
+          go test ./internal/secretscan
+          -run '^$' -fuzz '^FuzzScan$' -fuzztime 10s
+
+  opencode-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Install pinned OpenCode in runner temp
+        run: >-
+          npm install
+          --prefix "$RUNNER_TEMP/opencode-runtime"
+          --no-audit
+          --no-fund
+          opencode-ai@1.18.11
+      - name: Build agentmem
+        run: go build -o "$RUNNER_TEMP/agentmem" ./cmd/agentmem
+      - name: Verify OpenCode plugin to evidence ledger
+        env:
+          AGENTMEM_BINARY: ${{ runner.temp }}/agentmem
+          OPENCODE_BINARY: ${{ runner.temp }}/opencode-runtime/node_modules/.bin/opencode
+          OPENCODE_DISABLE_MODELS_FETCH: "true"
+        run: node integrations/opencode/runtime-smoke.mjs

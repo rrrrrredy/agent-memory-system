@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/compaction-ground-truth-pack.schema.json",
+  "title": "Sealed compaction ground-truth pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "pack_id", "pack_sha256", "corpus_id", "corpus_content_sha256",
+    "reviewer_id", "reason", "sealed_at", "subjects", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "compaction-ground-truth-pack/v1alpha1"},
+    "pack_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "pack_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "corpus_id": {"type": "string", "pattern": "^corpus-[a-f0-9]{64}$"},
+    "corpus_content_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+    "reviewer_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
+    "reason": {"type": "string", "minLength": 1},
+    "sealed_at": {"type": "string", "format": "date-time"},
+    "subjects": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/subject"}
+    },
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "subject": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event_id", "record_hash", "agent", "expected"],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1},
+        "record_hash": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
+        "agent": {"enum": ["codex", "claude_code", "opencode"]},
+        "expected": {"enum": ["drift", "preserved"]}
+      }
+    }
+  }
+}

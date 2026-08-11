@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/git-sync-hook-install-result.schema.json",
+  "title": "Git sync hook installation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "installed", "privacy"],
+  "properties": {
+    "schema_version": {"const": "git-sync-hook-install-result/v1alpha1"},
+    "installed": {"const": true},
+    "privacy": {"const": "portable_only"}
+  }
+}

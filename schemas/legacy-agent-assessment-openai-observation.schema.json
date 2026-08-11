@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/legacy-agent-assessment-openai-observation.schema.json",
+  "title": "Controlled OpenAI assessment response observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "observation_id", "observation_content_sha256", "attempt_id",
+    "attempt_content_sha256", "request_sha256", "http_status", "response_capture_status",
+    "response_bytes", "response_prefix_bytes",
+    "requested_model", "outcome", "completed_at", "authority", "artifact_storage"
+  ],
+  "properties": {
+    "schema_version": {"const": "legacy-agent-assessment-openai-observation/v1alpha1"},
+    "observation_id": {"type": "string", "pattern": "^agent-openai-observation-[a-f0-9]{64}$"},
+    "observation_content_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "attempt_id": {"type": "string", "pattern": "^agent-openai-attempt-[a-f0-9]{64}$"},
+    "attempt_content_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "request_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "http_status": {"type": "integer", "minimum": 0, "maximum": 599},
+    "response_capture_status": {"enum": ["none", "complete", "incomplete"]},
+    "response_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "response_bytes": {"type": "integer", "minimum": 0, "maximum": 33554432},
+    "response_prefix_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "response_prefix_bytes": {"type": "integer", "minimum": 0, "maximum": 33554433},
+    "content_type": {"$ref": "#/$defs/metadata"},
+    "openai_request_id": {"$ref": "#/$defs/metadata"},
+    "response_id": {"$ref": "#/$defs/metadata"},
+    "requested_model": {"$ref": "#/$defs/metadata"},
+    "observed_model": {"$ref": "#/$defs/metadata"},
+    "response_status": {"$ref": "#/$defs/metadata"},
+    "outcome": {
+      "enum": [
+        "transport_error", "invalid_response", "http_error", "provider_response_failed", "incomplete", "refusal",
+        "tool_output", "invalid_submission", "validated_submission"
+      ]
+    },
+    "failure_code": {
+      "enum": [
+        "timeout", "transport_error", "response_too_large_or_unreadable",
+        "provider_http_error", "unexpected_content_type", "invalid_response", "provider_response_failed", "incomplete",
+        "refusal", "tool_output", "submission_decode_failed", "submission_validation_failed"
+      ]
+    },
+    "submission_sha256": {"$ref": "legacy-agent-assessment-submission.schema.json#/$defs/sha256"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "authority": {"const": "provisional_only"},
+    "artifact_storage": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"response_capture_status": {"const": "complete"}}},
+      "then": {
+        "required": ["response_sha256"],
+        "properties": {"http_status": {"minimum": 100}, "response_prefix_bytes": {"const": 0}},
+        "not": {"required": ["response_prefix_sha256"]}
+      }
+    },
+    {
+      "if": {"properties": {"response_capture_status": {"const": "incomplete"}}},
+      "then": {
+        "required": ["response_prefix_sha256"],
+        "properties": {
+          "http_status": {"minimum": 100},
+          "response_bytes": {"const": 0},
+          "outcome": {"const": "invalid_response"},
+          "failure_code": {"const": "response_too_large_or_unreadable"}
+        },
+        "not": {
+          "anyOf": [
+            {"required": ["response_sha256"]}, {"required": ["response_id"]},
+            {"required": ["observed_model"]}, {"required": ["response_status"]},
+            {"required": ["submission_sha256"]}
+          ]
+        }
+      }
+    },
+    {
+      "if": {"properties": {"response_capture_status": {"const": "none"}}},
+      "then": {
+        "properties": {
+          "http_status": {"const": 0},
+          "response_bytes": {"const": 0},
+          "response_prefix_bytes": {"const": 0},
+          "outcome": {"const": "transport_error"},
+          "failure_code": {"enum": ["timeout", "transport_error"]}
+        },
+        "not": {
+          "anyOf": [
+            {"required": ["response_sha256"]}, {"required": ["response_prefix_sha256"]},
+            {"required": ["content_type"]}, {"required": ["openai_request_id"]},
+            {"required": ["response_id"]}, {"required": ["observed_model"]},
+            {"required": ["response_status"]}, {"required": ["submission_sha256"]}
+          ]
+        }
+      }
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "validated_submission"}}},
+      "then": {
+        "required": [
+          "response_sha256", "response_id", "observed_model", "response_status", "submission_sha256"
+        ],
+        "properties": {
+          "http_status": {"minimum": 200, "maximum": 299},
+          "response_capture_status": {"const": "complete"},
+          "response_status": {"const": "completed"}
+        },
+        "not": {"required": ["failure_code"]}
+      },
+      "else": {"required": ["failure_code"]}
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "transport_error"}}},
+      "then": {
+        "properties": {
+          "http_status": {"const": 0},
+          "response_capture_status": {"const": "none"}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "metadata": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\r\\n]+$"}
+  }
+}

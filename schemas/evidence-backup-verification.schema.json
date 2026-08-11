@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/evidence-backup-verification.schema.json",
+  "title": "Encrypted evidence backup verification result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "archive_sha256", "archive_bytes", "source_records", "files_checked", "plaintext_bytes", "ledger_verified", "issues", "privacy"],
+  "properties": {
+    "schema_version": {"const": "evidence-backup-verification/v1alpha1"},
+    "backup_id": {"type": "string", "pattern": "^backup-[a-f0-9]{64}$"},
+    "archive_sha256": {"$ref": "#/$defs/hash"},
+    "archive_bytes": {"type": "integer", "minimum": 0},
+    "source_device_id": {"type": "string", "minLength": 1},
+    "source_records": {"type": "integer", "minimum": 0},
+    "source_last_record_hash": {"$ref": "#/$defs/hash"},
+    "files_checked": {"type": "integer", "minimum": 0},
+    "plaintext_bytes": {"type": "integer", "minimum": 0},
+    "ledger_verified": {"type": "boolean"},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "privacy": {"const": "encrypted_local_evidence"}
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "path_sha256": {"$ref": "#/$defs/hash"},
+        "message": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

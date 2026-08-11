@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/episode-build-result.schema.json",
+  "title": "Episode build result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "derivation_version", "source_records", "generation_path", "episodes", "timeline_entries", "compactions", "drift_evidence", "at_risk", "insufficient_evidence", "timeline_sha256", "episodes_sha256", "reused"],
+  "properties": {
+    "schema_version": {"const": "episode-build-result/v1alpha1"},
+    "derivation_version": {"const": "episodes/v1alpha1"},
+    "source_records": {"type": "integer", "minimum": 0},
+    "source_last_record_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "generation_path": {"type": "string", "minLength": 1},
+    "episodes": {"type": "integer", "minimum": 0},
+    "timeline_entries": {"type": "integer", "minimum": 0},
+    "compactions": {"type": "integer", "minimum": 0},
+    "drift_evidence": {"type": "integer", "minimum": 0},
+    "at_risk": {"type": "integer", "minimum": 0},
+    "insufficient_evidence": {"type": "integer", "minimum": 0},
+    "timeline_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "episodes_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "reused": {"type": "boolean"}
+  }
+}

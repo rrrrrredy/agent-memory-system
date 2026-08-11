@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-retrieval-request.schema.json",
+  "title": "Promoted memory retrieval request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "context", "limit", "token_budget", "byte_budget"],
+  "properties": {
+    "schema_version": {"const": "memory-retrieval-request/v1alpha1"},
+    "query": {"type": "string", "minLength": 1, "maxLength": 65536},
+    "memory_id": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"},
+    "context": {"$ref": "#/$defs/context"},
+    "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+    "token_budget": {"type": "integer", "minimum": 1, "maximum": 4096},
+    "byte_budget": {"type": "integer", "minimum": 1, "maximum": 65536}
+  },
+  "oneOf": [
+    {"required": ["query"], "not": {"required": ["memory_id"]}},
+    {"required": ["memory_id"], "not": {"required": ["query"]}}
+  ],
+  "$defs": {
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "channel"],
+      "properties": {
+        "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
+        "thread_id": {"type": "string"},
+        "session_id": {"type": "string"},
+        "repository": {"type": "string"},
+        "project": {"type": "string"},
+        "task": {"type": "string"},
+        "channel": {
+          "enum": ["cli", "mcp", "codex_hook", "claude_code_hook", "opencode_plugin", "harness"]
+        }
+      }
+    }
+  }
+}

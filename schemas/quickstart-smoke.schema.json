@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/quickstart-smoke.schema.json",
+  "title": "Synthetic quickstart smoke receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "fixture_sha256", "simulated_attestations", "gaps_appended", "doctor_ready", "review_ready", "revisions_written", "active_memories", "selected_memories"],
+  "properties": {
+    "schema_version": {"const": "quickstart-smoke/v1alpha1"},
+    "fixture_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "simulated_attestations": {"const": true},
+    "gaps_appended": {"const": 0},
+    "doctor_ready": {"const": true},
+    "review_ready": {"const": 1},
+    "revisions_written": {"const": 1},
+    "active_memories": {"const": 1},
+    "selected_memories": {"const": 1}
+  }
+}

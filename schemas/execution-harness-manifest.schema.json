@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/execution-harness-manifest.schema.json",
+  "title": "Execution supervisor harness manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "arguments", "timeout_seconds", "inherit_environment",
+    "retrieval_limit", "retrieval_token_budget", "retrieval_byte_budget", "result_media_type", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "execution-harness-manifest/v1alpha1"},
+    "arguments": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[^\\x00]*$"}
+    },
+    "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 3600},
+    "working_directory": {"type": "string", "minLength": 1},
+    "inherit_environment": {"type": "boolean"},
+    "retrieval_limit": {"type": "integer", "minimum": 1},
+    "retrieval_token_budget": {"type": "integer", "minimum": 1},
+    "retrieval_byte_budget": {"type": "integer", "minimum": 1},
+    "result_media_type": {"type": "string", "minLength": 1},
+    "executable_suffix": {"enum": ["", ".exe"]},
+    "privacy": {"const": "local_only"}
+  }
+}

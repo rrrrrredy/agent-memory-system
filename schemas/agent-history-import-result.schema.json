@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/agent-history-import-result.schema.json",
+  "title": "Agent history import result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "files_examined", "files_changed", "events_appended", "events_skipped", "gaps_appended", "bytes_captured", "kinds"],
+  "properties": {
+    "schema_version": {"const": "agent-history-import-result/v1alpha1"},
+    "files_examined": {"type": "integer", "minimum": 0},
+    "files_changed": {"type": "integer", "minimum": 0},
+    "source_segments": {"type": "integer", "minimum": 0},
+    "source_snapshots": {"type": "integer", "minimum": 0},
+    "events_appended": {"type": "integer", "minimum": 0},
+    "events_skipped": {"type": "integer", "minimum": 0},
+    "gaps_appended": {"type": "integer", "minimum": 0},
+    "bytes_captured": {"type": "integer", "minimum": 0},
+    "kinds": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    }
+  },
+  "oneOf": [
+    {"required": ["source_segments"], "not": {"required": ["source_snapshots"]}},
+    {"required": ["source_snapshots"], "not": {"required": ["source_segments"]}}
+  ]
+}
