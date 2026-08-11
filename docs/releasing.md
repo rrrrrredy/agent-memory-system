@@ -17,8 +17,9 @@ Before building release artifacts:
 2. require all seven checks on the release commit to pass: Ubuntu, Windows,
    macOS, race, fuzz-smoke, OpenCode runtime, and public-tree privacy;
 3. require the release commit to be the protected `main` head;
-4. fetch every published branch and tag, then run the public-tree checker over
-   their complete reachable history;
+4. require every pull request to scan protected `main`, tags, and its own
+   complete reachable history; scan protected `main` and tags again when the
+   release artifact is built;
    the repository owner's intentionally public commit email is declared in the
    exact public-tree allowlist rather than treated as private data;
 5. verify the separate private memory repository independently and keep every
@@ -32,7 +33,7 @@ Run the manually dispatched `release-build` workflow with an exact SemVer label
 such as `v0.1.0` from `main`. The workflow refuses a different ref, a
 stale `main` commit, or a version absent from `CHANGELOG.md`. It verifies that
 one successful `ci.yml` push run on protected `main` contains every required job,
-scans the fetched public tree and history, and builds Windows, macOS, and Linux
+scans protected `main` and tag history, and builds Windows, macOS, and Linux
 archives for amd64 and arm64. Separate GitHub-hosted Windows and macOS jobs then
 download the exact staging artifact, verify its checksum, execute the embedded
 version metadata, and run the full quickstart with the archived binary. Only

@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
@@ -48,8 +48,8 @@ jobs:
             echo "Workflow commit is not the current origin/main head." >&2
             exit 1
           }
-          grep -Fqx "## [${VERSION#v}] - Unreleased" CHANGELOG.md || {
-            echo "CHANGELOG.md does not declare this exact release version." >&2
+          grep -Eq "^## \[${VERSION#v}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md || {
+            echo "CHANGELOG.md does not declare this exact release version with an ISO date." >&2
             exit 1
           }
       - name: Verify one canonical CI push run for the exact commit
@@ -95,9 +95,10 @@ jobs:
           jq -n --slurpfile run .release/ci-run.json --slurpfile jobs .release/ci-jobs.json \
             '{schema_version:"agentmem-required-checks/v1alpha1",workflow:{id:$run[0].workflow_id,path:".github/workflows/ci.yml",run_id:$run[0].id,run_attempt:$run[0].run_attempt,event:$run[0].event,head_branch:$run[0].head_branch,head_sha:$run[0].head_sha,html_url:$run[0].html_url},jobs:$jobs[0]}' \
             > .release/required-checks.json
-      - name: Verify public tree and fetched history
+      - name: Verify public tree and protected history
         run: |
-          git fetch --force origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+          git fetch --force --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          git fetch --force origin '+refs/tags/*:refs/tags/*'
           go run ./cmd/public-tree-check --root . --history
       - name: Build candidate archives
         shell: bash
