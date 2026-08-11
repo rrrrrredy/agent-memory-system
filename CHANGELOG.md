@@ -31,7 +31,7 @@ Semantic Versioning after the first tagged public release.
 - Release receipts that constrain the canonical CI set and exact hosted
   platform/archive pairings.
 - Installers that reject archives whose embedded binary version does not match
-  the requested release, and successful exit codes for command help paths.
+  the requested release, plus group-specific output and successful exit codes for command help paths.
 
 ### Security
 
