@@ -33,11 +33,16 @@ try {
 
   server = startServer({ opencode, project, spoolPath, password, port })
   const health = await waitForHealth(port, password, server)
-  const session = await requestJSON(port, password, "/session", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "{}",
-  })
+  let session
+  try {
+    session = await requestJSON(port, password, "/session", {
+      method: "POST", timeout: 20_000,
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    })
+  } catch (error) {
+    throw new Error(`OpenCode session creation failed: ${error.message}\n${childOutput(server)}`)
+  }
   if (typeof session?.id !== "string" || session.id.length === 0) {
     throw new Error("OpenCode did not create a session")
   }
@@ -124,11 +129,12 @@ async function waitForHealth(port, password, child) {
 }
 
 async function requestJSON(port, password, path, options = {}) {
+  const { timeout = 5_000, ...requestOptions } = options
   const authorization = Buffer.from(`opencode:${password}`).toString("base64")
   const response = await fetch(`http://127.0.0.1:${port}${path}`, {
-    ...options,
-    headers: { ...options.headers, authorization: `Basic ${authorization}` },
-    signal: AbortSignal.timeout(5_000),
+    ...requestOptions,
+    headers: { ...requestOptions.headers, authorization: `Basic ${authorization}` },
+    signal: AbortSignal.timeout(timeout),
   })
   const text = await response.text()
   if (!response.ok) throw new Error(`${path} returned ${response.status}: ${text}`)
