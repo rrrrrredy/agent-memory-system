@@ -136,7 +136,7 @@ jobs:
           done
           (cd dist && sha256sum ./*.zip ./*.tar.gz > SHA256SUMS)
           cp .release/required-checks.json dist/REQUIRED_CHECKS.json
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.STAGING_ARTIFACT }}
           path: dist/
@@ -185,7 +185,7 @@ jobs:
             version = $versionOutput
             quickstart = $quickstart
           } | ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8NoBOM -LiteralPath acceptance-windows.json
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: acceptance-windows-${{ github.sha }}
           path: acceptance-windows.json
@@ -232,7 +232,7 @@ jobs:
             --argjson version "${version_output}" --argjson quickstart "${quickstart}" \
             '{schema_version:"agentmem-candidate-acceptance/v1alpha1",os:$os,runner_arch:$runner_arch,archive:$archive,archive_sha256:$archive_sha256,version:$version,quickstart:$quickstart}' \
             > acceptance-macos.json
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: acceptance-macos-${{ github.sha }}
           path: acceptance-macos.json
@@ -295,7 +295,7 @@ jobs:
             --slurpfile macos_acceptance candidate/ACCEPTANCE-MACOS.json \
             '{schema_version:$schema_version,version:$version,commit:$commit,observed_main:$observed_main,ref:$ref,repository:$repository,workflow_run_id:$workflow_run_id,sha256sums_sha256:$sha256sums_sha256,required_checks_sha256:$required_checks_sha256,windows_acceptance_sha256:$windows_acceptance_sha256,macos_acceptance_sha256:$macos_acceptance_sha256,required_checks:$required_checks[0],hosted_acceptance:[$windows_acceptance[0],$macos_acceptance[0]]}' \
             > candidate/PROVENANCE.json
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: agentmem-${{ inputs.version }}-${{ github.sha }}
           path: candidate/
