@@ -23,7 +23,11 @@
       "minItems": 2,
       "maxItems": 2,
       "uniqueItems": true,
-      "items": {"$ref": "agentmem-candidate-acceptance.schema.json"}
+      "items": {"$ref": "agentmem-candidate-acceptance.schema.json"},
+      "allOf": [
+        {"contains": {"properties": {"os": {"const": "windows"}}, "required": ["os"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"os": {"const": "macos"}}, "required": ["os"]}, "minContains": 1, "maxContains": 1}
+      ]
     }
   }
 }

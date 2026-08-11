@@ -25,6 +25,7 @@
     "jobs": {
       "type": "array",
       "minItems": 7,
+      "maxItems": 7,
       "uniqueItems": true,
       "items": {
         "type": "object",
@@ -32,14 +33,23 @@
         "required": ["id", "name", "status", "conclusion", "html_url", "head_sha", "run_id"],
         "properties": {
           "id": {"type": "integer", "minimum": 1},
-          "name": {"type": "string", "minLength": 1},
+          "name": {"enum": ["test (ubuntu-latest)", "test (windows-latest)", "test (macos-latest)", "race", "fuzz-smoke", "opencode-runtime", "public-tree-privacy"]},
           "status": {"const": "completed"},
           "conclusion": {"const": "success"},
           "html_url": {"type": "string", "format": "uri", "pattern": "^https://github\\.com/"},
           "head_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
           "run_id": {"type": "integer", "minimum": 1}
         }
-      }
+      },
+      "allOf": [
+        {"contains": {"properties": {"name": {"const": "test (ubuntu-latest)"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "test (windows-latest)"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "test (macos-latest)"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "race"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "fuzz-smoke"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "opencode-runtime"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "public-tree-privacy"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1}
+      ]
     }
   }
 }

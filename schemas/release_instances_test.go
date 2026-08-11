@@ -128,6 +128,18 @@ func TestReleaseAndHostedReceiptInstancesMatchPublishedSchemas(t *testing.T) {
 	wrong := cloneMap(t, provenance)
 	wrong["commit"] = strings.Repeat("c", 39)
 	rejectPublishedInstance(t, "agentmem-release-provenance.schema.json", wrong)
+
+	wrongChecks := cloneMap(t, requiredChecks)
+	wrongChecks["jobs"].([]any)[0].(map[string]any)["name"] = "unexpected-check"
+	rejectPublishedInstance(t, "agentmem-required-checks.schema.json", wrongChecks)
+
+	wrongWindows := cloneMap(t, windows)
+	wrongWindows["archive"] = "agentmem_v0.1.0-rc.1_darwin_amd64.tar.gz"
+	rejectPublishedInstance(t, "agentmem-candidate-acceptance.schema.json", wrongWindows)
+
+	duplicateOS := cloneMap(t, provenance)
+	duplicateOS["hosted_acceptance"] = []any{windows, windows}
+	rejectPublishedInstance(t, "agentmem-release-provenance.schema.json", duplicateOS)
 }
 
 func TestTrackedFixtureAndAllowlistMatchPublishedSchemas(t *testing.T) {

@@ -103,7 +103,10 @@ try {
     $staged = Join-Path $InstallDir (".agentmem-" + [guid]::NewGuid().ToString("N") + ".tmp.exe")
     Copy-Item -LiteralPath $binaries[0].FullName -Destination $staged
     try {
-        & $staged version | Out-Null
+        $versionReport = (& $staged version | ConvertFrom-Json)
+        if ([string]$versionReport.version -ne $Version) {
+            throw "Release binary version $($versionReport.version) does not match requested version $Version"
+        }
         Move-AgentmemFile -Source $staged -Destination $target
     }
     finally {

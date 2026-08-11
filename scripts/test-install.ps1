@@ -20,7 +20,14 @@ $previousAssetRoot = $env:AGENTMEM_TEST_ASSET_ROOT
 $previousCGO = $env:CGO_ENABLED
 
 function New-TestRelease {
-    param([Parameter(Mandatory = $true)][string]$Version)
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [string]$BinaryVersion = ""
+    )
+
+    if ([string]::IsNullOrWhiteSpace($BinaryVersion)) {
+        $BinaryVersion = $Version
+    }
 
     $architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
     switch ($architecture) {
@@ -36,7 +43,7 @@ function New-TestRelease {
     Push-Location $repositoryRoot
     try {
         $env:CGO_ENABLED = "0"
-        & go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$Version" `
+        & go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$BinaryVersion" `
             -o $binary ./cmd/agentmem
         if ($LASTEXITCODE -ne 0) {
             throw "Building the Windows installer fixture failed."
@@ -103,6 +110,22 @@ try {
     }
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $installed).Hash -ne $installedDigest) {
         throw "Failed checksum verification changed the installed binary."
+    }
+
+    $null = New-TestRelease -Version "v0.0.2-test" -BinaryVersion "v9.9.9-test"
+    $versionMismatchRejected = $false
+    try {
+        & (Join-Path $PSScriptRoot "install.ps1") -Version "v0.0.2-test" `
+            -InstallDir $installRoot | Out-Null
+    }
+    catch {
+        $versionMismatchRejected = $_.Exception.Message -like "*does not match requested version*"
+    }
+    if (-not $versionMismatchRejected) {
+        throw "Installer did not reject a release whose binary version mismatched its tag."
+    }
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $installed).Hash -ne $installedDigest) {
+        throw "Failed version verification changed the installed binary."
     }
 
     $installedFiles = @(Get-ChildItem -LiteralPath $installRoot -Force)

@@ -59,7 +59,12 @@ fi
 mkdir -p "${install_dir}"
 staged="$(mktemp "${install_dir}/.agentmem.XXXXXX")"
 install -m 0755 "${temporary_root}/extract/agentmem" "${staged}"
-"${staged}" version >/dev/null
+version_output="$("${staged}" version)"
+embedded_version="$(printf '%s\n' "${version_output}" | sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)"[[:space:]]*,\{0,1\}[[:space:]]*$/\1/p')"
+if [ "${embedded_version}" != "${version}" ]; then
+  echo "Release binary version ${embedded_version:-unknown} does not match requested version ${version}" >&2
+  exit 1
+fi
 mv -f "${staged}" "${install_dir}/agentmem"
 staged=""
 printf 'Installed %s to %s\n' "${version}" "${install_dir}/agentmem"

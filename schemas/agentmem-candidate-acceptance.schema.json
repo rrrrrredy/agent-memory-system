@@ -8,10 +8,48 @@
   "properties": {
     "schema_version": {"const": "agentmem-candidate-acceptance/v1alpha1"},
     "os": {"enum": ["windows", "macos"]},
-    "runner_arch": {"type": "string", "minLength": 1},
+    "runner_arch": {"enum": ["X64", "ARM64"]},
     "archive": {"type": "string", "pattern": "^agentmem_v[^/]+_(?:windows|darwin)_(?:amd64|arm64)\\.(?:zip|tar\\.gz)$"},
     "archive_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "version": {"$ref": "agent-memory-version.schema.json"},
     "quickstart": {"$ref": "quickstart-smoke.schema.json"}
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"os": {"const": "windows"}}, "required": ["os"]},
+      "then": {
+        "properties": {
+          "archive": {"pattern": "_windows_(?:amd64|arm64)\\.zip$"},
+          "version": {"properties": {"platform": {"pattern": "^windows/(?:amd64|arm64)$"}}, "required": ["platform"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"os": {"const": "macos"}}, "required": ["os"]},
+      "then": {
+        "properties": {
+          "archive": {"pattern": "_darwin_(?:amd64|arm64)\\.tar\\.gz$"},
+          "version": {"properties": {"platform": {"pattern": "^darwin/(?:amd64|arm64)$"}}, "required": ["platform"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"runner_arch": {"const": "X64"}}, "required": ["runner_arch"]},
+      "then": {
+        "properties": {
+          "archive": {"pattern": "_amd64\\.(?:zip|tar\\.gz)$"},
+          "version": {"properties": {"platform": {"pattern": "/amd64$"}}, "required": ["platform"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"runner_arch": {"const": "ARM64"}}, "required": ["runner_arch"]},
+      "then": {
+        "properties": {
+          "archive": {"pattern": "_arm64\\.(?:zip|tar\\.gz)$"},
+          "version": {"properties": {"platform": {"pattern": "/arm64$"}}, "required": ["platform"]}
+        }
+      }
+    }
+  ]
 }
