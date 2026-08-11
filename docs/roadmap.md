@@ -5,6 +5,8 @@ future tasks.
 
 ## M0: Contract and ledger foundation
 
+Status: implemented and covered by cross-platform integrity tests.
+
 - Product contract, threat model, and architecture decisions.
 - Versioned evidence-event schema.
 - Content-addressed raw blobs.
@@ -17,6 +19,8 @@ without calling them promoted memory.
 
 ## M1: Three complete Agent adapters
 
+Status: implemented; runtime formats remain version-sensitive.
+
 - Codex history importer and incremental reconciler.
 - Claude Code history importer and incremental reconciler.
 - OpenCode history importer and incremental reconciler.
@@ -28,6 +32,8 @@ does not exit until all three pass the same contract.
 
 ## M2: Episodes and evidence-driven learning
 
+Status: implemented with human-gated validation and promotion.
+
 - Timeline and episode reconstruction.
 - Compaction continuity and goal/constraint drift checks.
 - Candidate extraction with traceable evidence spans.
@@ -38,6 +44,8 @@ does not exit until all three pass the same contract.
   missing-source evidence, foreground watch, and opt-in freshness gates.
 
 ## M3: Portable memory and Git synchronization
+
+Status: implemented; manual synchronization remains the default.
 
 - Readable Markdown/YAML memory protocol with immutable revisions.
 - Deterministic secret scanning.
@@ -51,8 +59,9 @@ No raw evidence is migrated when the private repository is created.
 
 ## M4: Retrieval, evaluation, and recovery
 
-Status: protocol implementation is complete in the v1alpha1 foundation.
-Independent real-runtime and longitudinal efficacy evidence remains an
+Status: retrieval, evaluation controls, and recovery are implemented. Core
+runtime compatibility includes real Codex evidence and a hosted OpenCode plugin
+smoke. Independent longitudinal efficacy evidence remains an
 operational acceptance requirement, not a claim made by the synthetic suite.
 
 - Cross-agent local query and MCP retrieval.

@@ -64,11 +64,11 @@ entire private chain-of-thought.
 
 ## Current safety limit
 
-The ledger is single-writer in this milestone. Do not run concurrent import or
-daemon processes against the same evidence root until cross-process locking and
-crash-recovery tests are implemented. Default incremental import detects
-append and truncation; detecting arbitrary earlier in-place modification
-requires `--full-reconcile`.
+The evidence root enforces a cross-process writer lock. Concurrent compliant
+writers fail closed instead of forking the hash chain; a stale lock is removed
+only through explicit recovery after the operator verifies that no writer is
+active. Default incremental import detects append and truncation; detecting an
+arbitrary earlier in-place modification requires `--full-reconcile`.
 
 Hook configuration and periodic execution are deployment choices. The CLI
 does not install either one without explicit approval. Hook capture supplies

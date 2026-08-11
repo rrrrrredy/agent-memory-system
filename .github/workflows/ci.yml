@@ -2,7 +2,12 @@ name: ci
 
 on:
   push:
+    branches:
+      - main
+    tags:
+      - "v*"
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -64,3 +69,62 @@ jobs:
             $errors | ForEach-Object { Write-Error $_.Message }
             exit 1
           }
+
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Race-test stateful safety boundaries
+        run: >-
+          go test -race
+          ./internal/ledger
+          ./internal/review
+          ./internal/promotion
+          ./internal/portable
+          ./internal/retrieval
+          ./internal/capturesupervisor
+
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Fuzz secret scanning invariants
+        run: >-
+          go test ./internal/secretscan
+          -run '^$' -fuzz '^FuzzScan$' -fuzztime 10s
+
+  opencode-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned OpenCode in runner temp
+        run: >-
+          npm install
+          --prefix "$RUNNER_TEMP/opencode-runtime"
+          --no-audit
+          --no-fund
+          opencode-ai@1.18.11
+      - name: Build agentmem
+        run: go build -o "$RUNNER_TEMP/agentmem" ./cmd/agentmem
+      - name: Verify OpenCode plugin to evidence ledger
+        env:
+          AGENTMEM_BINARY: ${{ runner.temp }}/agentmem
+          OPENCODE_BINARY: ${{ runner.temp }}/opencode-runtime/node_modules/.bin/opencode
+          OPENCODE_DISABLE_MODELS_FETCH: "true"
+        run: node integrations/opencode/runtime-smoke.mjs

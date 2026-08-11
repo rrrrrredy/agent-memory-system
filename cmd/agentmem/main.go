@@ -65,6 +65,8 @@ func run(args []string) error {
 			"go_version":     runtime.Version(),
 			"platform":       runtime.GOOS + "/" + runtime.GOARCH,
 		})
+	case "compatibility":
+		return runCompatibility(args[1:])
 	case "init":
 		flags := flag.NewFlagSet("init", flag.ContinueOnError)
 		root := flags.String("root", "", "local evidence root (required)")
@@ -1838,6 +1840,8 @@ func runPortableVerify(args []string) error {
 
 func runPromote(args []string) error {
 	switch args[0] {
+	case "candidate":
+		return runPromoteCandidate(args[1:])
 	case "scan":
 		return runPromoteScan(args[1:])
 	case "apply":
@@ -2067,6 +2071,10 @@ func runRuleApprovalVerify(args []string) error {
 
 func runReview(args []string) error {
 	switch args[0] {
+	case "list":
+		return runReviewList(args[1:])
+	case "decide":
+		return runReviewDecide(args[1:])
 	case "apply":
 		return runReviewApply(args[1:])
 	case "status":
@@ -2622,7 +2630,7 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <version|init|doctor|import|inject|capture|backup|derive|eval|review|promote|rule-approval|portable|recall|serve|sync> [options]")
+	return errors.New("usage: agentmem <version|compatibility|init|doctor|import|inject|capture|backup|derive|eval|review|promote|rule-approval|portable|recall|serve|sync> [options]")
 }
 
 func backupUsageError() error {
@@ -2630,11 +2638,11 @@ func backupUsageError() error {
 }
 
 func reviewUsageError() error {
-	return errors.New("usage: agentmem review <apply|status|verify> [options]")
+	return errors.New("usage: agentmem review <list|decide|apply|status|verify> [options]")
 }
 
 func promoteUsageError() error {
-	return errors.New("usage: agentmem promote <scan|apply|status|verify> [options]")
+	return errors.New("usage: agentmem promote <candidate|scan|apply|status|verify> [options]")
 }
 
 func ruleApprovalUsageError() error {

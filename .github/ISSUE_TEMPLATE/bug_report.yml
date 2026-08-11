@@ -1,0 +1,72 @@
+name: Bug report
+description: Report a reproducible product or compatibility defect without private evidence
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste transcripts, tool output, reasoning, credentials, private memory text, local paths, or private repository URLs. Use a synthetic reproduction.
+  - type: input
+    id: version
+    attributes:
+      label: Agent Memory System version
+      placeholder: agentmem version output
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Evidence ledger
+        - Codex adapter
+        - Claude Code adapter
+        - OpenCode adapter
+        - Episode or candidate derivation
+        - Review or promotion
+        - Portable memory or Git sync
+        - Retrieval or MCP
+        - Evaluation
+        - Backup or recovery
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Synthetic reproduction
+      description: Provide the smallest commands and synthetic input that reproduce the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Redact all private data and paths.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I removed real transcripts, tool output, reasoning, credentials, local paths, private memory text, and private repository URLs.
+          required: true
