@@ -1,8 +1,9 @@
 {
   "schema_version": "public-tree-allowlist/v1alpha1",
-  "public_identities": ["luosongred@gmail.com"],
+  "public_identities": ["luosongred@gmail.com", "support@github.com"],
   "entries": [
-    {"path": ".github/workflows/ci.yml", "sha256": "b5d96e235636f9d5507192096b5073401d259a34c098ecfbf80e72bb5cce2b48", "reason": "public workflow example identifier"},
+    {"path": ".github/workflows/ci.yml", "sha256": "1ba55a41b0d9d639995081e6477aa3db3ac0ee6ea28c6ab21f2e27ef09ea5e7e", "reason": "public workflow example identifier"},
+    {"path": ".github/workflows/ci.yml", "sha256": "b5d96e235636f9d5507192096b5073401d259a34c098ecfbf80e72bb5cce2b48", "reason": "previous protected workflow in public history"},
     {"path": "README.md", "sha256": "2211245b97b1bae9c5b4496d193ccb8d7b7f57b11f3d81ff79fff7650b12a063", "reason": "documented portable path examples"},
     {"path": "adapters/codex/importer_test.go", "sha256": "b61fca71d61c0c73a8944106786ba82fc02126a8ce98b152c98d7e2083251184", "reason": "synthetic adapter transcript fixture"},
     {"path": "cmd/agentmem/main.go", "sha256": "9811d6f3aa868199724b74874f1d4eb499d37d27ba5fcf754331e66fce2e360e", "reason": "public command secret-name vocabulary"},

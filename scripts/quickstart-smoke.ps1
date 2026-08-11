@@ -26,9 +26,8 @@ try {
 
   if ([string]::IsNullOrWhiteSpace($BinaryPath)) {
     & $Go build -o $Binary .\cmd\agentmem
-  }
     if ($LASTEXITCODE -ne 0) { throw 'agentmem build failed' }
-  else {
+  } else {
     Copy-Item -LiteralPath (Resolve-Path -LiteralPath $BinaryPath) -Destination $Binary
   }
   if (-not (Test-Path -LiteralPath $Binary)) { throw 'agentmem binary preparation failed' }
