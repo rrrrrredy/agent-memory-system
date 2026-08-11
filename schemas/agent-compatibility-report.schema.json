@@ -16,7 +16,7 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "agent", "command", "runtime_status", "capture_modes", "retrieval_modes",
+          "agent", "command", "runtime_status", "history_import_available", "capture_modes", "retrieval_modes",
           "native_execution_verified", "limitations"
         ],
         "properties": {
@@ -28,6 +28,7 @@
           },
           "version": {"type": "string", "minLength": 1, "maxLength": 4096},
           "executable_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "history_import_available": {"type": "boolean"},
           "capture_modes": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
           "retrieval_modes": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
           "native_execution_verified": {"type": "boolean"},

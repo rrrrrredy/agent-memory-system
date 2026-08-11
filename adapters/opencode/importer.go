@@ -34,6 +34,7 @@ type Options struct {
 type SourceFile = adapterjsonl.SourceFile
 
 type Result struct {
+	SchemaVersion   string         `json:"schema_version"`
 	FilesExamined   int            `json:"files_examined"`
 	FilesChanged    int            `json:"files_changed"`
 	SourceSnapshots int            `json:"source_snapshots"`
@@ -114,7 +115,7 @@ type documentPointer struct {
 }
 
 func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result, error) {
-	result := Result{Kinds: map[string]int{}}
+	result := Result{SchemaVersion: adapterjsonl.ResultSchemaVersion, Kinds: map[string]int{}}
 	if store == nil {
 		return result, errors.New("store is required")
 	}
@@ -142,7 +143,7 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options) (Result
 }
 
 func ImportSources(store *ledger.Store, sources []SourceFile, options Options) (Result, error) {
-	result := Result{Kinds: map[string]int{}}
+	result := Result{SchemaVersion: adapterjsonl.ResultSchemaVersion, Kinds: map[string]int{}}
 	if store == nil {
 		return result, errors.New("store is required")
 	}

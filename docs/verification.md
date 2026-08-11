@@ -28,18 +28,25 @@ Runtime evidence must involve the actual executable, not only a fixture.
 
 The current acceptance includes:
 
-- a real Codex rollout imported on Windows: 56.9 MB, 29,577 normalized events,
+- a maintainer-reported private Codex rollout imported on Windows: 56.9 MB,
+  29,577 normalized events,
   zero importer gaps, idempotent re-import, verified episode derivation, and a
   16-item review-ready queue from 84 candidates;
-- a minimal authenticated `codex exec --ephemeral --json` run that completed
+- a maintainer-reported minimal authenticated `codex exec --ephemeral --json`
+  run that completed
   successfully without tool calls;
 - a pinned OpenCode server and plugin running in a disposable GitHub-hosted
-  Ubuntu runner, producing a native session event that is imported and verified;
+  Ubuntu runner, producing a `session.created` event whose session identifier
+  matches the session returned by the server and is imported and verified;
 - GitHub-hosted Windows, macOS, and Ubuntu build, test, installer, and protocol
   coverage.
 
-The acceptance report contains aggregate counts only. No transcript, local
-path, thread identifier, user instruction, or memory content is committed.
+The Codex acceptance is not independently reproducible from this repository:
+its private transcript and correlatable source hash are intentionally not
+published. The OpenCode hosted receipt exposes only aggregate counts and hashes
+of the matched event and session identifier. No raw transcript, local path,
+thread identifier, user instruction, session identifier, or memory content is
+committed.
 
 An authenticated Claude Code task and a physical macOS device test are not
 claimed.

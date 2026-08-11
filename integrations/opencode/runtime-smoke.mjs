@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
@@ -33,6 +33,7 @@ try {
 
   server = startServer({ opencode, project, spoolPath, password, port })
   const health = await waitForHealth(port, password, server)
+  const baselineEventHashes = new Set((await readCapturedEvents(spoolDirectory)).map(eventHash))
   let session
   try {
     session = await requestJSON(port, password, "/session", {
@@ -47,7 +48,7 @@ try {
     throw new Error("OpenCode did not create a session")
   }
 
-  const captured = await waitForCapturedEvents(spoolDirectory)
+  const captured = await waitForSessionEvent(spoolDirectory, baselineEventHashes, session.id)
   await run(agentmem, ["init", "--root", evidenceRoot])
   const imported = parseJSON(await run(agentmem, [
     "import", "opencode-events", "--root", evidenceRoot, "--path", spoolDirectory,
@@ -63,7 +64,10 @@ try {
   process.stdout.write(`${JSON.stringify({
     schema_version: "opencode-runtime-smoke/v1alpha1",
     runtime_version: health.version,
-    native_events_captured: captured,
+    native_events_captured: captured.total,
+    native_session_event_type: captured.type,
+    native_session_id_sha256: sha256(session.id),
+    native_session_event_sha256: captured.eventSHA256,
     evidence_events_appended: imported.events_appended,
     evidence_ready: doctor.ready,
     provider_model_invoked: false,
@@ -141,26 +145,51 @@ async function requestJSON(port, password, path, options = {}) {
   return JSON.parse(text)
 }
 
-async function waitForCapturedEvents(directory) {
+async function waitForSessionEvent(directory, baselineEventHashes, sessionID) {
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
-    const entries = await readdir(directory)
-    let captured = 0
-    for (const name of entries.filter((entry) => entry.endsWith(".jsonl"))) {
-      const data = await readFile(join(directory, name), "utf8")
-      for (const line of data.split("\n")) {
-        if (!line.trim()) continue
-        const record = JSON.parse(line)
-        if (!record.captured_at || typeof record.event !== "object" || record.event === null) {
-          throw new Error("OpenCode plugin wrote an invalid event envelope")
-        }
-        captured++
+    const records = await readCapturedEvents(directory)
+    for (const record of records) {
+      const digest = eventHash(record)
+      if (baselineEventHashes.has(digest)) continue
+      if (record.event.type === "session.created" && eventSessionID(record.event) === sessionID) {
+        return { total: records.length, type: record.event.type, eventSHA256: digest }
       }
     }
-    if (captured > 0) return captured
     await delay(200)
   }
-  throw new Error("OpenCode loaded but the evidence plugin captured no native event")
+  throw new Error("OpenCode loaded but the evidence plugin did not capture the created session")
+}
+
+async function readCapturedEvents(directory) {
+  const entries = (await readdir(directory)).filter((entry) => entry.endsWith(".jsonl")).sort()
+  const records = []
+  for (const name of entries) {
+    const data = await readFile(join(directory, name), "utf8")
+    for (const line of data.split("\n")) {
+      if (!line.trim()) continue
+      const record = JSON.parse(line)
+      if (!record.captured_at || typeof record.event !== "object" || record.event === null) {
+        throw new Error("OpenCode plugin wrote an invalid event envelope")
+      }
+      records.push(record)
+    }
+  }
+  return records
+}
+
+function eventSessionID(event) {
+  const properties = event?.properties
+  return properties?.info?.id ?? properties?.session?.id ?? properties?.id ??
+    properties?.sessionID ?? properties?.sessionId ?? ""
+}
+
+function eventHash(record) {
+  return sha256(JSON.stringify(record.event))
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex")
 }
 
 async function run(executable, arguments_) {

@@ -33,6 +33,29 @@ func TestDoctorAcceptsHealthyLocalStoreAndCanRequireRepository(t *testing.T) {
 	}
 }
 
+func TestDoctorIsNotReadyWhileEvidenceWriterLockExists(t *testing.T) {
+	store, err := ledger.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	appender, err := store.NewAppender()
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := Run(context.Background(), store, Options{})
+	if report.Ready || !hasIssue(report, "evidence", "writer_lock_present") {
+		_ = appender.Close()
+		t.Fatalf("doctor ignored the evidence writer lock: %+v", report)
+	}
+	if err := appender.Close(); err != nil {
+		t.Fatal(err)
+	}
+	report = Run(context.Background(), store, Options{})
+	if !report.Ready || hasIssue(report, "evidence", "writer_lock_present") {
+		t.Fatalf("doctor remained blocked after writer lock cleanup: %+v", report)
+	}
+}
+
 func TestDoctorAcceptsVerifiedPrivateMemoryRepository(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is unavailable")

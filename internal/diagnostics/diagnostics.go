@@ -68,6 +68,17 @@ func Run(ctx context.Context, store *ledger.Store, options Options) Report {
 		})
 		return finalize(report)
 	}
+	writerLockPresent, writerLockErr := store.WriterLockPresent()
+	if writerLockErr != nil {
+		report.Issues = append(report.Issues, Issue{
+			Component: "evidence", Code: "writer_lock_status_failed", Message: writerLockErr.Error(),
+		})
+	} else if writerLockPresent {
+		report.Issues = append(report.Issues, Issue{
+			Component: "evidence", Code: "writer_lock_present",
+			Message: "an evidence writer is active or left a lock; verify no writer is active before using doctor --clear-stale-writer-lock",
+		})
+	}
 	report.Evidence = store.Verify()
 	appendStrings(&report, "evidence", "integrity_failed", report.Evidence.Issues)
 	report.HookSpools = hookcapture.VerifySpools(store)

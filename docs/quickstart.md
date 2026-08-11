@@ -1,47 +1,54 @@
 # Quickstart
 
-This path imports existing Codex history, derives candidates, requires a human
-decision, exports one approved memory to a separate local repository, and
-retrieves it. It does not install hooks, upload raw evidence, or automatically
-approve a candidate.
+This walkthrough imports a privacy-safe synthetic Codex rollout, derives one
+candidate, requires two human decisions, exports one approved memory to a
+separate local repository, and proves that retrieval selects that exact memory.
+It does not install hooks, contact a model provider, or upload raw evidence.
 
-Keep the evidence directory outside every Git worktree. The portable memory
-directory must be a different physical tree.
+After the demo succeeds, replace the example source with your existing Codex
+sessions directory. Keep the evidence directory outside every Git worktree. The
+portable memory directory must be a different physical tree.
 
-## Build
+## Prerequisites
 
-```text
-git clone https://github.com/rrrrrredy/agent-memory-system.git
-cd agent-memory-system
-go build -o agentmem ./cmd/agentmem
-```
-
-On Windows, use `agentmem.exe` in the commands below.
+- Go 1.25 or newer;
+- Git;
+- `jq` for the POSIX walkthrough.
 
 ## Windows PowerShell
 
-Build and choose private local directories:
+Build the CLI and create isolated demo directories:
 
 ```powershell
 New-Item -ItemType Directory -Force .\bin | Out-Null
 go build -o .\bin\agentmem.exe .\cmd\agentmem
 
-$Evidence = Join-Path $env:LOCALAPPDATA "agentmem\evidence"
-$Memory = Join-Path $env:LOCALAPPDATA "agentmem\portable-memory"
-$CodexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
-$Sessions = Join-Path $CodexRoot "sessions"
+$Run = [guid]::NewGuid().ToString("N")
+$Evidence = Join-Path $env:TEMP "agentmem-demo-$Run\evidence"
+$Memory = Join-Path $env:TEMP "agentmem-demo-$Run\portable-memory"
+$DemoSessions = (Resolve-Path .\examples\quickstart).Path
 ```
 
-Check the local executable and import existing rollouts:
+The runtime probe is optional. A failed version probe does not disable offline
+history import; inspect `history_import_available` separately:
 
 ```powershell
-.\bin\agentmem.exe compatibility --agent codex
-.\bin\agentmem.exe init --root $Evidence
-.\bin\agentmem.exe import codex --root $Evidence --path $Sessions
-.\bin\agentmem.exe doctor --root $Evidence
+$Compatibility = .\bin\agentmem.exe compatibility --agent codex | ConvertFrom-Json
+$Compatibility.agents | Select-Object agent,runtime_status,history_import_available,runtime_issue
 ```
 
-Derive episodes and candidates from the verified evidence prefix:
+Import and verify the synthetic rollout:
+
+```powershell
+.\bin\agentmem.exe init --root $Evidence
+$Import = .\bin\agentmem.exe import codex --root $Evidence --path $DemoSessions | ConvertFrom-Json
+$Doctor = .\bin\agentmem.exe doctor --root $Evidence | ConvertFrom-Json
+if ($Import.gaps_appended -ne 0 -or -not $Doctor.ready) {
+  throw "The demo evidence import did not verify cleanly."
+}
+```
+
+Derive episodes and review-ready candidates:
 
 ```powershell
 $Episodes = .\bin\agentmem.exe derive episodes --root $Evidence | ConvertFrom-Json
@@ -54,21 +61,23 @@ $Queue = .\bin\agentmem.exe review list `
   --status review_ready `
   --limit 20 | ConvertFrom-Json
 
-$Queue.candidates | ForEach-Object {
-  [pscustomobject]@{
-    id = $_.candidate.candidate_id
-    text = $_.candidate.text
-    support = ($_.candidate.support_types -join ",")
-    text_sha256 = $_.text_sha256
-  }
+if ($Queue.candidates.Count -eq 0) {
+  throw "No review-ready candidate was derived. Inspect the candidate generation before continuing."
 }
+$Item = $Queue.candidates[0]
+$Basis = @("explicit_remember", "user_correction", "stable_repetition") |
+  Where-Object { $Item.candidate.support_types -contains $_ } |
+  Select-Object -First 1
+if (-not $Basis) {
+  throw "The selected candidate has no human-validation basis supported by this walkthrough."
+}
+$Item.candidate | Select-Object candidate_id,text,support_types
 ```
 
-Inspect the text and its evidence basis. Select one item only if it states a
-durable instruction you want future Agents to receive:
+Validation is a human decision. Read the candidate text before running this
+command:
 
 ```powershell
-$Item = $Queue.candidates[0]
 .\bin\agentmem.exe review decide `
   --root $Evidence `
   --candidates $Candidates.generation_path `
@@ -77,40 +86,40 @@ $Item = $Queue.candidates[0]
   --reviewer local-user `
   --scope project `
   --scope-value example-project `
-  --basis explicit_remember `
+  --basis $Basis `
   --reason "Reviewed the source evidence and confirmed this project preference."
 ```
 
-Use `explicit_remember` only when it appears in `support_types`. Other accepted
-bases are `user_correction`, `stable_repetition`, `outcome_evidence`, and
-`explicit_user_confirmation`. The last two also require explicit evidence event
-IDs. Conflicted candidates must be handled with an atomic review request.
-
-Promotion is a second human gate. It rescans the exact text and requires the
-confirmation hash returned by `review list`:
+Promotion is a separate human gate and rescans the exact text:
 
 ```powershell
-.\bin\agentmem.exe promote candidate `
+$Promoted = .\bin\agentmem.exe promote candidate `
   --root $Evidence `
   --candidates $Candidates.generation_path `
   --candidate $Item.candidate.candidate_id `
   --approver local-user `
   --confirm-text-sha256 $Item.text_sha256 `
-  --reason "Approved for portable project memory."
+  --reason "Approved for portable project memory." | ConvertFrom-Json
 ```
 
-Create and verify a separate readable memory repository:
+Export to a separate readable repository, then retrieve using the exact approved
+text and require the promoted memory to be selected:
 
 ```powershell
 .\bin\agentmem.exe portable init --repo $Memory
 .\bin\agentmem.exe portable export --root $Evidence --repo $Memory
 .\bin\agentmem.exe portable verify --repo $Memory
-.\bin\agentmem.exe recall search `
+
+$Recall = .\bin\agentmem.exe recall search `
   --root $Evidence `
   --repo $Memory `
   --agent codex `
   --scope-project example-project `
-  --query "project preference"
+  --query $Item.candidate.text | ConvertFrom-Json
+if ($Recall.selected.memory_id -notcontains $Promoted.revision.memory_id) {
+  throw "Retrieval did not select the promoted memory."
+}
+$Recall.selected | Select-Object memory_id,text,score,matched_terms
 ```
 
 Connect `$Memory` to an empty private Git remote only after reviewing the
@@ -118,39 +127,111 @@ readable diff. See [git-sync.md](git-sync.md).
 
 ## macOS or Linux
 
+Build the CLI and create isolated demo directories:
+
 ```sh
 mkdir -p ./bin
 go build -o ./bin/agentmem ./cmd/agentmem
 
-evidence="${XDG_DATA_HOME:-$HOME/.local/share}/agentmem/evidence"
-memory="${XDG_DATA_HOME:-$HOME/.local/share}/agentmem/portable-memory"
-codex_root="${CODEX_HOME:-$HOME/.codex}"
-sessions="$codex_root/sessions"
-
-./bin/agentmem compatibility --agent codex
-./bin/agentmem init --root "$evidence"
-./bin/agentmem import codex --root "$evidence" --path "$sessions"
-./bin/agentmem doctor --root "$evidence"
-
-./bin/agentmem derive episodes --root "$evidence"
+run_root="$(mktemp -d "${TMPDIR:-/tmp}/agentmem-demo.XXXXXX")"
+evidence="$run_root/evidence"
+memory="$run_root/portable-memory"
+demo_sessions="$(pwd)/examples/quickstart"
 ```
 
-Copy `generation_path` from the episode result:
+Probe the runtime without using it as an import gate, then import and verify:
 
 ```sh
-./bin/agentmem derive candidates \
-  --root "$evidence" \
-  --episodes '<episode-generation-path>'
-
-./bin/agentmem review list \
-  --root "$evidence" \
-  --candidates '<candidate-generation-path>' \
-  --status review_ready \
-  --limit 20
+./bin/agentmem compatibility --agent codex
+./bin/agentmem init --root "$evidence"
+imported="$(./bin/agentmem import codex --root "$evidence" --path "$demo_sessions")"
+doctor="$(./bin/agentmem doctor --root "$evidence")"
+printf '%s\n' "$imported" | jq -e '.gaps_appended == 0' >/dev/null
+printf '%s\n' "$doctor" | jq -e '.ready == true' >/dev/null
 ```
 
-Review, promotion, export, and retrieval use the same arguments shown in the
-PowerShell path. JSON output is stable and can be inspected with `jq`.
+Derive and select a review-ready candidate:
+
+```sh
+episodes="$(./bin/agentmem derive episodes --root "$evidence")"
+episode_path="$(printf '%s\n' "$episodes" | jq -r '.generation_path')"
+candidates="$(./bin/agentmem derive candidates --root "$evidence" --episodes "$episode_path")"
+candidate_path="$(printf '%s\n' "$candidates" | jq -r '.generation_path')"
+queue="$(./bin/agentmem review list --root "$evidence" --candidates "$candidate_path" --status review_ready --limit 20)"
+item="$(printf '%s\n' "$queue" | jq -ce '.candidates[0] // error("no review-ready candidate")')"
+candidate_id="$(printf '%s\n' "$item" | jq -r '.candidate.candidate_id')"
+text_sha256="$(printf '%s\n' "$item" | jq -r '.text_sha256')"
+query="$(printf '%s\n' "$item" | jq -r '.candidate.text')"
+basis="$(printf '%s\n' "$item" | jq -r '[.candidate.support_types[] | select(. == "explicit_remember" or . == "user_correction" or . == "stable_repetition")] | first // empty')"
+test -n "$basis" || { echo "candidate has no supported validation basis" >&2; exit 1; }
+printf '%s\n' "$item" | jq '{candidate_id:.candidate.candidate_id,text:.candidate.text,support_types:.candidate.support_types}'
+```
+
+Read the text, then validate, promote, export, and assert retrieval:
+
+```sh
+./bin/agentmem review decide \
+  --root "$evidence" \
+  --candidates "$candidate_path" \
+  --candidate "$candidate_id" \
+  --action validate \
+  --reviewer local-user \
+  --scope project \
+  --scope-value example-project \
+  --basis "$basis" \
+  --reason "Reviewed the source evidence and confirmed this project preference."
+
+promoted="$(./bin/agentmem promote candidate \
+  --root "$evidence" \
+  --candidates "$candidate_path" \
+  --candidate "$candidate_id" \
+  --approver local-user \
+  --confirm-text-sha256 "$text_sha256" \
+  --reason "Approved for portable project memory.")"
+memory_id="$(printf '%s\n' "$promoted" | jq -r '.revision.memory_id')"
+
+./bin/agentmem portable init --repo "$memory"
+./bin/agentmem portable export --root "$evidence" --repo "$memory"
+./bin/agentmem portable verify --repo "$memory"
+recall="$(./bin/agentmem recall search \
+  --root "$evidence" \
+  --repo "$memory" \
+  --agent codex \
+  --scope-project example-project \
+  --query "$query")"
+printf '%s\n' "$recall" | jq -e --arg id "$memory_id" '.selected | any(.memory_id == $id)' >/dev/null
+printf '%s\n' "$recall" | jq '.selected'
+```
+
+## Use existing Codex history
+
+After the synthetic demo succeeds, reuse the same flow with a new evidence
+directory and your actual sessions path:
+
+- Windows: `${CODEX_HOME:-$HOME\.codex}\sessions` (PowerShell should resolve
+  `$env:CODEX_HOME` explicitly as shown below);
+- macOS/Linux: `${CODEX_HOME:-$HOME/.codex}/sessions`.
+
+PowerShell path selection:
+
+```powershell
+$CodexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
+$Sessions = Join-Path $CodexRoot "sessions"
+```
+
+Real history may legitimately produce zero review-ready candidates. That is a
+safe result, not a reason to weaken the evidence policy or manufacture a memory.
+If evidence changes after derivation, rerun `derive episodes` and `derive
+candidates` before review or promotion.
+
+## JSON contracts
+
+Every versioned JSON result used in this walkthrough has a matching public
+schema under `schemas/`, including history import, episode and candidate builds,
+review and promotion application, portable initialization, export, verification,
+and retrieval. The schema tests validate real Go result types and reject an
+unknown protocol version. Plain path output from `init` is intentionally not a
+versioned JSON protocol.
 
 ## Claude Code and OpenCode sources
 
@@ -178,6 +259,9 @@ agentmem portable verify --repo <portable-memory>
 agentmem sync verify --repo <portable-memory>
 agentmem recall verify --root <evidence>
 ```
+
+If doctor reports `writer_lock_present`, do not remove it until you have
+confirmed no writer is active. Only then use `doctor --clear-stale-writer-lock`.
 
 For encrypted evidence backup and no-overwrite restore, see
 [backup-recovery.md](backup-recovery.md).

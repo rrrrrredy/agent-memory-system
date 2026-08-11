@@ -31,6 +31,7 @@ type AgentReport struct {
 	RuntimeIssue            string        `json:"runtime_issue,omitempty"`
 	Version                 string        `json:"version,omitempty"`
 	ExecutableSHA256        string        `json:"executable_sha256,omitempty"`
+	HistoryImportAvailable  bool          `json:"history_import_available"`
 	CaptureModes            []string      `json:"capture_modes"`
 	RetrievalModes          []string      `json:"retrieval_modes"`
 	NativeExecutionVerified bool          `json:"native_execution_verified"`
@@ -144,7 +145,8 @@ func normalizedVersion(output []byte) string {
 }
 
 func integrationContract(agent ledger.Agent) AgentReport {
-	item := AgentReport{Agent: agent, CaptureModes: []string{}, RetrievalModes: []string{},
+	item := AgentReport{Agent: agent, HistoryImportAvailable: true,
+		CaptureModes: []string{}, RetrievalModes: []string{},
 		NativeExecutionVerified: false, Limitations: []string{
 			"provider-hidden reasoning cannot be recovered",
 			"native Agent execution provenance is not yet verified",
@@ -164,6 +166,7 @@ func integrationContract(agent ledger.Agent) AgentReport {
 		item.RetrievalModes = []string{"plugin_injection", "mcp"}
 	default:
 		item.Command = string(agent)
+		item.HistoryImportAvailable = false
 		item.Limitations = append(item.Limitations, "unsupported Agent integration")
 	}
 	return item

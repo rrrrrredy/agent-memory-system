@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/portable-memory-init-result.schema.json",
+  "title": "Portable memory repository initialization result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "initialized", "privacy"],
+  "properties": {
+    "schema_version": {"const": "portable-memory-init-result/v1alpha1"},
+    "initialized": {"const": true},
+    "privacy": {"const": "private_git"}
+  }
+}

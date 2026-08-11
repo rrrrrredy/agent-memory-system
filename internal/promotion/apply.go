@@ -60,7 +60,15 @@ func ScanCandidate(store *ledger.Store, generationPath, candidateID string) (Sca
 	}, nil
 }
 
+type applyHooks struct {
+	afterPrepare func()
+}
+
 func Apply(store *ledger.Store, request Request) (ApplyResult, error) {
+	return applyWithHooks(store, request, applyHooks{})
+}
+
+func applyWithHooks(store *ledger.Store, request Request, hooks applyHooks) (ApplyResult, error) {
 	result := ApplyResult{SchemaVersion: ApplyResultSchemaVersion, Privacy: "local_only"}
 	if store == nil {
 		return result, errors.New("store is required")
@@ -79,6 +87,16 @@ func Apply(store *ledger.Store, request Request) (ApplyResult, error) {
 			_ = lock.release()
 		}
 	}()
+	evidenceGuard, err := store.NewAppenderAfterVisit(nil)
+	if err != nil {
+		return result, fmt.Errorf("lock current evidence prefix: %w", err)
+	}
+	evidenceReleased := false
+	defer func() {
+		if !evidenceReleased {
+			_ = evidenceGuard.Close()
+		}
+	}()
 	state, err := replayVerified(store)
 	if err != nil {
 		return result, err
@@ -91,6 +109,9 @@ func Apply(store *ledger.Store, request Request) (ApplyResult, error) {
 	revision, err := prepareRevision(store, request, state, now)
 	if err != nil {
 		return result, err
+	}
+	if hooks.afterPrepare != nil {
+		hooks.afterPrepare()
 	}
 	requestDigest, err := hashRequest(request)
 	if err != nil {
@@ -115,6 +136,10 @@ func Apply(store *ledger.Store, request Request) (ApplyResult, error) {
 	result.Sequence = record.Sequence
 	result.RecordSHA256 = record.RecordSHA256
 	result.Revision = revision
+	if err := evidenceGuard.Close(); err != nil {
+		return result, fmt.Errorf("memory promotion was appended but evidence lock cleanup failed: %w", err)
+	}
+	evidenceReleased = true
 	if err := lock.release(); err != nil {
 		return result, fmt.Errorf("memory promotion was appended but lock cleanup failed: %w", err)
 	}

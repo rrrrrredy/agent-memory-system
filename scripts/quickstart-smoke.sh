@@ -1,0 +1,61 @@
+#!/bin/sh
+set -eu
+
+repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+temporary_parent=${TMPDIR:-/tmp}
+root=$(mktemp -d "$temporary_parent/agentmem-quickstart.XXXXXX")
+evidence="$root/evidence"
+memory="$root/portable-memory"
+binary="$root/agentmem"
+go_command=${AGENTMEM_GO:-go}
+
+cleanup() {
+  case "$root" in
+    "$temporary_parent"/agentmem-quickstart.*)
+      rm -rf -- "$root"
+      ;;
+    *)
+      printf '%s\n' "refusing to remove unexpected quickstart path: $root" >&2
+      ;;
+  esac
+}
+trap cleanup EXIT HUP INT TERM
+
+cd "$repository"
+"$go_command" build -o "$binary" ./cmd/agentmem
+"$binary" init --root "$evidence" >/dev/null
+imported=$("$binary" import codex --root "$evidence" --path "$repository/examples/quickstart")
+doctor=$("$binary" doctor --root "$evidence")
+printf '%s\n' "$imported" | jq -e '.schema_version == "agent-history-import-result/v1alpha1" and .gaps_appended == 0' >/dev/null
+printf '%s\n' "$doctor" | jq -e '.ready == true' >/dev/null
+
+episodes=$("$binary" derive episodes --root "$evidence")
+episode_path=$(printf '%s\n' "$episodes" | jq -r '.generation_path')
+candidates=$("$binary" derive candidates --root "$evidence" --episodes "$episode_path")
+candidate_path=$(printf '%s\n' "$candidates" | jq -r '.generation_path')
+queue=$("$binary" review list --root "$evidence" --candidates "$candidate_path" --status review_ready --limit 20)
+item=$(printf '%s\n' "$queue" | jq -ce '.candidates[0] // error("no review-ready candidate")')
+candidate_id=$(printf '%s\n' "$item" | jq -r '.candidate.candidate_id')
+text_sha256=$(printf '%s\n' "$item" | jq -r '.text_sha256')
+query=$(printf '%s\n' "$item" | jq -r '.candidate.text')
+basis=$(printf '%s\n' "$item" | jq -r '[.candidate.support_types[] | select(. == "explicit_remember" or . == "user_correction" or . == "stable_repetition")] | first // empty')
+test -n "$basis"
+
+"$binary" review decide --root "$evidence" --candidates "$candidate_path" --candidate "$candidate_id" --action validate --reviewer quickstart-smoke --scope project --scope-value example-project --basis "$basis" --reason 'Reviewed synthetic source evidence.' >/dev/null
+promoted=$("$binary" promote candidate --root "$evidence" --candidates "$candidate_path" --candidate "$candidate_id" --approver quickstart-smoke --confirm-text-sha256 "$text_sha256" --reason 'Approved synthetic portable project memory.')
+memory_id=$(printf '%s\n' "$promoted" | jq -r '.revision.memory_id')
+
+"$binary" portable init --repo "$memory" >/dev/null
+exported=$("$binary" portable export --root "$evidence" --repo "$memory")
+portable=$("$binary" portable verify --repo "$memory")
+recall=$("$binary" recall search --root "$evidence" --repo "$memory" --agent codex --scope-project example-project --query "$query")
+printf '%s\n' "$recall" | jq -e --arg id "$memory_id" '.selected | any(.memory_id == $id)' >/dev/null
+
+jq -n -c \
+  --argjson gaps "$(printf '%s\n' "$imported" | jq '.gaps_appended')" \
+  --argjson ready "$(printf '%s\n' "$doctor" | jq '.ready')" \
+  --argjson review "$(printf '%s\n' "$candidates" | jq '.review_ready')" \
+  --argjson written "$(printf '%s\n' "$exported" | jq '.revisions_written')" \
+  --argjson active "$(printf '%s\n' "$portable" | jq '.active_memories')" \
+  --argjson selected "$(printf '%s\n' "$recall" | jq '.selected | length')" \
+  '{schema_version:"quickstart-smoke/v1alpha1",gaps_appended:$gaps,doctor_ready:$ready,review_ready:$review,revisions_written:$written,active_memories:$active,selected_memories:$selected}'

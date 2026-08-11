@@ -18,7 +18,7 @@ A higher level does not imply access to provider-hidden reasoning.
 
 | Agent | Format contract | Runtime startup | Native event path | Provider-backed task |
 | --- | --- | --- | --- | --- |
-| Codex | Yes | Yes, local acceptance | Yes, real rollout import | Minimal authenticated CLI acceptance; not yet an independently certified evaluation bridge |
+| Codex | Yes | Maintainer-reported private local acceptance | Maintainer-reported real rollout import | Minimal authenticated maintainer acceptance; not independently reproducible from this repository and not an independently certified evaluation bridge |
 | Claude Code | Yes | CLI version probe only | Fixture and hook-contract coverage | Not claimed in the current acceptance record |
 | OpenCode | Yes | Yes, pinned hosted runner | Yes, hosted plugin event to verified ledger | Not claimed; the hosted smoke test intentionally uses no provider key |
 
@@ -35,6 +35,7 @@ agentmem compatibility --agent opencode --require-all
 
 The command reports:
 
+- history-import availability independently of executable startup;
 - executable status: `available`, `blocked`, or `not_found`;
 - normalized version output;
 - executable SHA-256 when the file is readable;
@@ -45,6 +46,11 @@ The command reports:
 provider access, hook installation, native event capture, or task quality.
 `--require-all` returns a nonzero exit status unless every selected executable
 is available.
+
+On Windows, an app-execution alias can be readable and hashable while direct
+version probing is blocked by application control. In that case runtime status
+is `blocked`, but `history_import_available` remains true because importing an
+existing transcript does not execute the Agent binary.
 
 ## Codex
 
@@ -80,9 +86,13 @@ The GitHub-hosted runtime smoke test:
 2. copies the plugin into a temporary project;
 3. starts the real OpenCode server on loopback with authentication;
 4. creates a native session without invoking a model;
-5. verifies that the plugin writes the event to its crash-safe spool;
+5. verifies that the plugin writes a new `session.created` event whose session
+   identifier matches the server response to its crash-safe spool;
 6. imports the spool and requires `agentmem doctor` to pass;
 7. deletes the temporary runtime and evidence.
+
+The CI receipt publishes the event type and SHA-256 hashes of the matched event
+and session identifier, never the raw identifier.
 
 This proves runtime/plugin compatibility without requiring users to install
 OpenCode and without placing a provider secret in CI. It does not prove a

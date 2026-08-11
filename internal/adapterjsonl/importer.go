@@ -26,6 +26,8 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
+const ResultSchemaVersion = "agent-history-import-result/v1alpha1"
+
 type Options struct {
 	FullReconcile   bool
 	Now             func() time.Time
@@ -93,6 +95,7 @@ type SourceFile struct {
 }
 
 type Result struct {
+	SchemaVersion  string         `json:"schema_version"`
 	FilesExamined  int            `json:"files_examined"`
 	FilesChanged   int            `json:"files_changed"`
 	SourceSegments int            `json:"source_segments"`
@@ -143,18 +146,18 @@ type eventPointer struct {
 
 func ImportPath(store *ledger.Store, sourcePath string, options Options, spec Spec) (Result, error) {
 	if err := validateInputs(store, sourcePath, &options, spec); err != nil {
-		return Result{Kinds: map[string]int{}}, err
+		return newResult(), err
 	}
 	files, err := collectFiles(options.Context, sourcePath, spec.MatchFile)
 	if err != nil {
-		return Result{Kinds: map[string]int{}}, err
+		return newResult(), err
 	}
 	if len(files) == 0 {
 		message := spec.NoFilesError
 		if message == "" {
 			message = "no matching JSONL files found"
 		}
-		return Result{Kinds: map[string]int{}}, errors.New(message)
+		return newResult(), errors.New(message)
 	}
 	sources := make([]SourceFile, 0, len(files))
 	for _, path := range files {
@@ -168,7 +171,7 @@ func ImportPath(store *ledger.Store, sourcePath string, options Options, spec Sp
 // recorded. Event identity remains bound to LogicalSourcePathSHA256 while the
 // actual acquisition path is recorded separately.
 func ImportSources(store *ledger.Store, sources []SourceFile, options Options, spec Spec) (Result, error) {
-	result := Result{Kinds: map[string]int{}}
+	result := newResult()
 	if err := validateInputs(store, "explicit-source-set", &options, spec); err != nil {
 		return result, err
 	}
@@ -217,6 +220,10 @@ func ImportSources(store *ledger.Store, sources []SourceFile, options Options, s
 		return result, err
 	}
 	return result, nil
+}
+
+func newResult() Result {
+	return Result{SchemaVersion: ResultSchemaVersion, Kinds: map[string]int{}}
 }
 
 func ValidateSources(sources []SourceFile) ([]SourceFile, error) {

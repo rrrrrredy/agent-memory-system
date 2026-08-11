@@ -37,6 +37,9 @@ func TestProbeSeparatesShippedIntegrationFromRuntimeAvailability(t *testing.T) {
 		report.Agents[1].RuntimeIssue != "command_not_found" || len(report.Agents[1].RetrievalModes) == 0 {
 		t.Fatalf("missing runtime lost its integration boundary: %+v", report.Agents[1])
 	}
+	if !report.Agents[0].HistoryImportAvailable || !report.Agents[1].HistoryImportAvailable {
+		t.Fatalf("runtime availability was incorrectly used to gate history import: %+v", report.Agents)
+	}
 }
 
 func TestProbeFailsClosedOnUnexecutableAndEmptyVersionCommands(t *testing.T) {
@@ -59,6 +62,9 @@ func TestProbeFailsClosedOnUnexecutableAndEmptyVersionCommands(t *testing.T) {
 	for _, item := range report.Agents {
 		if item.RuntimeStatus != RuntimeBlocked || item.RuntimeIssue == "" || item.ExecutableSHA256 != "" {
 			t.Fatalf("unusable runtime was accepted: %+v", item)
+		}
+		if !item.HistoryImportAvailable {
+			t.Fatalf("blocked version probe incorrectly disabled history import: %+v", item)
 		}
 	}
 }

@@ -15,10 +15,11 @@ It is built for a harder question than “what should the agent remember?”:
 > What evidence supports this memory, is it still current, and can another
 > machine use it without receiving the private transcript?
 
-Status: **public beta**. Storage, derivation, review, memory lifecycle, private
-Git synchronization, retrieval, encrypted recovery, and evaluation controls are
-implemented. Runtime adapters remain version-sensitive. The system fails closed
-when evidence is incomplete or a compatibility claim cannot be verified.
+Status: **release candidate for the v0.1.0 public beta**. Storage, derivation,
+review, memory lifecycle, private Git synchronization, retrieval, encrypted
+recovery, and evaluation controls are implemented. Runtime adapters remain
+version-sensitive. The system fails closed when evidence is incomplete or a
+compatibility claim cannot be verified.
 
 ## Why this is different
 
@@ -63,36 +64,61 @@ history.
 These guarantees apply to locally available evidence. No client can recover
 provider-hidden reasoning or bytes that the runtime never exposed.
 
-## Five-minute Codex path
+## Install
 
-Prerequisites: Go 1.25 or newer and an existing Codex session history.
+The release candidate can be built from source with Go 1.25 or newer.
 
-```text
+Windows PowerShell:
+
+```powershell
 git clone https://github.com/rrrrrredy/agent-memory-system.git
 cd agent-memory-system
-go build -o agentmem ./cmd/agentmem
-
-agentmem compatibility --agent codex
-agentmem init --root <local-evidence-directory>
-agentmem import codex --root <local-evidence-directory> --path <codex-sessions-directory>
-agentmem derive episodes --root <local-evidence-directory>
-agentmem derive candidates --root <local-evidence-directory> --episodes <episode-generation-from-previous-command>
-agentmem review list --root <local-evidence-directory> --candidates <candidate-generation-from-previous-command>
+New-Item -ItemType Directory -Force .\bin | Out-Null
+go build -o .\bin\agentmem.exe .\cmd\agentmem
+.\bin\agentmem.exe version
 ```
 
-The last command returns verified review-ready candidates and a SHA-256 of the
-exact text for the promotion confirmation gate. It does not approve anything.
+macOS or Linux:
 
-The [quickstart](docs/quickstart.md) provides copyable PowerShell and POSIX
-commands for review, promotion, private Git export, and retrieval.
+```sh
+git clone https://github.com/rrrrrredy/agent-memory-system.git
+cd agent-memory-system
+mkdir -p ./bin
+go build -o ./bin/agentmem ./cmd/agentmem
+./bin/agentmem version
+```
+
+Tagged releases provide checksum-verified Windows and macOS installers. See
+[install, upgrade, and uninstall](docs/install.md).
+
+## Try the complete lifecycle
+
+The [quickstart](docs/quickstart.md) contains complete PowerShell and POSIX
+paths for import, review, promotion, private Git export, and retrieval. A
+privacy-safe synthetic rollout under `examples/quickstart` makes the lifecycle
+reproducible without reading personal Agent history. The same commands can then
+be pointed at an existing Codex sessions directory.
+
+A runtime probe is optional and never gates history import:
+
+```powershell
+.\bin\agentmem.exe compatibility --agent codex
+```
+
+```sh
+./bin/agentmem compatibility --agent codex
+```
+
+`history_import_available` remains separate from `runtime_status`, so a blocked
+version probe does not hide a working offline importer.
 
 ## Compatibility and verification
 
 | Surface | Current evidence |
 | --- | --- |
-| Codex rollout import | Real-rollout acceptance on Windows, loss/compaction fixtures, and cross-platform protocol tests |
+| Codex rollout import | Maintainer-reported private real-rollout acceptance on Windows, plus public loss/compaction fixtures and cross-platform protocol tests; the private run is not independently reproducible from this repository |
 | Claude Code import | Transcript, history, companion, thinking, and unknown-block fixtures on Windows, macOS, and Linux |
-| OpenCode plugin | Pinned OpenCode runtime starts on a GitHub-hosted runner, loads the plugin, creates a native session event, imports it, and verifies the ledger; no provider model or secret is used |
+| OpenCode plugin | Pinned OpenCode runtime starts on a GitHub-hosted runner, loads the plugin, captures the matching `session.created` event, imports it, and verifies the ledger; no provider model or secret is used |
 | Review and memory lifecycle | Human-bound review, promotion, supersession, revocation, secret scanning, and conflict tests |
 | Cross-device memory | Private Git history verification, offline use, divergence handling, recovery, and hosted Windows/macOS/Linux tests |
 | Learning efficacy | Frozen-corpus metrics and replay are implemented; efficacy certification remains blocked unless task execution is independently verified |

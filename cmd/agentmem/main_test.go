@@ -160,6 +160,20 @@ func TestEvaluationRunRejectsLegacyUnboundContinuousInput(t *testing.T) {
 	}
 }
 
+func TestTopLevelHelpSucceeds(t *testing.T) {
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devNull.Close()
+	stdout := os.Stdout
+	os.Stdout = devNull
+	defer func() { os.Stdout = stdout }()
+	if err := run([]string{"--help"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestVersionCommand(t *testing.T) {
 	if err := run([]string{"version"}); err != nil {
 		t.Fatal(err)

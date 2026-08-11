@@ -309,6 +309,59 @@ func TestNewEvidenceRequiresFreshGenerationForNewPromotion(t *testing.T) {
 	}
 }
 
+func TestPromotionHoldsEvidenceWriterLockThroughPromotionAppend(t *testing.T) {
+	fixture := newPromotionFixture(t)
+	candidate := fixture.byText["Please remember that reports stay local"]
+	request := promotionRequest(
+		ActionPromote, "", "", fixture.generation, candidate,
+		fixture.reviewRecords[candidate.CandidateID], nil, candidate.Text,
+	)
+	prepared := make(chan struct{})
+	continuePromotion := make(chan struct{})
+	promotionDone := make(chan error, 1)
+	go func() {
+		_, err := applyWithHooks(fixture.store, request, applyHooks{afterPrepare: func() {
+			close(prepared)
+			<-continuePromotion
+		}})
+		promotionDone <- err
+	}()
+	<-prepared
+
+	now := time.Date(2026, 8, 11, 4, 0, 0, 0, time.UTC)
+	payload := ledger.InlinePayload("utf-8", "text/plain", "Concurrent evidence must not advance.")
+	_, appendErr := fixture.store.Append(ledger.Event{
+		SchemaVersion: ledger.SchemaVersion, EventID: "concurrent-evidence-event",
+		Kind: ledger.KindUserMessage, ObservedAt: now, RecordedAt: now,
+		Source: ledger.Source{
+			Agent: ledger.AgentCodex, Adapter: "test", AdapterVersion: "v1",
+			DeviceID: fixture.store.DeviceID(), ThreadID: "concurrent-thread",
+		},
+		Payload: &payload, Completeness: ledger.Completeness{Status: ledger.CompletenessComplete},
+		Privacy: ledger.Privacy{Classification: "local_only"},
+	})
+	if !errors.Is(appendErr, ledger.ErrWriterLocked) {
+		close(continuePromotion)
+		t.Fatalf("evidence advanced after promotion checked its source prefix: %v", appendErr)
+	}
+	close(continuePromotion)
+	if err := <-promotionDone; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.store.Append(ledger.Event{
+		SchemaVersion: ledger.SchemaVersion, EventID: "post-promotion-evidence-event",
+		Kind: ledger.KindUserMessage, ObservedAt: now, RecordedAt: now,
+		Source: ledger.Source{
+			Agent: ledger.AgentCodex, Adapter: "test", AdapterVersion: "v1",
+			DeviceID: fixture.store.DeviceID(), ThreadID: "post-promotion-thread",
+		},
+		Payload: &payload, Completeness: ledger.Completeness{Status: ledger.CompletenessComplete},
+		Privacy: ledger.Privacy{Classification: "local_only"},
+	}); err != nil {
+		t.Fatalf("evidence writer lock was not released after promotion: %v", err)
+	}
+}
+
 func TestConcurrentPromotionHasOneWinnerAndTamperingFailsSemanticReplay(t *testing.T) {
 	fixture := newPromotionFixture(t)
 	candidate := fixture.byText["Please remember that reports stay local"]

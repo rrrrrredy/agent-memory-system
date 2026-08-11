@@ -55,6 +55,10 @@ func run(args []string) error {
 	if len(args) == 0 {
 		return usageError()
 	}
+	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+		fmt.Println(usageError().Error())
+		return nil
+	}
 	switch args[0] {
 	case "version":
 		return encodeIndented(map[string]any{

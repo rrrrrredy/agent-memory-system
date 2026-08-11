@@ -475,6 +475,20 @@ func releaseWriterLockAfterError(lock *writerLock, operationErr error) error {
 	return operationErr
 }
 
+// WriterLockPresent reports whether a ledger writer currently owns, or may
+// have left behind, the exclusive writer lock. It does not guess whether the
+// lock is stale.
+func (s *Store) WriterLockPresent() (bool, error) {
+	path := filepath.Join(s.root, filepath.FromSlash(writerLockPath))
+	if _, err := os.Lstat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect evidence writer lock: %w", err)
+	}
+	return true, nil
+}
+
 // ClearStaleWriterLock removes the evidence writer lock only after the caller
 // has independently verified that no ledger writer is active.
 func (s *Store) ClearStaleWriterLock() (bool, error) {

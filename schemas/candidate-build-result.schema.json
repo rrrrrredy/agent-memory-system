@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/candidate-build-result.schema.json",
+  "title": "Candidate build result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "derivation_version", "source_episode_generation", "source_episode_manifest_sha256", "source_episodes_sha256", "source_episodes", "generation_path", "observations", "candidates", "review_ready", "untrusted", "quarantined", "conflict_groups", "candidates_sha256", "reused"],
+  "properties": {
+    "schema_version": {"const": "candidate-build-result/v1alpha1"},
+    "derivation_version": {"const": "candidates/v1alpha1"},
+    "source_episode_generation": {"type": "string", "minLength": 1},
+    "source_episode_manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_episodes_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_episodes": {"type": "integer", "minimum": 0},
+    "generation_path": {"type": "string", "minLength": 1},
+    "observations": {"type": "integer", "minimum": 0},
+    "candidates": {"type": "integer", "minimum": 0},
+    "review_ready": {"type": "integer", "minimum": 0},
+    "untrusted": {"type": "integer", "minimum": 0},
+    "quarantined": {"type": "integer", "minimum": 0},
+    "conflict_groups": {"type": "integer", "minimum": 0},
+    "candidates_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "reused": {"type": "boolean"}
+  }
+}

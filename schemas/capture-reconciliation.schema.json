@@ -34,6 +34,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "schema_version",
         "files_examined",
         "files_changed",
         "source_segments",
@@ -44,6 +45,7 @@
         "kinds"
       ],
       "properties": {
+        "schema_version": {"const": "agent-history-import-result/v1alpha1"},
         "files_examined": {"type": "integer", "minimum": 0},
         "files_changed": {"type": "integer", "minimum": 0},
         "source_segments": {"type": "integer", "minimum": 0},

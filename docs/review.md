@@ -53,6 +53,11 @@ The request's `reviewer.kind` is fixed to `human`. This field is an explicit
 attestation, not biometric authentication; callers must not generate or submit
 it without the user's decision.
 
+For `outcome_evidence` and `explicit_user_confirmation`, the system verifies
+that the referenced event exists, is complete, hash-valid, and has the required
+event kind. The human reviewer attests that the event is semantically relevant
+to the candidate. The software does not infer or prove that semantic relation.
+
 Global scope uses `*`. Agent scope names one supported adapter: `codex`,
 `claude_code`, `opencode`, or `unknown`. Repository, project, and task scopes
 use their stable local identifiers. Scope values cannot contain line breaks.

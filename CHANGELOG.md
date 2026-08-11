@@ -18,6 +18,12 @@ Semantic Versioning after the first tagged public release.
 - Frozen-corpus continuous-learning evaluation and replay verification.
 - Runtime compatibility reports and a verified candidate review queue.
 - GitHub-hosted OpenCode plugin-to-ledger runtime smoke test.
+- Reproducible synthetic quickstart for review, promotion, portable export, and
+  retrieval on PowerShell and POSIX shells.
+- Public JSON Schemas for every versioned quickstart result envelope.
+- Separate history-import and executable-runtime compatibility status.
+- Read-only manual release-candidate workflow, source/install/uninstall guidance,
+  dependency updates, code ownership, and a pull-request checklist.
 
 ### Security
 
@@ -28,6 +34,13 @@ Semantic Versioning after the first tagged public release.
   fail closed.
 - Rule changes require a separate revision-, surface-, and target-bound human
   authorization.
+- Promotion holds the evidence writer lock from freshness validation through the
+  durable promotion append, closing the cross-ledger race window.
+- Doctor reports an existing evidence writer lock as not ready and requires an
+  explicit stale-lock recovery decision.
+- The hosted OpenCode smoke binds a new `session.created` event to the server
+  response and publishes only event and identifier hashes.
+- GitHub Actions dependencies are pinned to full commit hashes.
 
 ### Known limits
 
@@ -38,3 +51,6 @@ Semantic Versioning after the first tagged public release.
   task execution is not independently verified.
 - Physical macOS device acceptance is not yet claimed; macOS coverage uses
   GitHub-hosted runners.
+- The maintainer-reported private Codex acceptance cannot be independently
+  reproduced from this repository because neither the private transcript nor a
+  correlatable source hash is published.
