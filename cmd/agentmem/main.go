@@ -52,11 +52,43 @@ func main() {
 }
 
 func runForExit(args []string) error {
+	if usage, ok := nestedCommandGroupHelp(args); ok {
+		fmt.Println(usage.Error())
+		return nil
+	}
 	err := run(args)
 	if errors.Is(err, flag.ErrHelp) {
 		return nil
 	}
 	return err
+}
+
+func nestedCommandGroupHelp(args []string) (error, bool) {
+	if len(args) < 3 || !isHelpArgument(args[len(args)-1]) {
+		return nil, false
+	}
+	switch strings.Join(args[:len(args)-1], " ") {
+	case "capture hook":
+		return captureUsageError(), true
+	case "capture supervisor":
+		return captureSupervisorUsageError(), true
+	case "eval corpus",
+		"eval corpus agent-assessment",
+		"eval attempt",
+		"eval compaction",
+		"eval trial",
+		"eval oracle",
+		"eval sut":
+		return evalUsageError(), true
+	case "sync auto":
+		return syncAutoUsageError(), true
+	default:
+		return nil, false
+	}
+}
+
+func isHelpArgument(value string) bool {
+	return value == "help" || value == "--help" || value == "-h"
 }
 
 func run(args []string) error {

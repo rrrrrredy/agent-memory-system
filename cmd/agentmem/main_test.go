@@ -199,6 +199,37 @@ func TestLeafCommandHelpSucceeds(t *testing.T) {
 	}
 }
 
+func TestNestedCommandGroupHelpSucceeds(t *testing.T) {
+	for _, args := range [][]string{
+		{"capture", "hook", "--help"},
+		{"capture", "supervisor", "--help"},
+		{"eval", "corpus", "--help"},
+		{"eval", "corpus", "agent-assessment", "--help"},
+		{"eval", "attempt", "--help"},
+		{"eval", "compaction", "--help"},
+		{"eval", "trial", "--help"},
+		{"eval", "oracle", "--help"},
+		{"eval", "sut", "--help"},
+		{"sync", "auto", "--help"},
+	} {
+		if err := runForExit(args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+}
+
+func TestRunForExitPreservesNonHelpErrors(t *testing.T) {
+	for _, args := range [][]string{
+		{"unknown"},
+		{"unknown", "--help"},
+		{"eval", "unknown", "--help"},
+	} {
+		if err := runForExit(args); err == nil {
+			t.Fatalf("unknown command succeeded: %v", args)
+		}
+	}
+}
+
 func TestVersionCommand(t *testing.T) {
 	if err := run([]string{"version"}); err != nil {
 		t.Fatal(err)
