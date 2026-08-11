@@ -58,8 +58,9 @@ history.
   authenticate a human identity.
 - Active memories form immutable revision chains with explicit supersession and
   revocation.
-- Retrieval verifies the complete portable repository, applies exact scope,
-  result, token, and byte budgets, and records what was delivered.
+- Retrieval verifies the complete portable repository, applies exact scope and
+  result limits plus estimated-token and UTF-8 byte budgets, and records what
+  was delivered.
 - Raw evidence backup is optional, encrypted with age, and completely separate
   from the readable memory repository.
 - `AGENTS.md`, Skills, and other rule surfaces are never changed without a

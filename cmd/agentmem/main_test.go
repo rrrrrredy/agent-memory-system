@@ -185,6 +185,20 @@ func TestCommandGroupHelpSucceeds(t *testing.T) {
 	}
 }
 
+func TestLeafCommandHelpSucceeds(t *testing.T) {
+	for _, args := range [][]string{
+		{"doctor", "--help"},
+		{"review", "decide", "--help"},
+		{"promote", "candidate", "--help"},
+		{"portable", "verify", "--help"},
+		{"recall", "search", "--help"},
+	} {
+		if err := runForExit(args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+}
+
 func TestVersionCommand(t *testing.T) {
 	if err := run([]string{"version"}); err != nil {
 		t.Fatal(err)

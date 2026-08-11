@@ -28,6 +28,10 @@ Semantic Versioning after the first tagged public release.
 - A required public-tree privacy gate, exact frozen Quickstart manifest, and
   release provenance bound to protected `main` and successful checks for the
   exact release commit.
+- Release receipts that constrain the canonical CI set and exact hosted
+  platform/archive pairings.
+- Installers that reject archives whose embedded binary version does not match
+  the requested release, and successful exit codes for leaf command help.
 
 ### Security
 

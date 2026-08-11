@@ -45,10 +45,18 @@ var (
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	if err := runForExit(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "agentmem:", err)
 		os.Exit(1)
 	}
+}
+
+func runForExit(args []string) error {
+	err := run(args)
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	return err
 }
 
 func run(args []string) error {

@@ -55,13 +55,14 @@ chmod 0755 "${mock_bin}/curl"
 
 build_release() {
   version="$1"
+  binary_version="${2:-${version}}"
   asset="agentmem_${version}_darwin_${release_architecture}.tar.gz"
   package_root="${temporary_root}/package-${version}"
   mkdir -p "${package_root}"
   (
     cd "${repository_root}"
     CGO_ENABLED=0 GOOS=darwin GOARCH="${release_architecture}" \
-      go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=${version}" \
+      go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=${binary_version}" \
       -o "${package_root}/agentmem" ./cmd/agentmem
   )
   tar -C "${package_root}" -czf "${artifact_root}/${asset}" agentmem
@@ -94,6 +95,17 @@ if AGENTMEM_VERSION="v0.0.1-test" AGENTMEM_INSTALL_DIR="${install_root}" \
 fi
 if [ "$(shasum -a 256 "${install_root}/agentmem" | awk '{ print $1 }')" != "${installed_digest}" ]; then
   echo "Failed checksum verification changed the installed binary." >&2
+  exit 1
+fi
+
+build_release v0.0.2-test v9.9.9-test
+if AGENTMEM_VERSION="v0.0.2-test" AGENTMEM_INSTALL_DIR="${install_root}" \
+  sh "${repository_root}/scripts/install.sh" >/dev/null 2>&1; then
+  echo "Installer accepted a release whose binary version mismatched its tag." >&2
+  exit 1
+fi
+if [ "$(shasum -a 256 "${install_root}/agentmem" | awk '{ print $1 }')" != "${installed_digest}" ]; then
+  echo "Failed version verification changed the installed binary." >&2
   exit 1
 fi
 
