@@ -7,8 +7,10 @@ Status: accepted baseline, 2026-08-04.
 Agent Memory System is a local-first, cross-agent, evidence-driven, evaluable
 continuous memory system. It preserves each supported agent's locally available
 task trajectory, reconstructs episodes, validates candidate experience, and
-requires policy-based human promotion. Only redacted promoted memory is
-synchronized through a separate private Git repository.
+requires policy-based operator review and promotion. Those decisions are stored
+as caller-supplied attestations bound to evidence; the implementation does not
+authenticate that a reviewer or approver identity is human. Only redacted
+promoted memory is synchronized through a separate private Git repository.
 
 Continuous learning means that recalled memory measurably reduces repeated
 mistakes and repeated work without increasing false guidance, goal drift, or
@@ -86,8 +88,8 @@ validated candidate or promoted memory, and it is never automatically eligible
 for promotion.
 
 A review transition MUST bind the candidate content hash, expected prior state,
-human reviewer attestation, confirmed scope, and evidence basis in an
-append-only record. Validation alone does not create promoted memory.
+caller-supplied reviewer attestation, confirmed scope, and evidence basis in an
+append-only record. The attestation is not identity authentication. Validation alone does not create promoted memory.
 
 A promotion transition MUST bind the exact current validation record,
 candidate content and semantic identity, confirmed scope, deterministic scan,
@@ -96,7 +98,7 @@ detected sensitive ranges but may not serve as an unreviewed semantic rewrite.
 The candidate generation MUST cover the current verified evidence-ledger
 prefix at promotion time. Later evidence MUST prevent any new promotion from
 reusing that stale generation, but it MUST NOT retroactively erase an existing
-human-approved revision. An active memory MUST fail closed for export and
+attested revision. An active memory MUST fail closed for export and
 retrieval if its bound source validation later ceases to be current, its proof
 fails verification, or the revision is superseded or revoked. Newly derived
 semantic conflicts remain quarantined until explicit review resolves them.

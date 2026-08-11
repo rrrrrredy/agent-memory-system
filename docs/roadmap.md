@@ -32,7 +32,9 @@ does not exit until all three pass the same contract.
 
 ## M2: Episodes and evidence-driven learning
 
-Status: implemented with human-gated validation and promotion.
+Status: implemented with evidence-bound validation and promotion attestations.
+Deployment policy requires operator review; caller identity is not
+authenticated by the CLI.
 
 - Timeline and episode reconstruction.
 - Compaction continuity and goal/constraint drift checks.

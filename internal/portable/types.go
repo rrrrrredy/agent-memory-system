@@ -7,6 +7,7 @@ import (
 
 const (
 	RepositorySchemaVersion   = "portable-memory-repository/v1alpha1"
+	InitResultSchemaVersion   = "portable-memory-init-result/v1alpha1"
 	RevisionSchemaVersion     = "portable-memory-revision/v1alpha1"
 	ExportResultSchemaVersion = "portable-memory-export-result/v1alpha1"
 	VerificationSchemaVersion = "portable-memory-verification/v1alpha1"
@@ -50,6 +51,12 @@ type Revision struct {
 
 type ExportOptions struct {
 	MemoryIDs []string
+}
+
+type InitResult struct {
+	SchemaVersion string `json:"schema_version"`
+	Initialized   bool   `json:"initialized"`
+	Privacy       string `json:"privacy"`
 }
 
 type ExportResult struct {

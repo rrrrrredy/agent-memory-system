@@ -7,8 +7,10 @@ Local-first, evidence-backed memory for coding agents.
 
 Agent Memory System preserves the task evidence a runtime exposes, rebuilds it
 into episodes, turns supported observations into reviewable memory candidates,
-and shares only human-approved, redacted memories through a separate private
-Git repository.
+and shares only redacted memories with explicit validation and promotion
+records through a separate private Git repository. Deployment policy requires
+an operator to make those decisions; the software binds each attestation to
+the evidence but does not authenticate that the caller is human.
 
 It is built for a harder question than “what should the agent remember?”:
 
@@ -31,7 +33,7 @@ flowchart LR
     A["Agent-local traces"] --> B["Append-only evidence ledger"]
     B --> C["Episodes and compaction checks"]
     C --> D["Candidate memories"]
-    D --> E["Human validation"]
+    D --> E["Validation attestation"]
     E --> F["Promote, supersede, or revoke"]
     F --> G["Private Git memory repository"]
     G --> H["Bounded cross-agent retrieval"]
@@ -48,10 +50,13 @@ history.
 - Every evidence record participates in an append-only SHA-256 chain.
 - A cross-process writer lock prevents compliant writers from forking a store.
 - Missing, truncated, opaque, or unavailable data becomes an explicit gap.
-- Candidates cannot become portable memory without a human validation and a
-  separate human promotion.
+- Candidates cannot become portable memory without a validation attestation and
+  a separate promotion attestation, each bound to the exact evidence state.
 - Conflicting candidates are quarantined; cross-device semantic conflicts are
   reported instead of resolved with last-write-wins.
+- Reviewer and approver identifiers are caller-supplied attestations. Operator
+  policy requires a person to inspect the evidence, but the CLI does not
+  authenticate a human identity.
 - Active memories form immutable revision chains with explicit supersession and
   revocation.
 - Retrieval verifies the complete portable repository, applies exact scope,
@@ -119,7 +124,7 @@ version probe does not hide a working offline importer.
 | Codex rollout import | Maintainer-reported private real-rollout acceptance on Windows, plus public loss/compaction fixtures and cross-platform protocol tests; the private run is not independently reproducible from this repository |
 | Claude Code import | Transcript, history, companion, thinking, and unknown-block fixtures on Windows, macOS, and Linux |
 | OpenCode plugin | Pinned OpenCode runtime starts on a GitHub-hosted runner, loads the plugin, captures the matching `session.created` event, imports it, and verifies the ledger; no provider model or secret is used |
-| Review and memory lifecycle | Human-bound review, promotion, supersession, revocation, secret scanning, and conflict tests |
+| Review and memory lifecycle | Evidence-bound caller attestations, promotion, supersession, revocation, secret scanning, and conflict tests; caller identity is not authenticated |
 | Cross-device memory | Private Git history verification, offline use, divergence handling, recovery, and hosted Windows/macOS/Linux tests |
 | Learning efficacy | Frozen-corpus metrics and replay are implemented; efficacy certification remains blocked unless task execution is independently verified |
 
@@ -170,7 +175,7 @@ native hooks or plugins are optional; CLI and MCP remain the stable boundary.
 | Zone | Contains | May enter Git? |
 | --- | --- | --- |
 | Local evidence | Exact transcripts, tool output, exposed reasoning, normalized events, gaps, receipts | No |
-| Portable memory | Reviewed and redacted Markdown/YAML revisions | Separate private repository only |
+| Portable memory | Attested and redacted Markdown/YAML revisions | Separate private repository only |
 | Encrypted backup | Complete local evidence snapshot | Optional backup backend, never the memory repository |
 
 Do not copy `~/.codex`, Agent state databases, session directories, or the local
@@ -192,7 +197,7 @@ local index, never as Git-merged canonical data.
 - `adapters`: loss-aware Codex, Claude Code, and OpenCode importers
 - `internal/ledger`: append-only evidence and content-addressed blobs
 - `internal/episodes`, `internal/candidates`: reconstruction and extraction
-- `internal/review`, `internal/promotion`: human decisions and memory lifecycle
+- `internal/review`, `internal/promotion`: attested decisions and memory lifecycle
 - `internal/portable`, `internal/gitsync`: portable projection and private Git
 - `internal/retrieval`, `internal/mcpserver`: bounded query and delivery
 - `internal/evaluation`: frozen corpora, paired trials, metrics, and replay

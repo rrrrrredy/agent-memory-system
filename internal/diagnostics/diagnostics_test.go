@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,6 +54,40 @@ func TestDoctorIsNotReadyWhileEvidenceWriterLockExists(t *testing.T) {
 	report = Run(context.Background(), store, Options{})
 	if !report.Ready || hasIssue(report, "evidence", "writer_lock_present") {
 		t.Fatalf("doctor remained blocked after writer lock cleanup: %+v", report)
+	}
+}
+
+func TestDoctorHoldsEvidenceWriterLockThroughVerification(t *testing.T) {
+	store, err := ledger.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := make(chan struct{})
+	continueDoctor := make(chan struct{})
+	done := make(chan Report, 1)
+	go func() {
+		done <- runWithHooks(context.Background(), store, Options{}, runHooks{
+			afterEvidenceLock: func() {
+				close(locked)
+				<-continueDoctor
+			},
+		})
+	}()
+	<-locked
+	if _, err := store.NewAppender(); !errors.Is(err, ledger.ErrWriterLocked) {
+		close(continueDoctor)
+		t.Fatalf("writer entered while doctor was verifying the evidence prefix: %v", err)
+	}
+	close(continueDoctor)
+	if report := <-done; !report.Ready {
+		t.Fatalf("doctor failed after holding a stable evidence prefix: %+v", report)
+	}
+	appender, err := store.NewAppender()
+	if err != nil {
+		t.Fatalf("doctor did not release the evidence writer lock: %v", err)
+	}
+	if err := appender.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

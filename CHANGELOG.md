@@ -3,7 +3,7 @@
 All notable changes will be documented in this file. The project follows
 Semantic Versioning after the first tagged public release.
 
-## Unreleased
+## [0.1.0-rc.1] - Unreleased
 
 ### Added
 
@@ -11,7 +11,8 @@ Semantic Versioning after the first tagged public release.
 - Content-addressed blobs and an append-only, writer-locked evidence ledger.
 - Episode reconstruction with compaction continuity checks.
 - Evidence-backed candidate extraction, deduplication, and conflict quarantine.
-- Human review, promotion, supersession, revocation, and rule-change approval.
+- Caller-attested review, promotion, supersession, revocation, and rule-change
+  approval with an explicit unauthenticated-identity boundary.
 - Readable portable memory with explicit private Git synchronization.
 - Deterministic scoped retrieval through CLI, MCP, and optional Agent bridges.
 - Age-encrypted evidence backup and no-overwrite restore.
@@ -24,6 +25,9 @@ Semantic Versioning after the first tagged public release.
 - Separate history-import and executable-runtime compatibility status.
 - Read-only manual release-candidate workflow, source/install/uninstall guidance,
   dependency updates, code ownership, and a pull-request checklist.
+- A required public-tree privacy gate, exact frozen Quickstart manifest, and
+  release provenance bound to protected `main` and successful checks for the
+  exact candidate commit.
 
 ### Security
 

@@ -14,11 +14,10 @@ a separate owner action after the candidate has been inspected.
 Before creating a candidate:
 
 1. update `CHANGELOG.md` with the exact SemVer version and date;
-2. require all six checks on the release commit to pass: Ubuntu, Windows,
-   macOS, race, fuzz-smoke, and OpenCode runtime;
+2. require all seven checks on the release commit to pass: Ubuntu, Windows,
+   macOS, race, fuzz-smoke, OpenCode runtime, and public-tree privacy;
 3. require the release commit to be the protected `main` head;
-4. inspect the complete public Git diff and reachable history for credentials,
-   raw task evidence, and machine-specific paths;
+4. run the public-tree checker over the current tree and every reachable ref;
 5. verify the separate private memory repository independently and keep every
    raw-evidence location outside both repositories; and
 6. keep efficacy claims measurement-only until independently verified native
@@ -27,9 +26,12 @@ Before creating a candidate:
 ## Build a release candidate
 
 Run the manually dispatched `release-candidate` workflow with a SemVer label
-such as `v0.1.0-rc.1`. It reruns the Go and OpenCode suites, builds Windows,
-macOS, and Linux archives for amd64 and arm64, writes `SHA256SUMS`, and uploads
-the candidate as a workflow artifact with 14-day retention.
+such as `v0.1.0-rc.1` from `main`. The workflow refuses a different ref, a
+stale `main` commit, or a version absent from `CHANGELOG.md`. It verifies that
+all required checks succeeded for the exact commit, scans the reachable public
+tree and history, builds Windows, macOS, and Linux archives for amd64 and arm64,
+and writes `SHA256SUMS`, `REQUIRED_CHECKS.json`, and `PROVENANCE.json`. The
+candidate is uploaded as a workflow artifact with 14-day retention.
 
 The workflow cannot push a tag or create a release.
 

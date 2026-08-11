@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 jobs:
   build:
@@ -18,19 +19,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: false
-      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
-        with:
-          version: 11.20.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: integrations/opencode/pnpm-lock.yaml
-      - name: Validate candidate label
+      - name: Bind candidate to protected main
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
@@ -40,15 +36,52 @@ jobs:
             echo "Version must be SemVer without build metadata." >&2
             exit 1
           fi
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-        working-directory: integrations/opencode
-      - run: go test ./...
-      - run: go vet ./...
-      - run: sh ./scripts/quickstart-smoke.sh
-      - run: pnpm test
-        working-directory: integrations/opencode
-      - run: pnpm typecheck
-        working-directory: integrations/opencode
+          test "${GITHUB_REF}" = "refs/heads/main" || {
+            echo "Release candidates must be dispatched from main." >&2
+            exit 1
+          }
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "${GITHUB_SHA}" = "$(git rev-parse refs/remotes/origin/main)" || {
+            echo "Workflow commit is not the current origin/main head." >&2
+            exit 1
+          }
+          grep -Fqx "## [${VERSION#v}] - Unreleased" CHANGELOG.md || {
+            echo "CHANGELOG.md does not declare this exact release candidate." >&2
+            exit 1
+          }
+      - name: Verify required checks for the exact commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p .release
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
+            > .release/check-runs-response.json
+          jq --arg sha "${GITHUB_SHA}" \
+            '[.check_runs[] | select(.head_sha == $sha and .app.slug == "github-actions") | {name,id,status,conclusion,details_url,head_sha,app:.app.slug}] | sort_by(.name,.id)' \
+            .release/check-runs-response.json > .release/required-checks.json
+          required=(
+            "test (ubuntu-latest)"
+            "test (windows-latest)"
+            "test (macos-latest)"
+            "race"
+            "fuzz-smoke"
+            "opencode-runtime"
+            "public-tree-privacy"
+          )
+          for name in "${required[@]}"; do
+            jq -e --arg name "${name}" \
+              'any(.[]; .name == $name and .status == "completed" and .conclusion == "success")' \
+              .release/required-checks.json >/dev/null || {
+                echo "Required check is not successful for ${GITHUB_SHA}: ${name}" >&2
+                exit 1
+              }
+          done
+      - name: Verify public tree and reachable history
+        run: go run ./cmd/public-tree-check --root . --history
       - name: Build candidate archives
         shell: bash
         env:
@@ -73,7 +106,7 @@ jobs:
               -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${GITHUB_SHA} -X main.buildDate=${build_date}" \
               -o "${directory}/${binary}" ./cmd/agentmem
             cp LICENSE README.md "${directory}/"
-            git archive HEAD docs schemas integrations scripts | tar -x -C "${directory}"
+            git archive HEAD docs schemas integrations scripts examples | tar -x -C "${directory}"
             for capability in adapters/*/CAPABILITIES.md; do
               install -D "${capability}" "${directory}/${capability}"
             done
@@ -84,6 +117,27 @@ jobs:
             fi
           done
           (cd dist && sha256sum ./*.zip ./*.tar.gz > SHA256SUMS)
+      - name: Write candidate provenance
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          cp .release/required-checks.json dist/REQUIRED_CHECKS.json
+          sums_sha256="$(sha256sum dist/SHA256SUMS | cut -d' ' -f1)"
+          checks_sha256="$(sha256sum dist/REQUIRED_CHECKS.json | cut -d' ' -f1)"
+          jq -n \
+            --arg schema_version "agentmem-release-provenance/v1alpha1" \
+            --arg version "${VERSION}" \
+            --arg commit "${GITHUB_SHA}" \
+            --arg ref "${GITHUB_REF}" \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg workflow_run_id "${GITHUB_RUN_ID}" \
+            --arg sha256sums_sha256 "${sums_sha256}" \
+            --arg required_checks_sha256 "${checks_sha256}" \
+            --slurpfile required_checks dist/REQUIRED_CHECKS.json \
+            '{schema_version:$schema_version,version:$version,commit:$commit,ref:$ref,repository:$repository,workflow_run_id:$workflow_run_id,sha256sums_sha256:$sha256sums_sha256,required_checks_sha256:$required_checks_sha256,required_checks:$required_checks[0]}' \
+            > dist/PROVENANCE.json
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: agentmem-${{ inputs.version }}-${{ github.sha }}

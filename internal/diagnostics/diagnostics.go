@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -53,7 +54,15 @@ type Report struct {
 	Privacy           string                              `json:"privacy"`
 }
 
+type runHooks struct {
+	afterEvidenceLock func()
+}
+
 func Run(ctx context.Context, store *ledger.Store, options Options) Report {
+	return runWithHooks(ctx, store, options, runHooks{})
+}
+
+func runWithHooks(ctx context.Context, store *ledger.Store, options Options, hooks runHooks) Report {
 	if options.Now == nil {
 		options.Now = time.Now
 	}
@@ -62,22 +71,40 @@ func Run(ctx context.Context, store *ledger.Store, options Options) Report {
 		Platform: runtime.GOOS + "/" + runtime.GOARCH,
 		Issues:   []Issue{}, Privacy: "local_only",
 	}
+	var evidenceGuard *ledger.Appender
+	finish := func() Report {
+		if evidenceGuard != nil {
+			if err := evidenceGuard.Close(); err != nil {
+				report.Issues = append(report.Issues, Issue{
+					Component: "evidence", Code: "writer_lock_cleanup_failed", Message: err.Error(),
+				})
+				evidenceGuard = nil
+			}
+		}
+		return finalize(report)
+	}
 	if store == nil {
 		report.Issues = append(report.Issues, Issue{
 			Component: "evidence", Code: "store_required", Message: "local evidence store is required",
 		})
-		return finalize(report)
+		return finish()
 	}
-	writerLockPresent, writerLockErr := store.WriterLockPresent()
+	guard, writerLockErr := store.NewAppenderAfterVisit(nil)
 	if writerLockErr != nil {
+		code := "writer_lock_status_failed"
+		message := writerLockErr.Error()
+		if errors.Is(writerLockErr, ledger.ErrWriterLocked) {
+			code = "writer_lock_present"
+			message = "an evidence writer is active or left a lock; verify no writer is active before using doctor --clear-stale-writer-lock"
+		}
 		report.Issues = append(report.Issues, Issue{
-			Component: "evidence", Code: "writer_lock_status_failed", Message: writerLockErr.Error(),
+			Component: "evidence", Code: code, Message: message,
 		})
-	} else if writerLockPresent {
-		report.Issues = append(report.Issues, Issue{
-			Component: "evidence", Code: "writer_lock_present",
-			Message: "an evidence writer is active or left a lock; verify no writer is active before using doctor --clear-stale-writer-lock",
-		})
+	} else {
+		evidenceGuard = guard
+		if hooks.afterEvidenceLock != nil {
+			hooks.afterEvidenceLock()
+		}
 	}
 	report.Evidence = store.Verify()
 	appendStrings(&report, "evidence", "integrity_failed", report.Evidence.Issues)
@@ -122,7 +149,7 @@ func Run(ctx context.Context, store *ledger.Store, options Options) Report {
 				Message: "portable memory repository is required for a complete recovery check",
 			})
 		}
-		return finalize(report)
+		return finish()
 	}
 	report.RepositoryChecked = true
 	if storageZonesOverlap(store.Root(), options.Repository) {
@@ -130,7 +157,7 @@ func Run(ctx context.Context, store *ledger.Store, options Options) Report {
 			Component: "storage", Code: "storage_zones_overlap",
 			Message: "local evidence and portable memory repositories must be separate",
 		})
-		return finalize(report)
+		return finish()
 	}
 	gitReport := gitsync.Verify(ctx, options.Repository)
 	report.GitSync = &gitReport
@@ -139,7 +166,7 @@ func Run(ctx context.Context, store *ledger.Store, options Options) Report {
 			Component: "git_sync", Code: issue.Code, Message: issue.Message,
 		})
 	}
-	return finalize(report)
+	return finish()
 }
 
 func appendStrings(report *Report, component, code string, issues []string) {

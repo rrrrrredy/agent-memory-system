@@ -1,9 +1,12 @@
 # Quickstart
 
 This walkthrough imports a privacy-safe synthetic Codex rollout, derives one
-candidate, requires two human decisions, exports one approved memory to a
-separate local repository, and proves that retrieval selects that exact memory.
-It does not install hooks, contact a model provider, or upload raw evidence.
+candidate, asks the operator to inspect it, records separate validation and
+promotion attestations, exports one memory to a separate local repository, and
+proves that retrieval selects that exact memory. The CLI binds the records but
+does not authenticate that the supplied reviewer or approver identifier belongs
+to a human. It does not install hooks, contact a model provider, or upload raw
+evidence.
 
 After the demo succeeds, replace the example source with your existing Codex
 sessions directory. Keep the evidence directory outside every Git worktree. The
@@ -14,6 +17,16 @@ portable memory directory must be a different physical tree.
 - Go 1.25 or newer;
 - Git;
 - `jq` for the POSIX walkthrough.
+
+The repository smoke scripts use `examples/quickstart/manifest.json` to pin the
+exact synthetic rollout, candidate ID, candidate text hash, and retrieval query.
+They record `synthetic-test-attestation` as the reviewer and approver so CI does
+not present automation as a human decision:
+
+```text
+scripts/quickstart-smoke.ps1
+scripts/quickstart-smoke.sh
+```
 
 ## Windows PowerShell
 
@@ -74,8 +87,10 @@ if (-not $Basis) {
 $Item.candidate | Select-Object candidate_id,text,support_types
 ```
 
-Validation is a human decision. Read the candidate text before running this
-command:
+Read the candidate and its evidence before running this command. `local-user`
+is a caller-supplied attestation label, not an authenticated account. In a real
+deployment, policy must require the operator to make this decision rather than
+letting the Agent attest its own output:
 
 ```powershell
 .\bin\agentmem.exe review decide `
@@ -90,7 +105,8 @@ command:
   --reason "Reviewed the source evidence and confirmed this project preference."
 ```
 
-Promotion is a separate human gate and rescans the exact text:
+Promotion is a separate caller attestation and rescans the exact text. Inspect
+the scan result and scope before recording it:
 
 ```powershell
 $Promoted = .\bin\agentmem.exe promote candidate `
@@ -167,7 +183,8 @@ test -n "$basis" || { echo "candidate has no supported validation basis" >&2; ex
 printf '%s\n' "$item" | jq '{candidate_id:.candidate.candidate_id,text:.candidate.text,support_types:.candidate.support_types}'
 ```
 
-Read the text, then validate, promote, export, and assert retrieval:
+Read the text and evidence first. The following reviewer and approver strings
+are caller attestations, not authenticated human identities:
 
 ```sh
 ./bin/agentmem review decide \

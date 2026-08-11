@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
 	"github.com/rrrrrredy/agent-memory-system/internal/adapterjsonl"
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
@@ -70,9 +71,9 @@ func TestQuickstartResultInstancesMatchPublishedSchemas(t *testing.T) {
 		SchemaVersion: promotion.ApplyResultSchemaVersion, EventID: "promotion-example",
 		Sequence: 1, RecordSHA256: hashD, Revision: revision, Privacy: "local_only",
 	}
-	portableInit := map[string]any{
-		"schema_version": "portable-memory-init-result/v1alpha1", "initialized": true,
-		"privacy": portable.PortablePrivacy,
+	portableInit := portable.InitResult{
+		SchemaVersion: portable.InitResultSchemaVersion, Initialized: true,
+		Privacy: portable.PortablePrivacy,
 	}
 	portableExport := portable.ExportResult{
 		SchemaVersion: portable.ExportResultSchemaVersion, MemoriesSelected: 1,
@@ -112,4 +113,28 @@ func TestQuickstartResultInstancesMatchPublishedSchemas(t *testing.T) {
 			rejectPublishedInstance(t, instance.schema, wrongVersion)
 		})
 	}
+}
+
+func TestAgentHistoryImportSchemaCoversOpenCodeSnapshots(t *testing.T) {
+	instance := opencode.Result{
+		SchemaVersion: adapterjsonl.ResultSchemaVersion,
+		FilesExamined: 1, FilesChanged: 1, SourceSnapshots: 1,
+		EventsAppended: 2, BytesCaptured: 256,
+		Kinds: map[string]int{"user_message": 1, "assistant_message": 1},
+	}
+	validatePublishedInstance(t, "agent-history-import-result.schema.json", instance)
+
+	data, err := json.Marshal(instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var invalid map[string]any
+	if err := json.Unmarshal(data, &invalid); err != nil {
+		t.Fatal(err)
+	}
+	invalid["source_segments"] = 1
+	rejectPublishedInstance(t, "agent-history-import-result.schema.json", invalid)
+	delete(invalid, "source_segments")
+	delete(invalid, "source_snapshots")
+	rejectPublishedInstance(t, "agent-history-import-result.schema.json", invalid)
 }

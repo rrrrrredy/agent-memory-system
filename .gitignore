@@ -11,6 +11,9 @@ node_modules/
 /data/evidence/
 /data/indexes/
 /data/backups/
+/sessions/
+*.db
+*.sqlite*
 
 # Environment and secrets
 .env
@@ -18,6 +21,7 @@ node_modules/
 !.env.example
 *.key
 *.pem
+*.age
 
 # Editors and operating systems
 .DS_Store

@@ -9,8 +9,9 @@ Maintain three physically and logically separate storage zones:
 
 1. **Local evidence:** exact captured bytes, normalized append-only events,
    ingestion checkpoints, and derived local indexes.
-2. **Promoted memory:** redacted, human-approved, scoped, versioned memory in a
-   private Git repository.
+2. **Promoted memory:** redacted, caller-attested, scoped, versioned memory in a
+   private Git repository. Operator policy requires human review, while the
+   software treats the supplied identity as unauthenticated.
 3. **Encrypted evidence backup:** optional snapshots stored outside the promoted
    memory repository.
 

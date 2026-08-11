@@ -1786,10 +1786,10 @@ func runPortableInit(args []string) error {
 	if err := portable.InitRepository(*repository); err != nil {
 		return err
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{
-		"schema_version": "portable-memory-init-result/v1alpha1",
-		"initialized":    true,
-		"privacy":        portable.PortablePrivacy,
+	return json.NewEncoder(os.Stdout).Encode(portable.InitResult{
+		SchemaVersion: portable.InitResultSchemaVersion,
+		Initialized:   true,
+		Privacy:       portable.PortablePrivacy,
 	})
 }
 
