@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/codex-memory-benchmark-suite.schema.json",
+  "title": "Codex memory capability benchmark suite",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "suite_id", "project_scope", "description", "tool_policy", "tasks", "privacy"],
+  "properties": {
+    "schema_version": {"const": "codex-memory-benchmark-suite/v1alpha1"},
+    "suite_id": {"$ref": "codex-memory-benchmark-plan.schema.json#/$defs/identifier"},
+    "project_scope": {"type": "string", "minLength": 1, "maxLength": 256},
+    "description": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "tool_policy": {"const": "forbid"},
+    "tasks": {
+      "type": "array", "minItems": 20, "maxItems": 50,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["task_id", "cluster_id", "memory_text", "retrieval_query", "prompt", "expected"],
+        "properties": {
+          "task_id": {"$ref": "codex-memory-benchmark-plan.schema.json#/$defs/identifier"},
+          "cluster_id": {"$ref": "codex-memory-benchmark-plan.schema.json#/$defs/identifier"},
+          "memory_text": {"type": "string", "minLength": 1, "maxLength": 65536},
+          "retrieval_query": {"type": "string", "minLength": 1, "maxLength": 65536},
+          "prompt": {"type": "string", "minLength": 1, "maxLength": 65536},
+          "expected": {"type": "string", "minLength": 1, "maxLength": 4096}
+        }
+      }
+    },
+    "privacy": {"const": "synthetic_public"}
+  }
+}

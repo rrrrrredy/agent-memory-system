@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/codex-memory-benchmark-report.schema.json",
+  "title": "Codex memory benchmark report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "report_sha256", "plan_sha256", "plan_blob", "input_plan_blob", "plan_event_id",
+    "suite_id", "started_at", "finished_at", "pairs", "summary", "authority", "efficacy_claim", "issues", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "codex-memory-benchmark-report/v1alpha1"},
+    "report_sha256": {"$ref": "#/$defs/sha256"},
+    "plan_sha256": {"$ref": "#/$defs/sha256"},
+    "plan_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "input_plan_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "plan_event_id": {"type": "string", "pattern": "^codex-benchmark-plan-[a-f0-9]{64}$"},
+    "suite_id": {"$ref": "codex-memory-benchmark-plan.schema.json#/$defs/identifier"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "pairs": {"type": "array", "minItems": 1, "maxItems": 50, "items": {"$ref": "#/$defs/pair"}},
+    "summary": {"$ref": "#/$defs/summary"},
+    "authority": {"const": "exact_codex_cli_and_local_oracle_receipts"},
+    "efficacy_claim": {"enum": ["measurement_only", "observed_benefit_on_sealed_suite_not_longitudinal_certification"]},
+    "issues": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"efficacy_claim": {"const": "observed_benefit_on_sealed_suite_not_longitudinal_certification"}}},
+      "then": {
+        "properties": {
+          "pairs": {
+            "minItems": 20,
+            "items": {
+              "allOf": [
+                {"$ref": "#/$defs/pair"},
+                {"properties": {"memory_source": {"const": "verified_injection"}, "tool_policy": {"const": "forbid"},
+                  "baseline": {"properties": {"tool_calls": {"const": 0}}}, "treatment": {"properties": {"tool_calls": {"const": 0}}}}}
+              ]
+            }
+          },
+          "issues": {"maxItems": 0},
+          "summary": {"properties": {"verified_retrieval_pairs": {"minimum": 20}, "tool_free_pairs": {"minimum": 20}, "distinct_clusters": {"minimum": 20}, "one_sided_sign_test_p": {"maximum": 0.05}}}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "usage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["input_tokens", "cached_input_tokens", "cache_write_input_tokens", "output_tokens", "reasoning_output_tokens"],
+      "properties": {
+        "input_tokens": {"type": "integer", "minimum": 0},
+        "cached_input_tokens": {"type": "integer", "minimum": 0},
+        "cache_write_input_tokens": {"type": "integer", "minimum": 0},
+        "output_tokens": {"type": "integer", "minimum": 0},
+        "reasoning_output_tokens": {"type": "integer", "minimum": 0}
+      }
+    },
+    "arm": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "task_id", "condition", "execution_order", "codex_exit_code", "oracle_exit_code", "tool_calls", "oracle_passed",
+        "raw_events_blob", "oracle_output_blob", "workspace_before_sha256", "workspace_after_sha256", "usage",
+        "started_at", "finished_at", "started_event_id", "result_event_id", "issues"
+      ],
+      "properties": {
+        "task_id": {"$ref": "codex-memory-benchmark-plan.schema.json#/$defs/identifier"},
+        "condition": {"enum": ["baseline", "memory"]},
+        "execution_order": {"type": "integer", "minimum": 0, "maximum": 1},
+        "thread_id": {"type": "string", "minLength": 1},
+        "codex_exit_code": {"type": "integer"},
+        "oracle_exit_code": {"type": "integer"},
+        "tool_calls": {"type": "integer", "minimum": 0},
+        "oracle_passed": {"type": "boolean"},
+        "agent_message_sha256": {"$ref": "#/$defs/sha256"},
+        "raw_events_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+        "agent_message_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+        "stderr_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+        "oracle_output_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+        "workspace_before_sha256": {"$ref": "#/$defs/sha256"},
+        "workspace_after_sha256": {"$ref": "#/$defs/sha256"},
+        "usage": {"$ref": "#/$defs/usage"},
+        "started_at": {"type": "string", "format": "date-time"},
+        "finished_at": {"type": "string", "format": "date-time"},
+        "started_event_id": {"type": "string", "pattern": "^codex-benchmark-start-[a-f0-9]{64}$"},
+        "result_event_id": {"type": "string", "pattern": "^codex-benchmark-result-[a-f0-9]{64}$"},
+        "issues": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "pair": {
+      "type": "object", "additionalProperties": false,
+      "required": ["task_id", "cluster_id", "tool_policy", "memory_source", "baseline", "treatment", "outcome", "token_delta"],
+      "properties": {
+        "task_id": {"$ref": "codex-memory-benchmark-plan.schema.json#/$defs/identifier"},
+        "cluster_id": {"$ref": "codex-memory-benchmark-plan.schema.json#/$defs/identifier"},
+        "tool_policy": {"enum": ["forbid", "allow"]},
+        "memory_source": {"enum": ["caller_provided", "verified_injection"]},
+        "baseline": {"$ref": "#/$defs/arm"},
+        "treatment": {"$ref": "#/$defs/arm"},
+        "outcome": {"enum": ["win", "tie", "loss"]},
+        "token_delta": {"type": "integer"}
+      }
+    },
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "pairs", "verified_retrieval_pairs", "tool_free_pairs", "distinct_clusters", "baseline_passes", "treatment_passes",
+        "wins", "ties", "losses", "discordant_pairs", "one_sided_sign_test_p", "success_rate_delta", "mean_token_delta"
+      ],
+      "properties": {
+        "pairs": {"type": "integer", "minimum": 1, "maximum": 50},
+        "verified_retrieval_pairs": {"type": "integer", "minimum": 0, "maximum": 50},
+        "tool_free_pairs": {"type": "integer", "minimum": 0, "maximum": 50},
+        "distinct_clusters": {"type": "integer", "minimum": 1, "maximum": 50},
+        "baseline_passes": {"type": "integer", "minimum": 0, "maximum": 50},
+        "treatment_passes": {"type": "integer", "minimum": 0, "maximum": 50},
+        "wins": {"type": "integer", "minimum": 0, "maximum": 50},
+        "ties": {"type": "integer", "minimum": 0, "maximum": 50},
+        "losses": {"type": "integer", "minimum": 0, "maximum": 50},
+        "discordant_pairs": {"type": "integer", "minimum": 0, "maximum": 50},
+        "one_sided_sign_test_p": {"type": "number", "minimum": 0, "maximum": 1},
+        "success_rate_delta": {"type": "number", "minimum": -1, "maximum": 1},
+        "mean_token_delta": {"type": "number"}
+      }
+    }
+  }
+}

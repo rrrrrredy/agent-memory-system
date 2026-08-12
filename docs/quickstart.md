@@ -1,28 +1,35 @@
 # Quickstart
 
-This walkthrough imports a privacy-safe synthetic Codex rollout, derives one
-candidate, asks the operator to inspect it, records separate validation and
-promotion attestations, exports one memory to a separate local repository, and
-proves that retrieval selects that exact memory. The CLI binds the records but
-does not authenticate that the supplied reviewer or approver identifier belongs
-to a human. It does not install hooks, contact a model provider, or upload raw
-evidence.
+This walkthrough proves the complete user path with a privacy-safe synthetic
+Codex rollout. It imports locally available history, verifies the evidence
+ledger, derives the current episode and candidate generations, asks the
+operator to review one candidate, records a separate promotion decision,
+exports only the promoted memory, and retrieves that exact revision.
 
-After the demo succeeds, replace the example source with your existing Codex
-sessions directory. Keep the evidence directory outside every Git worktree. The
-portable memory directory must be a different physical tree.
+`onboard` does not approve or promote anything. Reviewer and approver names are
+caller-supplied attestations; the CLI binds them to evidence but does not
+authenticate a human identity. Raw evidence remains outside Git.
 
 ## Prerequisites
 
 - Go 1.25 or newer;
 - Git;
-- `jq` for the POSIX walkthrough.
+- `jq` for the POSIX commands.
 
-The repository smoke scripts use `examples/quickstart/manifest.json` to pin the
-exact synthetic rollout, candidate ID, candidate text hash, and retrieval query.
-They record `synthetic-test-attestation` with the explicit `synthetic_test`
-reviewer and approver kind. The stored ledger therefore describes automation
-as synthetic rather than as a human decision:
+Build from the repository root:
+
+```powershell
+New-Item -ItemType Directory -Force .\bin | Out-Null
+go build -o .\bin\agentmem.exe .\cmd\agentmem
+```
+
+```sh
+mkdir -p ./bin
+go build -o ./bin/agentmem ./cmd/agentmem
+```
+
+The automated smoke tests use the same public fixture and record explicit
+`synthetic_test` attestations. They never label automation as a human decision:
 
 ```text
 scripts/quickstart-smoke.ps1
@@ -31,72 +38,60 @@ scripts/quickstart-smoke.sh
 
 ## Windows PowerShell
 
-Build the CLI and create isolated demo directories:
+Create separate local evidence and portable-memory directories:
 
 ```powershell
-New-Item -ItemType Directory -Force .\bin | Out-Null
-go build -o .\bin\agentmem.exe .\cmd\agentmem
-
 $Run = [guid]::NewGuid().ToString("N")
 $Evidence = Join-Path $env:TEMP "agentmem-demo-$Run\evidence"
 $Memory = Join-Path $env:TEMP "agentmem-demo-$Run\portable-memory"
 $DemoSessions = (Resolve-Path .\examples\quickstart).Path
 ```
 
-The runtime probe is optional. A failed version probe does not disable offline
-history import; inspect `history_import_available` separately:
+The compatibility probe is optional. `history_import_available` remains
+separate from executable runtime status:
 
 ```powershell
-$Compatibility = .\bin\agentmem.exe compatibility --agent codex | ConvertFrom-Json
-$Compatibility.agents | Select-Object agent,runtime_status,history_import_available,runtime_issue
+.\bin\agentmem.exe compatibility --agent codex
 ```
 
-Import and verify the synthetic rollout:
+Import, derive, and verify in one command, then inspect the current state:
 
 ```powershell
-.\bin\agentmem.exe init --root $Evidence
-$Import = .\bin\agentmem.exe import codex --root $Evidence --path $DemoSessions | ConvertFrom-Json
-$Doctor = .\bin\agentmem.exe doctor --root $Evidence | ConvertFrom-Json
-if ($Import.gaps_appended -ne 0 -or -not $Doctor.ready) {
-  throw "The demo evidence import did not verify cleanly."
-}
-```
-
-Derive episodes and review-ready candidates:
-
-```powershell
-$Episodes = .\bin\agentmem.exe derive episodes --root $Evidence | ConvertFrom-Json
-$Candidates = .\bin\agentmem.exe derive candidates `
+$Onboard = .\bin\agentmem.exe onboard codex `
   --root $Evidence `
-  --episodes $Episodes.generation_path | ConvertFrom-Json
+  --path $DemoSessions | ConvertFrom-Json
+if (-not $Onboard.ready -or $Onboard.import.gaps_appended -ne 0) {
+  throw "Onboarding found evidence gaps or integrity issues."
+}
+$Status = .\bin\agentmem.exe status --root $Evidence | ConvertFrom-Json
+$Status | Select-Object workflow_ready,next_action,candidate_generation
+```
+
+List the current review queue. The CLI resolves the latest verified candidate
+generation, so ordinary review commands do not need a generated path:
+
+```powershell
 $Queue = .\bin\agentmem.exe review list `
   --root $Evidence `
-  --candidates $Candidates.generation_path `
   --status review_ready `
   --limit 20 | ConvertFrom-Json
-
 if ($Queue.candidates.Count -eq 0) {
-  throw "No review-ready candidate was derived. Inspect the candidate generation before continuing."
+  throw "No review-ready candidate was derived."
 }
 $Item = $Queue.candidates[0]
 $Basis = @("explicit_remember", "user_correction", "stable_repetition") |
   Where-Object { $Item.candidate.support_types -contains $_ } |
   Select-Object -First 1
-if (-not $Basis) {
-  throw "The selected candidate has no human-validation basis supported by this walkthrough."
-}
 $Item.candidate | Select-Object candidate_id,text,support_types
 ```
 
-Read the candidate and its evidence before running this command. `local-user`
-is a caller-supplied attestation label, not an authenticated account. In a real
-deployment, policy must require the operator to make this decision rather than
-letting the Agent attest its own output:
+Read the candidate and its evidence before recording validation. In a real
+deployment, the operator must make this decision instead of asking the Agent to
+approve its own output:
 
 ```powershell
 .\bin\agentmem.exe review decide `
   --root $Evidence `
-  --candidates $Candidates.generation_path `
   --candidate $Item.candidate.candidate_id `
   --action validate `
   --reviewer local-user `
@@ -106,91 +101,66 @@ letting the Agent attest its own output:
   --reason "Reviewed the source evidence and confirmed this project preference."
 ```
 
-Promotion is a separate caller attestation and rescans the exact text. Inspect
-the scan result and scope before recording it:
+Promotion is a separate decision and rescans the exact text:
 
 ```powershell
 $Promoted = .\bin\agentmem.exe promote candidate `
   --root $Evidence `
-  --candidates $Candidates.generation_path `
   --candidate $Item.candidate.candidate_id `
   --approver local-user `
   --confirm-text-sha256 $Item.text_sha256 `
   --reason "Approved for portable project memory." | ConvertFrom-Json
 ```
 
-Export to a separate readable repository, then retrieve using the exact approved
-text and require the promoted memory to be selected:
+Export into a different repository and require retrieval of the promoted
+revision:
 
 ```powershell
 .\bin\agentmem.exe portable init --repo $Memory
 .\bin\agentmem.exe portable export --root $Evidence --repo $Memory
 .\bin\agentmem.exe portable verify --repo $Memory
-
-$Recall = .\bin\agentmem.exe recall search `
+$Context = .\bin\agentmem.exe recall context `
   --root $Evidence `
   --repo $Memory `
   --agent codex `
   --scope-project example-project `
   --query $Item.candidate.text | ConvertFrom-Json
-if ($Recall.selected.memory_id -notcontains $Promoted.revision.memory_id) {
-  throw "Retrieval did not select the promoted memory."
+if ($Context.memories.memory_id -notcontains $Promoted.revision.memory_id) {
+  throw "Retrieval did not deliver the promoted memory."
 }
-$Recall.selected | Select-Object memory_id,text,score,matched_terms
+$Context | Select-Object injection_id,content_sha256,content_bytes,estimated_tokens
 ```
 
-Connect `$Memory` to an empty private Git remote only after reviewing the
-readable diff. See [git-sync.md](git-sync.md).
+After inspecting the readable portable-memory diff, connect that separate
+directory to an empty private remote by following [Git synchronization](git-sync.md).
+
+The returned `injection_id` identifies the exact delivered context. Delivery is
+not automatically counted as adoption or usefulness.
 
 ## macOS or Linux
 
-Build the CLI and create isolated demo directories:
-
 ```sh
-mkdir -p ./bin
-go build -o ./bin/agentmem ./cmd/agentmem
-
 run_root="$(mktemp -d "${TMPDIR:-/tmp}/agentmem-demo.XXXXXX")"
 evidence="$run_root/evidence"
 memory="$run_root/portable-memory"
 demo_sessions="$(pwd)/examples/quickstart"
-```
 
-Probe the runtime without using it as an import gate, then import and verify:
-
-```sh
 ./bin/agentmem compatibility --agent codex
-./bin/agentmem init --root "$evidence"
-imported="$(./bin/agentmem import codex --root "$evidence" --path "$demo_sessions")"
-doctor="$(./bin/agentmem doctor --root "$evidence")"
-printf '%s\n' "$imported" | jq -e '.gaps_appended == 0' >/dev/null
-printf '%s\n' "$doctor" | jq -e '.ready == true' >/dev/null
-```
+onboard="$(./bin/agentmem onboard codex --root "$evidence" --path "$demo_sessions")"
+printf '%s\n' "$onboard" | jq -e '.ready == true and .import.gaps_appended == 0' >/dev/null
+./bin/agentmem status --root "$evidence" | jq '{workflow_ready,next_action,candidate_generation}'
 
-Derive and select a review-ready candidate:
-
-```sh
-episodes="$(./bin/agentmem derive episodes --root "$evidence")"
-episode_path="$(printf '%s\n' "$episodes" | jq -r '.generation_path')"
-candidates="$(./bin/agentmem derive candidates --root "$evidence" --episodes "$episode_path")"
-candidate_path="$(printf '%s\n' "$candidates" | jq -r '.generation_path')"
-queue="$(./bin/agentmem review list --root "$evidence" --candidates "$candidate_path" --status review_ready --limit 20)"
+queue="$(./bin/agentmem review list --root "$evidence" --status review_ready --limit 20)"
 item="$(printf '%s\n' "$queue" | jq -ce '.candidates[0] // error("no review-ready candidate")')"
 candidate_id="$(printf '%s\n' "$item" | jq -r '.candidate.candidate_id')"
 text_sha256="$(printf '%s\n' "$item" | jq -r '.text_sha256')"
 query="$(printf '%s\n' "$item" | jq -r '.candidate.text')"
 basis="$(printf '%s\n' "$item" | jq -r '[.candidate.support_types[] | select(. == "explicit_remember" or . == "user_correction" or . == "stable_repetition")] | first // empty')"
-test -n "$basis" || { echo "candidate has no supported validation basis" >&2; exit 1; }
+test -n "$basis"
 printf '%s\n' "$item" | jq '{candidate_id:.candidate.candidate_id,text:.candidate.text,support_types:.candidate.support_types}'
-```
 
-Read the text and evidence first. The following reviewer and approver strings
-are caller attestations, not authenticated human identities:
-
-```sh
 ./bin/agentmem review decide \
   --root "$evidence" \
-  --candidates "$candidate_path" \
   --candidate "$candidate_id" \
   --action validate \
   --reviewer local-user \
@@ -201,7 +171,6 @@ are caller attestations, not authenticated human identities:
 
 promoted="$(./bin/agentmem promote candidate \
   --root "$evidence" \
-  --candidates "$candidate_path" \
   --candidate "$candidate_id" \
   --approver local-user \
   --confirm-text-sha256 "$text_sha256" \
@@ -211,49 +180,43 @@ memory_id="$(printf '%s\n' "$promoted" | jq -r '.revision.memory_id')"
 ./bin/agentmem portable init --repo "$memory"
 ./bin/agentmem portable export --root "$evidence" --repo "$memory"
 ./bin/agentmem portable verify --repo "$memory"
-recall="$(./bin/agentmem recall search \
+context="$(./bin/agentmem recall context \
   --root "$evidence" \
   --repo "$memory" \
   --agent codex \
   --scope-project example-project \
   --query "$query")"
-printf '%s\n' "$recall" | jq -e --arg id "$memory_id" '.selected | any(.memory_id == $id)' >/dev/null
-printf '%s\n' "$recall" | jq '.selected'
+printf '%s\n' "$context" | jq -e --arg id "$memory_id" '.memories | any(.memory_id == $id)' >/dev/null
+printf '%s\n' "$context" | jq '{injection_id,content_sha256,content_bytes,estimated_tokens}'
 ```
+
+After inspecting the readable portable-memory diff, connect that separate
+directory to an empty private remote by following [Git synchronization](git-sync.md).
 
 ## Use existing Codex history
 
-After the synthetic demo succeeds, reuse the same flow with a new evidence
-directory and your actual sessions path:
-
-- Windows: `${CODEX_HOME:-$HOME\.codex}\sessions` (PowerShell should resolve
-  `$env:CODEX_HOME` explicitly as shown below);
-- macOS/Linux: `${CODEX_HOME:-$HOME/.codex}/sessions`.
-
-PowerShell path selection:
+After the synthetic walkthrough succeeds, create a new evidence directory and
+point `onboard` at your actual sessions directory:
 
 ```powershell
 $CodexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
-$Sessions = Join-Path $CodexRoot "sessions"
+.\bin\agentmem.exe onboard codex --root <new-evidence-directory> --path (Join-Path $CodexRoot "sessions")
 ```
 
-Real history may legitimately produce zero review-ready candidates. That is a
-safe result, not a reason to weaken the evidence policy or manufacture a memory.
-If evidence changes after derivation, rerun `derive episodes` and `derive
-candidates` before review or promotion.
+```sh
+./bin/agentmem onboard codex \
+  --root <new-evidence-directory> \
+  --path "${CODEX_HOME:-$HOME/.codex}/sessions"
+```
 
-## JSON contracts
+Real history may legitimately produce no review-ready candidates. That is a
+safe result. Do not manufacture a memory or weaken the evidence policy. If new
+history is captured later, rerun `onboard` or the explicit derive commands.
 
-Every versioned JSON result used in this walkthrough has a matching public
-schema under `schemas/`, including history import, episode and candidate builds,
-review and promotion application, portable initialization, export, verification,
-and retrieval. The schema tests validate real Go result types and reject an
-unknown protocol version. Plain path output from `init` is intentionally not a
-versioned JSON protocol.
+## Other Agents
 
-## Claude Code and OpenCode sources
-
-The same evidence store may import other runtimes:
+Claude Code and OpenCode sources use the same evidence and portable-memory
+protocols:
 
 ```text
 agentmem import claude-home --root <evidence> --path <claude-home>
@@ -261,13 +224,12 @@ agentmem import opencode-export --root <evidence> --path <export-file-or-directo
 agentmem import opencode-events --root <evidence> --path <plugin-spool-directory>
 ```
 
-OpenCode event capture uses the opt-in plugin under `integrations/opencode`.
-Keep its JSONL spool outside every Git worktree. Installing the OpenCode runtime
-is not required to use Codex or Claude Code support.
+OpenCode is optional. Its pinned runtime smoke runs only on a disposable
+GitHub-hosted Ubuntu runner; it is not installed by this walkthrough.
 
-## Recovery and verification
+## Recovery and schemas
 
-Run integrity checks after capture, before promotion, and after sync:
+Run integrity checks after capture, before promotion, and after synchronization:
 
 ```text
 agentmem doctor --root <evidence>
@@ -278,8 +240,9 @@ agentmem sync verify --repo <portable-memory>
 agentmem recall verify --root <evidence>
 ```
 
-If doctor reports `writer_lock_present`, do not remove it until you have
-confirmed no writer is active. Only then use `doctor --clear-stale-writer-lock`.
+If doctor reports `writer_lock_present`, first confirm that no writer is active.
+Only then use `doctor --clear-stale-writer-lock`.
 
-For encrypted evidence backup and no-overwrite restore, see
-[backup-recovery.md](backup-recovery.md).
+Every versioned JSON envelope in this walkthrough has a public schema under
+`schemas/`. Encrypted evidence backup and no-overwrite restore are documented
+in [backup-recovery.md](backup-recovery.md).

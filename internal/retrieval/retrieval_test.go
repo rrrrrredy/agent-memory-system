@@ -124,6 +124,14 @@ func TestBuildContextUsesActualInjectionReceiptAndAdoptionClosesObservation(t *t
 		contextResult.ContentBytes > 1400 || contextResult.EstimatedTokens > 400 {
 		t.Fatalf("unexpected bounded context: %+v", contextResult)
 	}
+	resolved, err := ResolveVerifiedInjection(store, contextResult.InjectionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Content != contextResult.Content || len(resolved.Memories) != len(contextResult.Memories) {
+		t.Fatalf("resolved injection does not match the exact delivered context: %+v", resolved)
+	}
+
 	items := make([]AdoptionItem, 0, len(contextResult.Memories))
 	for _, memory := range contextResult.Memories {
 		items = append(items, AdoptionItem{

@@ -619,6 +619,10 @@ boundary after an index has grown, pass its prior entry count through
 `eval corpus freeze --index-entry-limit <count>`. Existing corpora, receipts,
 attestations, and events remain historical evidence; migration never deletes,
 overwrites, or promotes them.
+For a smaller provider-backed check of whether an exact promoted-memory
+delivery changes a real local Codex result, see the
+[native Codex paired diagnostic](codex-benchmark.md). It is not the
+continuous-learning release gate.
 
 ## Regression policy
 

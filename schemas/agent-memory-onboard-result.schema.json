@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/agent-memory-onboard-result.schema.json",
+  "title": "Agent Memory System onboarding result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "agent", "evidence_root", "import", "episodes", "candidates", "review", "doctor", "ready", "next_action", "privacy"],
+  "properties": {
+    "schema_version": {"const": "agent-memory-onboard-result/v1alpha1"},
+    "agent": {"const": "codex"},
+    "evidence_root": {"type": "string", "minLength": 1},
+    "repository": {"type": "string", "minLength": 1},
+    "import": {"$ref": "agent-history-import-result.schema.json"},
+    "episodes": {"$ref": "episode-build-result.schema.json"},
+    "candidates": {"$ref": "candidate-build-result.schema.json"},
+    "review": {"$ref": "candidate-review-summary.schema.json"},
+    "doctor": {"$ref": "agent-memory-doctor-report.schema.json"},
+    "sync": {"$ref": "git-sync-bootstrap-result.schema.json"},
+    "ready": {"type": "boolean"},
+    "next_action": {"enum": ["repair_capture_gaps", "repair_diagnostics", "review_candidates", "promote_validated_candidates", "export_and_sync", "capture_more_evidence"]},
+    "privacy": {"const": "local_only"}
+  }
+}

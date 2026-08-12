@@ -18,6 +18,8 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 	}{
 		{name: "missing subcommand", args: []string{"derive"}, message: "derive <episodes|candidates>"},
 		{name: "unknown subcommand", args: []string{"derive", "unknown"}, message: "derive <episodes|candidates>"},
+		{name: "missing onboard adapter", args: []string{"onboard"}, message: "onboard codex"},
+		{name: "onboard flags", args: []string{"onboard", "codex"}, message: "requires --root and --path"},
 		{name: "candidate flags", args: []string{"derive", "candidates"}, message: "requires --root and --episodes"},
 		{name: "episode flags", args: []string{"derive", "episodes"}, message: "requires --root"},
 		{name: "missing eval subcommand", args: []string{"eval"}, message: "eval <corpus ...|oracle init|sut bind|trial select|trial preregister"},
@@ -71,14 +73,14 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "capture supervisor recover flags", args: []string{"capture", "supervisor", "recover"}, message: "requires --root"},
 		{name: "missing review subcommand", args: []string{"review"}, message: "review <list|decide|apply|status|verify>"},
 		{name: "unknown review subcommand", args: []string{"review", "unknown"}, message: "review <list|decide|apply|status|verify>"},
-		{name: "review list flags", args: []string{"review", "list"}, message: "requires --root and --candidates"},
-		{name: "review decide flags", args: []string{"review", "decide"}, message: "requires --root, --candidates, --candidate, --action, --reviewer, and --reason"},
+		{name: "review list flags", args: []string{"review", "list"}, message: "requires --root"},
+		{name: "review decide flags", args: []string{"review", "decide"}, message: "requires --root, --candidate, --action, --reviewer, and --reason"},
 		{name: "review apply flags", args: []string{"review", "apply"}, message: "requires --root, --candidates, and --file"},
 		{name: "review status flags", args: []string{"review", "status"}, message: "requires --root, --candidates, and --candidate"},
 		{name: "review verify flags", args: []string{"review", "verify"}, message: "requires --root"},
 		{name: "missing promote subcommand", args: []string{"promote"}, message: "promote <candidate|scan|apply|status|verify>"},
 		{name: "unknown promote subcommand", args: []string{"promote", "unknown"}, message: "promote <candidate|scan|apply|status|verify>"},
-		{name: "promote candidate flags", args: []string{"promote", "candidate"}, message: "requires --root, --candidates, --candidate, --approver, --confirm-text-sha256, and --reason"},
+		{name: "promote candidate flags", args: []string{"promote", "candidate"}, message: "requires --root, --candidate, --approver, --confirm-text-sha256, and --reason"},
 		{name: "promote scan flags", args: []string{"promote", "scan"}, message: "requires --root, --candidates, and --candidate"},
 		{name: "promote apply flags", args: []string{"promote", "apply"}, message: "requires --root and --file"},
 		{name: "promote status flags", args: []string{"promote", "status"}, message: "requires --root and --memory"},
@@ -176,7 +178,7 @@ func TestTopLevelHelpSucceeds(t *testing.T) {
 
 func TestCommandGroupHelpSucceeds(t *testing.T) {
 	for _, group := range []string{
-		"import", "inject", "capture", "backup", "derive", "eval", "review", "promote",
+		"onboard", "import", "inject", "capture", "backup", "derive", "eval", "review", "promote",
 		"rule-approval", "portable", "recall", "serve", "sync",
 	} {
 		if err := run([]string{group, "--help"}); err != nil {
@@ -210,6 +212,7 @@ func TestNestedCommandGroupHelpSucceeds(t *testing.T) {
 		{[]string{"eval", "corpus", "agent-assessment", "--help"}, "eval corpus agent-assessment <prepare|import-external|run-openai>"},
 		{[]string{"eval", "attempt", "--help"}, "eval attempt <preregister|execute|observe|finalize|record|verify>"},
 		{[]string{"eval", "compaction", "--help"}, "eval compaction seal"},
+		{[]string{"eval", "codex", "--help"}, "eval codex <benchmark|verify|receipt>"},
 		{[]string{"eval", "trial", "--help"}, "eval trial <select|preregister>"},
 		{[]string{"eval", "oracle", "--help"}, "eval oracle init"},
 		{[]string{"eval", "sut", "--help"}, "eval sut bind"},

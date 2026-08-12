@@ -22,7 +22,7 @@
   ],
   "properties": {
     "schema_version": {"const": "episode-derivation-manifest/v1alpha1"},
-    "derivation_version": {"const": "episodes/v1alpha1"},
+    "derivation_version": {"const": "episodes/v1alpha2"},
     "privacy": {"const": "local_only"},
     "source_records": {"type": "integer", "minimum": 0},
     "source_last_record_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},

@@ -17,7 +17,7 @@ It is built for a harder question than “what should the agent remember?”:
 > What evidence supports this memory, is it still current, and can another
 > machine use it without receiving the private transcript?
 
-Version **0.1.0** implements storage, derivation, review, memory lifecycle,
+Version **0.2.0** implements storage, derivation, review, memory lifecycle,
 private Git synchronization, retrieval, encrypted recovery, and evaluation
 controls. Runtime adapters remain version-sensitive. The system fails closed
 when evidence is incomplete or a compatibility claim cannot be verified.
@@ -98,11 +98,28 @@ Tagged releases provide checksum-verified Windows and macOS installers. See
 
 ## Try the complete lifecycle
 
-The [quickstart](docs/quickstart.md) contains complete PowerShell and POSIX
-paths for import, review, promotion, private Git export, and retrieval. A
-privacy-safe synthetic rollout under `examples/quickstart` makes the lifecycle
-reproducible without reading personal Agent history. The same commands can then
-be pointed at an existing Codex sessions directory.
+A privacy-safe fixture under `examples/quickstart` exercises the same path as
+real Codex history. One command imports, derives, verifies, and reports the next
+operator action:
+
+```powershell
+$Evidence = Join-Path ([System.IO.Path]::GetTempPath()) ("agentmem-" + [guid]::NewGuid())
+$Onboard = .\bin\agentmem.exe onboard codex --root $Evidence --path .\examples\quickstart | ConvertFrom-Json
+.\bin\agentmem.exe status --root $Evidence
+.\bin\agentmem.exe review list --root $Evidence --status review_ready --limit 20
+```
+
+```sh
+evidence="$(mktemp -d)/evidence"
+./bin/agentmem onboard codex --root "$evidence" --path ./examples/quickstart
+./bin/agentmem status --root "$evidence"
+./bin/agentmem review list --root "$evidence" --status review_ready --limit 20
+```
+
+Review and promotion remain separate explicit decisions; `onboard` never makes
+either decision. The [quickstart](docs/quickstart.md) provides complete
+PowerShell and POSIX commands for review, promotion, private Git export, exact
+retrieval, and switching to an existing Codex sessions directory.
 
 A runtime probe is optional and never gates history import:
 
@@ -126,6 +143,7 @@ version probe does not hide a working offline importer.
 | OpenCode plugin | Pinned OpenCode runtime starts on a GitHub-hosted runner, loads the plugin, captures the matching `session.created` event, imports it, and verifies the ledger; no provider model or secret is used |
 | Review and memory lifecycle | Evidence-bound caller attestations, promotion, supersession, revocation, secret scanning, and conflict tests; caller identity is not authenticated |
 | Cross-device memory | Private Git history verification, offline use, divergence handling, recovery, and hosted Windows/macOS/Linux tests |
+| Native Codex memory diagnostic | A frozen 20-cluster synthetic suite ran 20 paired authenticated `codex exec` tasks with sealed no-tools policy and verified retrieval injections: 19 wins, 1 tie, 0 losses; baseline 1/20, memory 20/20; one-sided sign-test p=0.0000019073. This is bounded capability evidence, not longitudinal certification; see the [aggregate receipt](evals/results/codex-memory-capability-v1-2026-08-12.json) |
 | Learning efficacy | Frozen-corpus metrics and replay are implemented; efficacy certification remains blocked unless task execution is independently verified |
 
 Run a local, non-mutating runtime probe:
@@ -200,6 +218,7 @@ local index, never as Git-merged canonical data.
 - `internal/review`, `internal/promotion`: attested decisions and memory lifecycle
 - `internal/portable`, `internal/gitsync`: portable projection and private Git
 - `internal/retrieval`, `internal/mcpserver`: bounded query and delivery
+- `internal/codexbench`: sealed native Codex baseline/memory diagnostics
 - `internal/evaluation`: frozen corpora, paired trials, metrics, and replay
 - `internal/backup`, `internal/diagnostics`: encrypted recovery and integrity
 - `schemas`: versioned public JSON contracts

@@ -11,7 +11,7 @@ const (
 	TimelineSchemaVersion   = "timeline-entry/v1alpha1"
 	ManifestSchemaVersion   = "episode-derivation-manifest/v1alpha1"
 	BuildSchemaVersion      = "episode-build-result/v1alpha1"
-	DerivationVersion       = "episodes/v1alpha1"
+	DerivationVersion       = "episodes/v1alpha2"
 	GenerationAuditSchema   = "episode-generation-audit/v1alpha1"
 	GenerationAttemptSchema = "episode-generation-attempt/v1alpha1"
 )

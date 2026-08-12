@@ -1,0 +1,43 @@
+{
+  "schema_version": "codex-memory-benchmark-public-receipt/v1alpha1",
+  "receipt_sha256": "d94616d82a6606573df4ce0092c2ebfc39e7f743c4b66c8d1c4d42d038d852e7",
+  "suite_id": "codex-memory-capability-v1",
+  "suite_sha256": "3ecd01d00f7cea27688667352aea847dc9808abe42945e1113a3107db00bc38d",
+  "report_sha256": "c29203345609f567c5038d73856535d1ec2072896576dbe46ad75060ba9bf9a8",
+  "plan_sha256": "0c409b3b7aa7d970a2cfd8a5cccc9fd84509314b417f20cc057f0e7ceae0143a",
+  "input_plan_sha256": "1201fd0b3b1ee83260d595ba722277ab60eb94daa8e11d7e968968d2b1ee299f",
+  "codex_executable_sha256": "39e9e041ea33ac34aad9578adfe660c5c7a6dc8f82620b77623960f9352a6ef3",
+  "codex_version": "codex-cli 0.146.0-alpha.3.1",
+  "runner_executable_sha256": "24a1cf671308da10a3e99e0226d30fd329f6082ae386dd322f167745436cf982",
+  "runner_version": "codex-memory-benchmark/v1alpha1",
+  "oracle_executable_sha256": "a82f4a95b7db0b5a389c13bcfa83ce966bf77719d6b8211d5ed339406b31ceaa",
+  "model_selector": "default",
+  "tool_policy": "forbid",
+  "started_at": "2026-08-12T06:15:15.1970399Z",
+  "finished_at": "2026-08-12T06:22:29.9706233Z",
+  "summary": {
+    "pairs": 20,
+    "distinct_clusters": 20,
+    "baseline_passes": 1,
+    "tool_free_pairs": 20,
+    "verified_retrieval_pairs": 20,
+    "treatment_passes": 20,
+    "wins": 19,
+    "ties": 1,
+    "losses": 0,
+    "discordant_pairs": 19,
+    "one_sided_sign_test_p": 0.0000019073486328125,
+    "success_rate_delta": 0.95,
+    "mean_token_delta": 480.3
+  },
+  "authority": "exact_codex_cli_and_local_oracle_receipts",
+  "efficacy_claim": "observed_benefit_on_sealed_suite_not_longitudinal_certification",
+  "records_checked": 204,
+  "blobs_checked": 229,
+  "limitations": [
+    "frozen synthetic capability suite; not longitudinal learning certification",
+    "raw Codex events, messages, stderr, and the evidence ledger remain local",
+    "authenticated local Codex execution is bound by hashes but is not independently reproducible from this aggregate receipt"
+  ],
+  "privacy": "synthetic_public_aggregate"
+}

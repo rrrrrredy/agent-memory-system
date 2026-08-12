@@ -12,7 +12,7 @@
   "properties": {
     "schema_version": {"const": "episode-generation-audit/v1alpha1"},
     "audit_id": {"type": "string", "pattern": "^episode-generation-audit-[a-f0-9]{64}$"},
-    "derivation_version": {"const": "episodes/v1alpha1"},
+    "derivation_version": {"const": "episodes/v1alpha2"},
     "source_records": {"type": "integer", "minimum": 1},
     "source_last_record_hash": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
     "generation_name": {"type": "string", "minLength": 1},

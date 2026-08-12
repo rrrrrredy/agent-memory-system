@@ -7,7 +7,7 @@
   "required": ["schema_version", "derivation_version", "source_records", "generation_path", "episodes", "timeline_entries", "compactions", "drift_evidence", "at_risk", "insufficient_evidence", "timeline_sha256", "episodes_sha256", "reused"],
   "properties": {
     "schema_version": {"const": "episode-build-result/v1alpha1"},
-    "derivation_version": {"const": "episodes/v1alpha1"},
+    "derivation_version": {"const": "episodes/v1alpha2"},
     "source_records": {"type": "integer", "minimum": 0},
     "source_last_record_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "generation_path": {"type": "string", "minLength": 1},
