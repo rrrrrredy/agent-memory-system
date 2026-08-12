@@ -79,9 +79,10 @@ agentmem eval codex receipt \
 
 Receipt export strictly binds every public-suite task, prompt, expected-answer
 hash, memory text, retrieval query, verified injection, and sealed execution
-artifact to the locally replayed report. The receipt hash detects accidental or
-unreviewed byte changes; it is not a digital signature. Publication provenance
-comes from the reviewed Git commit and repository account.
+artifact to the locally replayed report. The receipt hash detects changes to
+canonical field values unless it is recomputed; it does not authenticate an
+author and is not a digital signature. Publication provenance comes from the
+reviewed Git commit and repository account.
 
 The published `codex-memory-capability-v1` receipt covers 20 distinct clusters:
 19 wins, 1 tie, 0 losses; baseline 1/20 and memory 20/20; all 40 arms emitted

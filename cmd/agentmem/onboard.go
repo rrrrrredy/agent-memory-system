@@ -67,6 +67,18 @@ func runOnboard(args []string) error {
 	if err != nil {
 		return err
 	}
+	generation, err := candidates.OpenGeneration(store, candidateResult.GenerationPath)
+	if err != nil {
+		return err
+	}
+	pendingPromotions, err := currentPendingPromotions(store, generation)
+	if err != nil {
+		return err
+	}
+	_, active, err := portable.LoadLocalPopulation(store)
+	if err != nil {
+		return err
+	}
 	doctor := diagnostics.Run(context.Background(), store, diagnostics.Options{
 		Repository: *repository, RequireRepository: *repository != "",
 	})
@@ -74,7 +86,8 @@ func runOnboard(args []string) error {
 		EvidenceRoot: store.Root(), Repository: cleanAbsolute(*repository), Import: imported,
 		Episodes: episodeResult, Candidates: candidateResult, Review: reviewSummary, Doctor: doctor, Sync: syncResult,
 		Ready: imported.GapsAppended == 0 && doctor.Ready, Privacy: "local_only"}
-	result.NextAction = workflow.NextAction(result.Ready, imported.GapsAppended, reviewSummary, 0, 0)
+	result.NextAction = workflow.NextAction(result.Ready, imported.GapsAppended, reviewSummary,
+		pendingPromotions, len(active))
 	if err := encodeIndented(result); err != nil {
 		return err
 	}
