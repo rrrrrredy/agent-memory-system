@@ -23,6 +23,16 @@ Unit, integration, schema, and cross-platform tests verify invariants such as:
 Stateful safety packages also run under the Go race detector.
 
 ## 2. Runtime compatibility
+The ordinary lifecycle smoke now uses `onboard`, `status`, current-generation
+review, separate synthetic validation and promotion, portable export, and exact
+retrieval. The fixture manifest pins the expected candidate text and hashes.
+This proves the control path; synthetic attestations are not human decisions.
+
+The native Codex benchmark stores the raw input plan, sealed plan, exact runner,
+Codex and oracle executable bytes, workspace and oracle artifacts, raw Codex
+JSONL, final agent message, token usage, and terminal receipts in the local
+content-addressed evidence store.
+
 
 Runtime evidence must involve the actual executable, not only a fixture.
 
@@ -40,6 +50,9 @@ The current acceptance includes:
   matches the session returned by the server and is imported and verified;
 - GitHub-hosted Windows, macOS, and Ubuntu build, test, installer, and protocol
   coverage.
+- a local authenticated 20-pair `codex exec` suite in which every synthetic
+  instruction traversed import, derivation, review, promotion, export,
+  retrieval, and a verified injection receipt before exact-oracle evaluation;
 
 The Codex acceptance is not independently reproducible from this repository:
 its private transcript and correlatable source hash are intentionally not
@@ -47,6 +60,15 @@ published. The OpenCode hosted receipt exposes only aggregate counts and hashes
 of the matched event and session identifier. No raw transcript, local path,
 thread identifier, user instruction, session identifier, or memory content is
 committed.
+
+The paired Codex diagnostic has 20 distinct task clusters, 19 wins, 1 tie,
+0 losses, baseline 1/20, memory 20/20, and a one-sided sign-test value of
+`0.0000019073486328125`. Every arm sealed `tool_policy=forbid` and emitted zero
+tool calls. The local verifier replayed 204 ledger records and 229 blobs without
+issues. Its exact report and raw events remain local because they contain provider
+event identifiers and environment-correlatable metadata. It establishes that
+the end-to-end mechanism changes outcomes on the frozen synthetic suite; it
+does not establish a general or longitudinal improvement.
 
 An authenticated Claude Code task and a physical macOS device test are not
 claimed.
@@ -73,8 +95,31 @@ The current local execution supervisor can verify a pinned adapter process but
 cannot independently certify that Codex, Claude Code, or OpenCode produced the
 result. The fixed population builder therefore sets
 `verified_agent_execution=false`, and the continuous efficacy report cannot
+
 become release-ready. This is an intentional truth boundary, not a passing
 placeholder.
+### Native Codex diagnostic benchmark
+
+`agentmem eval codex benchmark` preregisters a local-only paired suite before
+execution. It uses one fresh Git workspace per arm, derives arm order from the
+sealed task artifacts, binds exact runner, Codex, and oracle executable bytes,
+and records terminal evidence even when an arm fails. Oracle arguments cannot
+reference unsealed files. The public suite seals a no-tools policy, rejects any
+Codex tool item, and supplies only the expected-answer hash to the oracle.
+`eval codex verify` replays the full local evidence graph; `eval codex receipt`
+exports only a self-hashed aggregate receipt.
+
+A task may use caller-provided context for debugging, but that source is always
+reported as diagnostic. Only an `injection_id` resolved from a fully verified
+retrieval and injection receipt graph counts as promoted-memory exposure.
+Observed benefit requires at least 20 verified-retrieval pairs from 20 distinct
+task clusters, no infrastructure issue, more wins than losses, and a one-sided
+paired sign-test value at or below `0.05`. All pairs must also have sealed
+no-tools policy and zero tool calls. Even then the claim is restricted to
+the exact sealed suite and is not longitudinal certification. The separate
+fixed-population continuous-learning gate remains fail-closed until native
+Agent execution provenance satisfies its stronger contract.
+
 
 ## Reproduce public checks
 

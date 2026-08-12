@@ -11,7 +11,7 @@
   "properties": {
     "schema_version": {"const": "episode-generation-attempt/v1alpha1"},
     "attempt_id": {"type": "string", "pattern": "^episode-generation-attempt-[a-f0-9]{64}$"},
-    "derivation_version": {"const": "episodes/v1alpha1"},
+    "derivation_version": {"const": "episodes/v1alpha2"},
     "source_records": {"type": "integer", "minimum": 0},
     "source_last_record_hash": {
       "type": "string",

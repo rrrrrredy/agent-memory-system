@@ -3,6 +3,45 @@
 All notable changes will be documented in this file. The project follows
 Semantic Versioning after the first tagged public release.
 
+## [0.2.0] - 2026-08-12
+
+### Added
+
+- `onboard codex` imports, derives, verifies, and reports the next operator
+  action in one command without approving or promoting memory.
+- `status` summarizes evidence integrity, current review state, promoted local
+  revisions, portable verification, and the next safe action.
+- Review and promotion commands can resolve the latest verified candidate
+  generation, removing generated-path plumbing from the ordinary workflow.
+- A native Codex paired diagnostic seals its complete plan before execution,
+  randomizes arm order from bound task artifacts, records raw JSONL and token
+  usage, and runs exact staged Codex and local oracle bytes.
+- Public schemas and real producer tests for onboarding, status, review summary,
+  benchmark plans, sealed plans, reports, local verification, and aggregate
+  public receipts.
+- Episode derivation v1alpha2 preserves dotted project tokens without reusing v1alpha1 generations.
+
+### Security
+
+- Benchmark input plans, runner/Codex/oracle executables, workspaces, oracle
+  overlays, raw events, agent messages, and outputs are retained as local content-addressed evidence.
+- Oracle arguments cannot reference unsealed files, and the reserved result
+  directory is rejected from input artifacts.
+- Caller-provided context is permanently diagnostic. Only promoted memory
+  delivered through a replay-verified retrieval/injection receipt can count as
+  product memory exposure.
+- Observed benefit requires 20 verified-retrieval pairs from 20 distinct task
+  clusters, sealed no-tools policy, zero tool calls, no execution issue,
+  positive paired outcomes, and a one-sided sign-test value at or below 0.05.
+  It remains bounded to the exact sealed suite.
+
+### Evidence
+
+- The published synthetic aggregate receipt records 20 pairs and clusters,
+  baseline 1/20, memory 20/20, 19 wins, 1 tie, 0 losses, 40 zero-tool arms,
+  and a one-sided sign-test value of 0.0000019073486328125. The local verifier
+  replayed 204 records and 229 blobs without issues; raw evidence remains local.
+
 ## [0.1.0] - 2026-08-11
 
 ### Added

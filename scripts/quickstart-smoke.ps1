@@ -32,9 +32,9 @@ try {
   }
   if (-not (Test-Path -LiteralPath $Binary)) { throw 'agentmem binary preparation failed' }
 
-  & $Binary init --root $Evidence | Out-Null
-  $Import = & $Binary import codex --root $Evidence --path $DemoSessions | ConvertFrom-Json
-  $Doctor = & $Binary doctor --root $Evidence | ConvertFrom-Json
+  $Onboard = & $Binary onboard codex --root $Evidence --path $DemoSessions | ConvertFrom-Json
+  $Import = $Onboard.import
+  $Doctor = $Onboard.doctor
   if ($Import.schema_version -ne 'agent-history-import-result/v1alpha1') {
     throw 'history import returned an unsupported schema version'
   }
@@ -42,12 +42,13 @@ try {
     throw 'quickstart evidence import did not verify cleanly'
   }
 
-  $Episodes = & $Binary derive episodes --root $Evidence | ConvertFrom-Json
-  $Candidates = & $Binary derive candidates --root $Evidence --episodes $Episodes.generation_path | ConvertFrom-Json
-  $Queue = & $Binary review list --root $Evidence --candidates $Candidates.generation_path --status review_ready --limit 20 | ConvertFrom-Json
+  $Candidates = $Onboard.candidates
+  $Status = & $Binary status --root $Evidence | ConvertFrom-Json
+  $Queue = & $Binary review list --root $Evidence --status review_ready --limit 20 | ConvertFrom-Json
   if ($Candidates.review_ready -ne $Manifest.expected_review_ready -or $Queue.candidates.Count -ne $Manifest.expected_review_ready) {
     throw 'quickstart did not produce the frozen candidate population'
   }
+  if (-not $Status.workflow_ready -or $Status.review.pending -ne $Manifest.expected_review_ready) { throw 'status did not expose the current review queue' }
   $Item = $Queue.candidates[0]
   if ($Item.candidate.candidate_id -ne $Manifest.expected_candidate_id -or $Item.candidate.text -ne $Manifest.expected_candidate_text -or $Item.text_sha256 -ne $Manifest.expected_text_sha256) {
     throw 'quickstart candidate does not match the frozen manifest'
@@ -57,8 +58,8 @@ try {
     Select-Object -First 1
   if (-not $Basis) { throw 'quickstart candidate has no supported review basis' }
 
-  & $Binary review decide --root $Evidence --candidates $Candidates.generation_path --candidate $Item.candidate.candidate_id --action validate --reviewer synthetic-test-attestation --reviewer-kind synthetic_test --scope project --scope-value example-project --basis $Basis --reason 'Recorded a simulated validation for the frozen synthetic fixture.' | Out-Null
-  $Promoted = & $Binary promote candidate --root $Evidence --candidates $Candidates.generation_path --candidate $Item.candidate.candidate_id --approver synthetic-test-attestation --approver-kind synthetic_test --confirm-text-sha256 $Item.text_sha256 --reason 'Recorded a simulated promotion for the frozen synthetic fixture.' | ConvertFrom-Json
+  & $Binary review decide --root $Evidence --candidate $Item.candidate.candidate_id --action validate --reviewer synthetic-test-attestation --reviewer-kind synthetic_test --scope project --scope-value example-project --basis $Basis --reason 'Recorded a simulated validation for the frozen synthetic fixture.' | Out-Null
+  $Promoted = & $Binary promote candidate --root $Evidence --candidate $Item.candidate.candidate_id --approver synthetic-test-attestation --approver-kind synthetic_test --confirm-text-sha256 $Item.text_sha256 --reason 'Recorded a simulated promotion for the frozen synthetic fixture.' | ConvertFrom-Json
 
   $PortableInit = & $Binary portable init --repo $Memory | ConvertFrom-Json
   if ($PortableInit.schema_version -ne 'portable-memory-init-result/v1alpha1') { throw 'portable init result is not versioned' }

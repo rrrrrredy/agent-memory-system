@@ -22,6 +22,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/backup"
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/capturesupervisor"
+	"github.com/rrrrrredy/agent-memory-system/internal/codexbench"
 	"github.com/rrrrrredy/agent-memory-system/internal/diagnostics"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/evaluation"
@@ -80,6 +81,8 @@ func nestedCommandGroupHelp(args []string) (error, bool) {
 		return evalAttemptUsageError(), true
 	case "eval compaction":
 		return evalCompactionUsageError(), true
+	case "eval codex":
+		return evalCodexUsageError(), true
 	case "eval trial":
 		return evalTrialUsageError(), true
 	case "eval oracle":
@@ -115,6 +118,10 @@ func run(args []string) error {
 			"go_version":     runtime.Version(),
 			"platform":       runtime.GOOS + "/" + runtime.GOARCH,
 		})
+	case "onboard":
+		return runCommandGroup(args, onboardUsageError, runOnboard)
+	case "status":
+		return runStatus(args[1:])
 	case "compatibility":
 		return runCompatibility(args[1:])
 	case "init":
@@ -636,6 +643,8 @@ func runEvaluation(args []string) error {
 		return runEvaluationCorpus(args[1:])
 	case "compaction":
 		return runEvaluationCompaction(args[1:])
+	case "codex":
+		return runEvaluationCodex(args[1:])
 	case "trial":
 		return runEvaluationTrial(args[1:])
 	case "attest":
@@ -658,6 +667,83 @@ func runEvaluation(args []string) error {
 	default:
 		return evalUsageError()
 	}
+}
+
+func runEvaluationCodex(args []string) error {
+	if len(args) == 0 {
+		return evalCodexUsageError()
+	}
+	if args[0] == "verify" {
+		flags := flag.NewFlagSet("eval codex verify", flag.ContinueOnError)
+		root := flags.String("root", "", "dedicated local evidence root (required)")
+		reportPath := flags.String("file", "", "local Codex benchmark report (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *reportPath == "" {
+			return errors.New("eval codex verify requires --root and --file")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		verification := codexbench.Verify(store, *reportPath)
+		if err := encodeIndented(verification); err != nil {
+			return err
+		}
+		if len(verification.Issues) != 0 {
+			return errors.New("Codex benchmark verification failed")
+		}
+		return nil
+	}
+	if args[0] == "receipt" {
+		flags := flag.NewFlagSet("eval codex receipt", flag.ContinueOnError)
+		root := flags.String("root", "", "dedicated local evidence root (required)")
+		reportPath := flags.String("file", "", "verified local Codex benchmark report (required)")
+		suitePath := flags.String("suite", "", "public frozen benchmark suite (required)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *root == "" || *reportPath == "" || *suitePath == "" {
+			return errors.New("eval codex receipt requires --root, --file, and --suite")
+		}
+		store, err := ledger.Open(*root)
+		if err != nil {
+			return err
+		}
+		receipt, err := codexbench.BuildPublicReceipt(store, *reportPath, *suitePath)
+		if err != nil {
+			return err
+		}
+		return encodeIndented(receipt)
+	}
+	if args[0] != "benchmark" {
+		return evalCodexUsageError()
+	}
+	flags := flag.NewFlagSet("eval codex benchmark", flag.ContinueOnError)
+	root := flags.String("root", "", "dedicated local evidence root (required)")
+	plan := flags.String("file", "", "versioned Codex benchmark plan (required)")
+	binary := flags.String("codex", "codex", "Codex executable")
+	output := flags.String("output", "", "new local result directory outside Git (required)")
+	confirm := flags.Bool("confirm-oracle-execution", false,
+		"confirm that every pre-registered oracle command is trusted for local execution")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *root == "" || *plan == "" || *output == "" || !*confirm {
+		return errors.New("eval codex benchmark requires --root, --file, --output, and --confirm-oracle-execution")
+	}
+	store, err := ledger.Init(*root)
+	if err != nil {
+		return err
+	}
+	report, err := codexbench.Run(context.Background(), store, codexbench.Options{
+		PlanPath: *plan, CodexPath: *binary, OutputRoot: *output,
+	})
+	if err != nil {
+		return err
+	}
+	return encodeIndented(report)
 }
 
 func runEvaluationAttempt(args []string) error {
@@ -2656,7 +2742,11 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <version|compatibility|init|doctor|import|inject|capture|backup|derive|eval|review|promote|rule-approval|portable|recall|serve|sync> [options]")
+	return errors.New("usage: agentmem <version|onboard|status|compatibility|init|doctor|import|inject|capture|backup|derive|eval|review|promote|rule-approval|portable|recall|serve|sync> [options]")
+}
+
+func onboardUsageError() error {
+	return errors.New("usage: agentmem onboard codex --root <local-evidence-directory> --path <rollout-file-or-directory> [--repo <portable-memory-directory>]")
 }
 
 func backupUsageError() error {
@@ -2717,6 +2807,10 @@ func evalAttemptUsageError() error {
 
 func evalCompactionUsageError() error {
 	return errors.New("usage: agentmem eval compaction seal [options]")
+}
+
+func evalCodexUsageError() error {
+	return errors.New("usage: agentmem eval codex <benchmark|verify|receipt>; benchmark --root <dedicated-evidence-directory> --file <plan.json> --output <new-local-directory> --confirm-oracle-execution [--codex <executable>]; verify --root <dedicated-evidence-directory> --file <report.json>; receipt --root <dedicated-evidence-directory> --file <report.json> --suite <suite.json>")
 }
 
 func evalTrialUsageError() error {

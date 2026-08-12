@@ -34,7 +34,7 @@ then replace the installed binary.
 From a checked-out release on Windows:
 
 ```powershell
-.\scripts\install.ps1 -Version v0.1.0
+.\scripts\install.ps1 -Version v0.2.0
 ```
 
 Omit `-Version` to install the latest non-prerelease GitHub release. The default
@@ -44,7 +44,7 @@ destination is `%LOCALAPPDATA%\Programs\agentmem\agentmem.exe`. Use
 From a checked-out release on macOS:
 
 ```sh
-AGENTMEM_VERSION=v0.1.0 sh ./scripts/install.sh
+AGENTMEM_VERSION=v0.2.0 sh ./scripts/install.sh
 ```
 
 Omit `AGENTMEM_VERSION` to install the latest non-prerelease release. The

@@ -438,16 +438,28 @@ func splitClauses(text string) []string {
 			clauses = append(clauses, clause)
 		}
 	}
-	for _, char := range text {
+	runes := []rune(text)
+	for index, char := range runes {
 		switch char {
-		case '\n', '\r', '.', '?', '!', ';', '。', '？', '！', '；':
+		case '\n', '\r', '?', '!', ';', '。', '？', '！', '；':
 			flush()
+		case '.':
+			if periodBelongsToToken(runes, index) {
+				builder.WriteRune(char)
+			} else {
+				flush()
+			}
 		default:
 			builder.WriteRune(char)
 		}
 	}
 	flush()
 	return clauses
+}
+
+func periodBelongsToToken(runes []rune, index int) bool {
+	return index+1 < len(runes) &&
+		(unicode.IsLetter(runes[index+1]) || unicode.IsDigit(runes[index+1]) || runes[index+1] == '_')
 }
 
 func classifyNormalizedStatement(normalized string, firstUser bool) string {

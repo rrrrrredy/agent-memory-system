@@ -91,6 +91,63 @@ func OpenGeneration(store *ledger.Store, supplied string) (Generation, error) {
 	}, nil
 }
 
+// OpenCurrentGeneration resolves the candidate generation bound to the latest
+// verified episode-generation audit. It never guesses from directory names or
+// modification times.
+func OpenCurrentGeneration(store *ledger.Store) (Generation, error) {
+	if store == nil {
+		return Generation{}, errors.New("store is required")
+	}
+	audits, err := episodes.ListVerifiedGenerationAudits(store)
+	if err != nil {
+		return Generation{}, fmt.Errorf("verify episode generation audits: %w", err)
+	}
+	if len(audits) == 0 {
+		return Generation{}, errors.New("no verified episode generation is available; run derive episodes")
+	}
+	latest := audits[len(audits)-1]
+	name := strings.ReplaceAll(DerivationVersion, "/", "-") + "-" + latest.Audit.ManifestSHA256
+	generation, err := OpenGeneration(store, name)
+	if err != nil {
+		return Generation{}, fmt.Errorf("open current candidate generation: %w", err)
+	}
+	if err := generation.RequireCurrentEvidence(store); err != nil {
+		return Generation{}, err
+	}
+	return generation, nil
+}
+
+// All returns every candidate from a fully verified generation in stable ID
+// order. It is intended for local status and review accounting, not retrieval.
+func (generation Generation) All() ([]Candidate, error) {
+	path := filepath.Join(generation.Path, "candidates.jsonl")
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open candidate generation: %w", err)
+	}
+	defer file.Close()
+	ids := make([]string, 0, generation.Manifest.Candidates)
+	decoder := json.NewDecoder(file)
+	for {
+		var candidate Candidate
+		if err := decoder.Decode(&candidate); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return nil, fmt.Errorf("decode candidate generation: %w", err)
+		}
+		ids = append(ids, candidate.CandidateID)
+	}
+	selection, err := generation.Select(ids)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Candidate, 0, len(ids))
+	for _, id := range ids {
+		result = append(result, selection.Candidates[id])
+	}
+	return result, nil
+}
+
 func (generation Generation) SourceEvidencePrefix() (EvidencePrefix, error) {
 	source, err := openEpisodeSource(generation.storeRoot, generation.Manifest.SourceEpisodeGeneration)
 	if err != nil {

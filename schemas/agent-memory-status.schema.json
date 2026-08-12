@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/agent-memory-status.schema.json",
+  "title": "Agent Memory System workflow status",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "evidence_root", "doctor", "local_revisions", "local_active", "workflow_ready", "next_action", "issues", "privacy"],
+  "properties": {
+    "schema_version": {"const": "agent-memory-status/v1alpha1"},
+    "evidence_root": {"type": "string", "minLength": 1},
+    "repository": {"type": "string", "minLength": 1},
+    "doctor": {"$ref": "agent-memory-doctor-report.schema.json"},
+    "candidate_generation": {"type": "string", "minLength": 1},
+    "review": {"$ref": "candidate-review-summary.schema.json"},
+    "local_revisions": {"type": "integer", "minimum": 0},
+    "local_active": {"type": "integer", "minimum": 0},
+    "portable": {"$ref": "portable-memory-verification.schema.json"},
+    "workflow_ready": {"type": "boolean"},
+    "next_action": {"enum": ["repair_diagnostics", "derive_current_candidates", "review_candidates", "promote_validated_candidates", "export_and_sync", "capture_more_evidence"]},
+    "issues": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "privacy": {"const": "local_only"}
+  }
+}

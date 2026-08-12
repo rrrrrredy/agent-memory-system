@@ -18,15 +18,15 @@ import (
 func runReviewList(args []string) error {
 	flags := flag.NewFlagSet("review list", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
-	generationName := flags.String("candidates", "", "candidate generation path or directory name (required)")
+	generationName := flags.String("candidates", "", "candidate generation path or directory name; defaults to current")
 	var values repeatedStrings
 	flags.Var(&values, "status", "candidate derivation status: review_ready, untrusted, or quarantined; repeatable")
 	limit := flags.Int("limit", 50, "maximum candidates to return (1-1000)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if *root == "" || *generationName == "" {
-		return errors.New("review list requires --root and --candidates")
+	if *root == "" {
+		return errors.New("review list requires --root")
 	}
 	statuses := []candidates.ReviewStatus{}
 	if len(values) == 0 {
@@ -40,7 +40,7 @@ func runReviewList(args []string) error {
 	if err != nil {
 		return err
 	}
-	generation, err := candidates.OpenGeneration(store, *generationName)
+	generation, err := resolveCandidateGeneration(store, *generationName)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func runReviewList(args []string) error {
 func runReviewDecide(args []string) error {
 	flags := flag.NewFlagSet("review decide", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
-	generationName := flags.String("candidates", "", "candidate generation path or directory name (required)")
+	generationName := flags.String("candidates", "", "candidate generation path or directory name; defaults to current")
 	candidateID := flags.String("candidate", "", "candidate id (required)")
 	actionValue := flags.String("action", "", "validate, reject, quarantine, or reopen (required)")
 	reviewerID := flags.String("reviewer", "", "caller attestation id (required)")
@@ -71,9 +71,9 @@ func runReviewDecide(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if *root == "" || *generationName == "" || *candidateID == "" || *actionValue == "" ||
+	if *root == "" || *candidateID == "" || *actionValue == "" ||
 		strings.TrimSpace(*reviewerID) == "" || strings.TrimSpace(*reason) == "" {
-		return errors.New("review decide requires --root, --candidates, --candidate, --action, --reviewer, and --reason")
+		return errors.New("review decide requires --root, --candidate, --action, --reviewer, and --reason")
 	}
 	action, err := reviewAction(*actionValue)
 	if err != nil {
@@ -86,7 +86,7 @@ func runReviewDecide(args []string) error {
 	if err != nil {
 		return err
 	}
-	generation, err := candidates.OpenGeneration(store, *generationName)
+	generation, err := resolveCandidateGeneration(store, *generationName)
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func runReviewDecide(args []string) error {
 func runPromoteCandidate(args []string) error {
 	flags := flag.NewFlagSet("promote candidate", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
-	generationName := flags.String("candidates", "", "candidate generation path or directory name (required)")
+	generationName := flags.String("candidates", "", "candidate generation path or directory name; defaults to current")
 	candidateID := flags.String("candidate", "", "validated candidate id (required)")
 	approverID := flags.String("approver", "", "caller attestation id (required)")
 	approverKind := flags.String("approver-kind", promotion.ApproverKindCallerAttestation, "caller_attestation or synthetic_test")
@@ -147,9 +147,9 @@ func runPromoteCandidate(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if *root == "" || *generationName == "" || *candidateID == "" ||
+	if *root == "" || *candidateID == "" ||
 		strings.TrimSpace(*approverID) == "" || *confirmedTextSHA == "" || strings.TrimSpace(*reason) == "" {
-		return errors.New("promote candidate requires --root, --candidates, --candidate, --approver, --confirm-text-sha256, and --reason")
+		return errors.New("promote candidate requires --root, --candidate, --approver, --confirm-text-sha256, and --reason")
 	}
 	if *approverKind != promotion.ApproverKindCallerAttestation && *approverKind != promotion.ApproverKindSyntheticTest {
 		return errors.New("approver-kind must be caller_attestation or synthetic_test")
@@ -158,7 +158,7 @@ func runPromoteCandidate(args []string) error {
 	if err != nil {
 		return err
 	}
-	generation, err := candidates.OpenGeneration(store, *generationName)
+	generation, err := resolveCandidateGeneration(store, *generationName)
 	if err != nil {
 		return err
 	}

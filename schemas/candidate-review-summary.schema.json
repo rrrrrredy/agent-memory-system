@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/candidate-review-summary.schema.json",
+  "title": "Candidate review summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generation", "total", "pending", "validated", "rejected", "quarantined", "privacy"],
+  "properties": {
+    "schema_version": {"const": "candidate-review-summary/v1alpha1"},
+    "generation": {"type": "string", "minLength": 1},
+    "total": {"type": "integer", "minimum": 0},
+    "pending": {"type": "integer", "minimum": 0},
+    "validated": {"type": "integer", "minimum": 0},
+    "rejected": {"type": "integer", "minimum": 0},
+    "quarantined": {"type": "integer", "minimum": 0},
+    "privacy": {"const": "local_only"}
+  }
+}

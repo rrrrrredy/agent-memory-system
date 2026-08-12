@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/codex-memory-benchmark-public-receipt.schema.json",
+  "title": "Public aggregate Codex memory benchmark receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "receipt_sha256", "suite_id", "suite_sha256", "report_sha256", "plan_sha256",
+    "input_plan_sha256", "codex_executable_sha256", "codex_version", "runner_executable_sha256",
+    "runner_version", "oracle_executable_sha256", "model_selector", "tool_policy", "started_at", "finished_at",
+    "summary", "authority", "efficacy_claim", "records_checked", "blobs_checked", "limitations", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "codex-memory-benchmark-public-receipt/v1alpha1"},
+    "receipt_sha256": {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/sha256"},
+    "suite_id": {"$ref": "codex-memory-benchmark-plan.schema.json#/$defs/identifier"},
+    "suite_sha256": {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/sha256"},
+    "report_sha256": {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/sha256"},
+    "plan_sha256": {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/sha256"},
+    "input_plan_sha256": {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/sha256"},
+    "codex_executable_sha256": {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/sha256"},
+    "codex_version": {"type": "string", "minLength": 1},
+    "runner_executable_sha256": {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/sha256"},
+    "runner_version": {"const": "codex-memory-benchmark/v1alpha1"},
+    "oracle_executable_sha256": {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/sha256"},
+    "model_selector": {"type": "string", "minLength": 1},
+    "tool_policy": {"const": "forbid"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "summary": {
+      "allOf": [
+        {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/summary"},
+        {"properties": {"pairs": {"minimum": 20}, "distinct_clusters": {"minimum": 20},
+          "tool_free_pairs": {"minimum": 20}, "verified_retrieval_pairs": {"minimum": 20},
+          "one_sided_sign_test_p": {"maximum": 0.05}}}
+      ]
+    },
+    "authority": {"const": "exact_codex_cli_and_local_oracle_receipts"},
+    "efficacy_claim": {"const": "observed_benefit_on_sealed_suite_not_longitudinal_certification"},
+    "records_checked": {"type": "integer", "minimum": 1},
+    "blobs_checked": {"type": "integer", "minimum": 1},
+    "limitations": {"type": "array", "minItems": 3, "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "privacy": {"const": "synthetic_public_aggregate"}
+  }
+}

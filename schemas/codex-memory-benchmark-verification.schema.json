@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/codex-memory-benchmark-verification.schema.json",
+  "title": "Codex memory benchmark verification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "records_checked", "blobs_checked", "issues", "privacy"],
+  "properties": {
+    "schema_version": {"const": "codex-memory-benchmark-verification/v1alpha1"},
+    "report_sha256": {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/sha256"},
+    "plan_sha256": {"$ref": "codex-memory-benchmark-report.schema.json#/$defs/sha256"},
+    "records_checked": {"type": "integer", "minimum": 0},
+    "blobs_checked": {"type": "integer", "minimum": 0},
+    "issues": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "privacy": {"const": "local_only"}
+  },
+  "dependentRequired": {
+    "report_sha256": ["plan_sha256"],
+    "plan_sha256": ["report_sha256"]
+  }
+}
