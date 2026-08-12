@@ -29,9 +29,10 @@ Before building release artifacts:
 
 ## Build release artifacts
 
-Run the manually dispatched `release-build` workflow with an exact SemVer label
-such as `v0.1.0` from `main`. The workflow refuses a different ref, a
-stale `main` commit, or a version absent from `CHANGELOG.md`. It verifies that
+Run the manually dispatched `release-build` workflow with the exact SemVer label
+from the first versioned `CHANGELOG.md` entry, such as `v0.2.0`, on `main`.
+The workflow refuses a different ref, a stale `main` commit, or any historical
+version other than that current entry. It verifies that
 one successful `ci.yml` push run on protected `main` contains every required job,
 scans protected `main` and tag history, and builds Windows, macOS, and Linux
 archives for amd64 and arm64. Separate GitHub-hosted Windows and macOS jobs then
