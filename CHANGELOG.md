@@ -14,7 +14,7 @@ Semantic Versioning after the first tagged public release.
 - Review and promotion commands can resolve the latest verified candidate
   generation, removing generated-path plumbing from the ordinary workflow.
 - A native Codex paired diagnostic seals its complete plan before execution,
-  randomizes arm order from bound task artifacts, records raw JSONL and token
+  deterministically assigns arm order from bound task artifacts, records raw JSONL and token
   usage, and runs exact staged Codex and local oracle bytes.
 - Public schemas and real producer tests for onboarding, status, review summary,
   benchmark plans, sealed plans, reports, local verification, and aggregate

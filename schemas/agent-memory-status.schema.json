@@ -4,7 +4,7 @@
   "title": "Agent Memory System workflow status",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "evidence_root", "doctor", "local_revisions", "local_active", "workflow_ready", "next_action", "issues", "privacy"],
+  "required": ["schema_version", "evidence_root", "doctor", "pending_promotions", "local_revisions", "local_active", "workflow_ready", "next_action", "issues", "privacy"],
   "properties": {
     "schema_version": {"const": "agent-memory-status/v1alpha1"},
     "evidence_root": {"type": "string", "minLength": 1},
@@ -12,6 +12,7 @@
     "doctor": {"$ref": "agent-memory-doctor-report.schema.json"},
     "candidate_generation": {"type": "string", "minLength": 1},
     "review": {"$ref": "candidate-review-summary.schema.json"},
+    "pending_promotions": {"type": "integer", "minimum": 0},
     "local_revisions": {"type": "integer", "minimum": 0},
     "local_active": {"type": "integer", "minimum": 0},
     "portable": {"$ref": "portable-memory-verification.schema.json"},

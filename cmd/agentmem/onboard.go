@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"path/filepath"
+	"strings"
 
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
@@ -13,6 +14,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/gitsync"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 	"github.com/rrrrrredy/agent-memory-system/internal/portable"
+	"github.com/rrrrrredy/agent-memory-system/internal/promotion"
 	"github.com/rrrrrredy/agent-memory-system/internal/review"
 	"github.com/rrrrrredy/agent-memory-system/internal/workflow"
 )
@@ -72,7 +74,7 @@ func runOnboard(args []string) error {
 		EvidenceRoot: store.Root(), Repository: cleanAbsolute(*repository), Import: imported,
 		Episodes: episodeResult, Candidates: candidateResult, Review: reviewSummary, Doctor: doctor, Sync: syncResult,
 		Ready: imported.GapsAppended == 0 && doctor.Ready, Privacy: "local_only"}
-	result.NextAction = workflow.NextAction(result.Ready, imported.GapsAppended, reviewSummary, 0)
+	result.NextAction = workflow.NextAction(result.Ready, imported.GapsAppended, reviewSummary, 0, 0)
 	if err := encodeIndented(result); err != nil {
 		return err
 	}
@@ -111,6 +113,12 @@ func runStatus(args []string) error {
 			result.Issues = append(result.Issues, summaryErr.Error())
 		} else {
 			result.Review = &summary
+			pending, pendingErr := currentPendingPromotions(store, generation)
+			if pendingErr != nil {
+				result.Issues = append(result.Issues, pendingErr.Error())
+			} else {
+				result.PendingPromotions = pending
+			}
 		}
 	}
 	revisions, active, populationErr := portable.LoadLocalPopulation(store)
@@ -128,7 +136,7 @@ func runStatus(args []string) error {
 	if result.Review != nil {
 		summary = *result.Review
 	}
-	result.NextAction = workflow.NextAction(doctor.Ready, 0, summary, result.LocalActive)
+	result.NextAction = workflow.NextAction(doctor.Ready, 0, summary, result.PendingPromotions, result.LocalActive)
 	if err := encodeIndented(result); err != nil {
 		return err
 	}
@@ -147,6 +155,50 @@ func cleanAbsolute(value string) string {
 		return value
 	}
 	return filepath.Clean(absolute)
+}
+
+func currentPendingPromotions(store *ledger.Store, generation candidates.Generation) (int, error) {
+	items, err := generation.All()
+	if err != nil {
+		return 0, err
+	}
+	validated := make([]candidates.Candidate, 0, len(items))
+	for _, candidate := range items {
+		status, statusErr := review.GetStatus(store, generation.Name, candidate.CandidateID)
+		if statusErr != nil {
+			return 0, statusErr
+		}
+		if status.ReviewStatus == review.StatusValidated {
+			validated = append(validated, candidate)
+		}
+	}
+	histories, err := promotion.ListHistories(store)
+	if err != nil {
+		return 0, err
+	}
+	return unpromotedValidatedCount(generation.Name, validated, histories), nil
+}
+
+func unpromotedValidatedCount(generation string, validated []candidates.Candidate, histories []promotion.History) int {
+	promoted := map[string]struct{}{}
+	for _, history := range histories {
+		for _, revision := range history.Revisions {
+			if revision.Source == nil {
+				continue
+			}
+			key := strings.Join([]string{revision.Source.CandidateGeneration, revision.Source.CandidateID,
+				revision.Source.CandidateContentSHA256}, "\x00")
+			promoted[key] = struct{}{}
+		}
+	}
+	pending := 0
+	for _, candidate := range validated {
+		key := strings.Join([]string{generation, candidate.CandidateID, candidate.ContentSHA256}, "\x00")
+		if _, exists := promoted[key]; !exists {
+			pending++
+		}
+	}
+	return pending
 }
 
 func resolveCandidateGeneration(store *ledger.Store, supplied string) (candidates.Generation, error) {

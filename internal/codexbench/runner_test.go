@@ -238,3 +238,83 @@ func TestObservedBenefitRejectsToolUse(t *testing.T) {
 		t.Fatalf("tool use escaped the claim gate: %+v", report)
 	}
 }
+
+func TestRawArmReplayRejectsReportedZeroToolsWhenJSONLContainsToolUse(t *testing.T) {
+	raw := []byte(strings.Join([]string{
+		`{"type":"thread.started","thread_id":"thread"}`,
+		`{"type":"item.completed","item":{"id":"command-1","type":"command_execution"}}`,
+		`{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":"answer"}}`,
+		`{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0}}`,
+	}, "\n"))
+	arm := ArmResult{ThreadID: "thread", ToolCalls: 0, CodexExitCode: 0, OracleExitCode: 0,
+		OraclePassed: true, AgentMessageSHA256: sha256Hex([]byte("answer")),
+		Usage: Usage{InputTokens: 1, OutputTokens: 1}}
+	if err := verifyRawArmEvidence(arm, "forbid", raw); err == nil {
+		t.Fatal("raw tool use was accepted as a zero-tool arm")
+	}
+}
+
+func TestPublicSuiteShapeAndStaticTaskBindingRejectPopulationChanges(t *testing.T) {
+	tasks := make([]publicSuiteTask, minimumDistinctTaskClusters)
+	inputTasks := make([]Task, minimumDistinctTaskClusters)
+	sealedTasks := make([]SealedTask, minimumDistinctTaskClusters)
+	pairs := make([]PairResult, minimumDistinctTaskClusters)
+	for index := range tasks {
+		id := fmt.Sprintf("task-%02d", index)
+		cluster := fmt.Sprintf("cluster-%02d", index)
+		tasks[index] = publicSuiteTask{TaskID: id, ClusterID: cluster, MemoryText: "Remember value.",
+			RetrievalQuery: "remember value", Prompt: "Return the value.", Expected: "value"}
+		inputTasks[index] = Task{TaskID: id, ClusterID: cluster, Prompt: tasks[index].Prompt, ToolPolicy: "forbid",
+			InjectionID: "injection-" + id, OracleCommand: []string{"oracle", sha256Hex([]byte("value"))}}
+		sealedTasks[index] = SealedTask{TaskID: id, ClusterID: cluster, ToolPolicy: "forbid", MemorySource: "verified_injection",
+			InjectionID: "injection-" + id, OracleArguments: []string{sha256Hex([]byte("value"))}}
+		pairs[index] = PairResult{TaskID: id, ClusterID: cluster, ToolPolicy: "forbid", MemorySource: "verified_injection"}
+	}
+	suite := publicSuite{SchemaVersion: "codex-memory-benchmark-suite/v1alpha1", SuiteID: "suite", ProjectScope: "project",
+		Description: "suite", ToolPolicy: "forbid", Tasks: tasks, Privacy: "synthetic_public"}
+	data, err := json.Marshal(suite)
+	if err != nil || decodePublicSuite(data, &publicSuite{}) != nil {
+		t.Fatal("valid public suite shape was rejected")
+	}
+	taskless := suite
+	taskless.Tasks = nil
+	tasklessData, _ := json.Marshal(taskless)
+	if err := decodePublicSuite(tasklessData, &publicSuite{}); err == nil {
+		t.Fatal("taskless public suite was accepted")
+	}
+	input := Plan{SuiteID: "suite", Tasks: inputTasks}
+	sealed := SealedPlan{SuiteID: "suite", Tasks: sealedTasks}
+	report := Report{SuiteID: "suite", Pairs: pairs}
+	if err := validatePublicSuiteStatic(suite, input, sealed, report); err != nil {
+		t.Fatalf("matching public suite was rejected: %v", err)
+	}
+	changed := suite
+	changed.Tasks = append([]publicSuiteTask(nil), suite.Tasks...)
+	changed.Tasks[0].Prompt = "Different prompt."
+	if err := validatePublicSuiteStatic(changed, input, sealed, report); err == nil {
+		t.Fatal("changed public prompt was accepted")
+	}
+	changed = suite
+	changed.Tasks = append([]publicSuiteTask(nil), suite.Tasks...)
+	changed.Tasks[0].Expected = "different"
+	if err := validatePublicSuiteStatic(changed, input, sealed, report); err == nil {
+		t.Fatal("changed public expected answer was accepted")
+	}
+	changed = suite
+	changed.Tasks = append([]publicSuiteTask(nil), suite.Tasks[1:]...)
+	if err := validatePublicSuiteStatic(changed, input, sealed, report); err == nil {
+		t.Fatal("deleted public task was accepted")
+	}
+	changed = suite
+	changed.Tasks = append([]publicSuiteTask(nil), suite.Tasks...)
+	changed.Tasks[0], changed.Tasks[1] = changed.Tasks[1], changed.Tasks[0]
+	if err := validatePublicSuiteStatic(changed, input, sealed, report); err == nil {
+		t.Fatal("reordered public tasks were accepted")
+	}
+	if !suiteMemoryMatches("Please remember this value.", "Please remember this value") {
+		t.Fatal("the exact suite-to-retrieval memory mapping was rejected")
+	}
+	if suiteMemoryMatches("Please remember this value..", "Please remember this value") {
+		t.Fatal("a modified suite memory was accepted")
+	}
+}

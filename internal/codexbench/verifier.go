@@ -9,7 +9,20 @@ import (
 	"sort"
 
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
+	"github.com/rrrrrredy/agent-memory-system/internal/retrieval"
 )
+
+type benchmarkArmStart struct {
+	SchemaVersion   string `json:"schema_version"`
+	PlanSHA256      string `json:"plan_sha256"`
+	TaskID          string `json:"task_id"`
+	Condition       string `json:"condition"`
+	PromptSHA256    string `json:"prompt_sha256"`
+	WorkspaceSHA256 string `json:"workspace_sha256"`
+	CodexSHA256     string `json:"codex_sha256"`
+	Model           string `json:"model"`
+	ToolPolicy      string `json:"tool_policy"`
+}
 
 func Verify(store *ledger.Store, reportPath string) Verification {
 	result := Verification{SchemaVersion: VerificationSchema, Issues: []string{}, Privacy: "local_only"}
@@ -90,6 +103,8 @@ func Verify(store *ledger.Store, reportPath string) Verification {
 		result.Issues = append(result.Issues, "runner or Codex executable binding is invalid")
 	}
 	sealedTasks := map[string]SealedTask{}
+	inputTasks := map[string]Task{}
+	memoryContexts := map[string]string{}
 	for index, task := range plan.Tasks {
 		if _, duplicate := sealedTasks[task.TaskID]; duplicate {
 			result.Issues = append(result.Issues, "sealed plan repeats a task id")
@@ -99,12 +114,37 @@ func Verify(store *ledger.Store, reportPath string) Verification {
 			continue
 		}
 		source := input.Tasks[index]
+		memoryContext := source.MemoryContext
+		expectedMemorySource := "caller_provided"
+		expectedRetrievalID := ""
+		expectedReferences := []retrieval.MemoryReference{}
+		if source.InjectionID != "" {
+			injection, injectionErr := retrieval.ResolveVerifiedInjection(store, source.InjectionID)
+			if injectionErr != nil {
+				result.Issues = append(result.Issues, fmt.Sprintf("sealed task %s injection cannot be replayed: %v", task.TaskID, injectionErr))
+			} else {
+				memoryContext = injection.Content
+				expectedMemorySource = "verified_injection"
+				expectedRetrievalID = injection.RetrievalReceiptID
+				expectedReferences = append(expectedReferences, injection.Memories...)
+			}
+		}
+		expectedOrder := benchmarkExecutionOrder(source, memoryContext, task.WorkspaceSHA256,
+			task.OracleOverlaySHA256, task.OracleExecutable.SHA256)
 		if source.TaskID != task.TaskID || source.ClusterID != task.ClusterID || source.ToolPolicy != task.ToolPolicy ||
-			sha256Hex([]byte(source.Prompt)) != task.PromptSHA256 || len(task.ExecutionOrder) != 2 ||
+			sha256Hex([]byte(source.Prompt)) != task.PromptSHA256 || sha256Hex([]byte(memoryContext)) != task.MemorySHA256 ||
+			task.MemorySource != expectedMemorySource || task.InjectionID != source.InjectionID ||
+			task.RetrievalReceiptID != expectedRetrievalID || !reflect.DeepEqual(task.MemoryReferences, expectedReferences) ||
+			task.WorkspaceSHA256 != artifactSetSHA256(task.WorkspaceFiles) ||
+			task.OracleOverlaySHA256 != artifactSetSHA256(task.OracleFiles) ||
+			!reflect.DeepEqual(task.OracleArguments, source.OracleCommand[1:]) ||
+			!reflect.DeepEqual(task.ExecutionOrder, expectedOrder) ||
 			!validBoundArtifact(store, task.OracleExecutable, checkedBlobs) ||
 			!validArtifacts(store, task.WorkspaceFiles, checkedBlobs) || !validArtifacts(store, task.OracleFiles, checkedBlobs) {
 			result.Issues = append(result.Issues, fmt.Sprintf("sealed task %s does not match its input or artifacts", task.TaskID))
 		}
+		inputTasks[task.TaskID] = source
+		memoryContexts[task.TaskID] = memoryContext
 	}
 	if len(report.Pairs) != len(plan.Tasks) {
 		result.Issues = append(result.Issues, "report does not cover the complete sealed task population")
@@ -121,8 +161,10 @@ func Verify(store *ledger.Store, reportPath string) Verification {
 			result.Issues = append(result.Issues, fmt.Sprintf("report repeats task %s", pair.TaskID))
 		}
 		seenPairs[pair.TaskID] = struct{}{}
-		verifyArm(store, records, report.PlanEventID, pair.Baseline, "baseline", pair.TaskID, checkedBlobs, &result)
-		verifyArm(store, records, report.PlanEventID, pair.Treatment, "memory", pair.TaskID, checkedBlobs, &result)
+		verifyArm(store, records, report.PlanEventID, plan, sealedTask, inputTasks[pair.TaskID],
+			memoryContexts[pair.TaskID], pair.Baseline, "baseline", checkedBlobs, &result)
+		verifyArm(store, records, report.PlanEventID, plan, sealedTask, inputTasks[pair.TaskID],
+			memoryContexts[pair.TaskID], pair.Treatment, "memory", checkedBlobs, &result)
 		expectedOutcome := "tie"
 		if pair.Treatment.OraclePassed && !pair.Baseline.OraclePassed {
 			expectedOutcome = "win"
@@ -143,19 +185,36 @@ func Verify(store *ledger.Store, reportPath string) Verification {
 	return finishVerification(result, checkedBlobs)
 }
 
-func verifyArm(store *ledger.Store, records map[string]ledger.Record, planEventID string,
-	arm ArmResult, condition, taskID string, checkedBlobs map[string]struct{}, result *Verification) {
-	if arm.Condition != condition || arm.TaskID != taskID {
+func verifyArm(store *ledger.Store, records map[string]ledger.Record, planEventID string, plan SealedPlan,
+	sealedTask SealedTask, source Task, memoryContext string, arm ArmResult, condition string,
+	checkedBlobs map[string]struct{}, result *Verification) {
+	taskID := sealedTask.TaskID
+	if arm.Condition != condition || arm.TaskID != taskID || arm.ExecutionOrder != conditionIndex(sealedTask.ExecutionOrder, condition) {
 		result.Issues = append(result.Issues, fmt.Sprintf("task %s %s arm identity is invalid", taskID, condition))
 		return
 	}
 	started, startedOK := records[arm.StartedEventID]
 	terminal, terminalOK := records[arm.ResultEventID]
 	if !startedOK || !terminalOK || terminal.Event.Payload == nil || terminal.Event.Payload.Blob == nil ||
+		started.Event.Payload == nil || started.Event.Payload.Blob == nil ||
 		terminal.Event.Kind != ledger.KindToolResult || !containsParent(started.Event, planEventID) ||
 		!containsParent(terminal.Event, arm.StartedEventID) {
 		result.Issues = append(result.Issues, fmt.Sprintf("task %s %s event chain is invalid", taskID, condition))
 		return
+	}
+	startedData, startedErr := verifyReference(store, *started.Event.Payload.Blob, checkedBlobs)
+	var declaration benchmarkArmStart
+	resolvedSource := source
+	resolvedSource.MemoryContext = memoryContext
+	expectedDeclaration := benchmarkArmStart{SchemaVersion: "codex-benchmark-arm-start/v1alpha1",
+		PlanSHA256: plan.PlanSHA256, TaskID: taskID, Condition: condition,
+		PromptSHA256:    sha256Hex([]byte(benchmarkPrompt(resolvedSource, condition))),
+		WorkspaceSHA256: sealedTask.WorkspaceSHA256, CodexSHA256: plan.CodexExecutable.SHA256,
+		Model: plan.Model, ToolPolicy: sealedTask.ToolPolicy}
+	if startedErr != nil || decodeStrict(startedData, &declaration) != nil ||
+		!reflect.DeepEqual(declaration, expectedDeclaration) || arm.StartedEventID != "codex-benchmark-start-"+sha256Hex(startedData) ||
+		arm.WorkspaceBeforeSHA256 != sealedTask.WorkspaceSHA256 {
+		result.Issues = append(result.Issues, fmt.Sprintf("task %s %s start declaration is invalid", taskID, condition))
 	}
 	data, err := verifyReference(store, *terminal.Event.Payload.Blob, checkedBlobs)
 	var recorded ArmResult
@@ -165,8 +224,11 @@ func verifyArm(store *ledger.Store, records map[string]ledger.Record, planEventI
 		arm.ResultEventID != "codex-benchmark-result-"+sha256Hex(data) {
 		result.Issues = append(result.Issues, fmt.Sprintf("task %s %s result payload is invalid", taskID, condition))
 	}
-	if _, err := verifyReference(store, arm.RawEventsBlob, checkedBlobs); err != nil {
+	rawData, rawErr := verifyReference(store, arm.RawEventsBlob, checkedBlobs)
+	if rawErr != nil {
 		result.Issues = append(result.Issues, fmt.Sprintf("task %s %s raw events blob is invalid", taskID, condition))
+	} else if replayErr := verifyRawArmEvidence(arm, sealedTask.ToolPolicy, rawData); replayErr != nil {
+		result.Issues = append(result.Issues, fmt.Sprintf("task %s %s raw events replay failed: %v", taskID, condition, replayErr))
 	}
 	if _, err := verifyReference(store, arm.OracleOutputBlob, checkedBlobs); err != nil {
 		result.Issues = append(result.Issues, fmt.Sprintf("task %s %s oracle output blob is invalid", taskID, condition))
@@ -175,7 +237,8 @@ func verifyArm(store *ledger.Store, records map[string]ledger.Record, planEventI
 		if arm.AgentMessageSHA256 != "" {
 			result.Issues = append(result.Issues, fmt.Sprintf("task %s %s agent message binding is invalid", taskID, condition))
 		}
-	} else if message, err := verifyReference(store, *arm.AgentMessageBlob, checkedBlobs); err != nil || sha256Hex(message) != arm.AgentMessageSHA256 {
+	} else if message, messageErr := verifyReference(store, *arm.AgentMessageBlob, checkedBlobs); messageErr != nil ||
+		sha256Hex(message) != arm.AgentMessageSHA256 {
 		result.Issues = append(result.Issues, fmt.Sprintf("task %s %s agent message blob is invalid", taskID, condition))
 	}
 	if arm.StderrBlob != nil {
@@ -185,7 +248,33 @@ func verifyArm(store *ledger.Store, records map[string]ledger.Record, planEventI
 	}
 }
 
+func verifyRawArmEvidence(arm ArmResult, toolPolicy string, rawData []byte) error {
+	parsed, err := parseExecutionJSONL(rawData)
+	if err != nil {
+		return err
+	}
+	if parsed.ThreadID != arm.ThreadID || !reflect.DeepEqual(parsed.Usage, arm.Usage) ||
+		parsed.ToolCalls != arm.ToolCalls || sha256Hex([]byte(parsed.AgentMessage)) != arm.AgentMessageSHA256 {
+		return errors.New("reported thread, usage, tool calls, or agent message differs from raw Codex events")
+	}
+	expectedOraclePassed := arm.CodexExitCode == 0 && arm.OracleExitCode == 0 &&
+		(toolPolicy != "forbid" || parsed.ToolCalls == 0)
+	if arm.OraclePassed != expectedOraclePassed {
+		return errors.New("reported oracle result does not replay from exits and tool policy")
+	}
+	return nil
+}
+
+func conditionIndex(order []string, condition string) int {
+	for index, value := range order {
+		if value == condition {
+			return index
+		}
+	}
+	return -1
+}
 func containsParent(event ledger.Event, parent string) bool {
+
 	if event.Causality == nil {
 		return false
 	}

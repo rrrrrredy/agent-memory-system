@@ -38,6 +38,7 @@ type StatusReport struct {
 	Doctor              diagnostics.Report           `json:"doctor"`
 	CandidateGeneration string                       `json:"candidate_generation,omitempty"`
 	Review              *review.Summary              `json:"review,omitempty"`
+	PendingPromotions   int                          `json:"pending_promotions"`
 	LocalRevisions      int                          `json:"local_revisions"`
 	LocalActive         int                          `json:"local_active"`
 	Portable            *portable.VerificationReport `json:"portable,omitempty"`
@@ -47,7 +48,7 @@ type StatusReport struct {
 	Privacy             string                       `json:"privacy"`
 }
 
-func NextAction(diagnosticsReady bool, gaps int, summary review.Summary, active int) string {
+func NextAction(diagnosticsReady bool, gaps int, summary review.Summary, pendingPromotions, active int) string {
 	switch {
 	case gaps > 0:
 		return "repair_capture_gaps"
@@ -57,7 +58,7 @@ func NextAction(diagnosticsReady bool, gaps int, summary review.Summary, active 
 		return "derive_current_candidates"
 	case summary.Pending > 0:
 		return "review_candidates"
-	case summary.Validated > active:
+	case pendingPromotions > 0:
 		return "promote_validated_candidates"
 	case active > 0:
 		return "export_and_sync"

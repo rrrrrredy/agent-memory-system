@@ -106,8 +106,11 @@ sealed task artifacts, binds exact runner, Codex, and oracle executable bytes,
 and records terminal evidence even when an arm fails. Oracle arguments cannot
 reference unsealed files. The public suite seals a no-tools policy, rejects any
 Codex tool item, and supplies only the expected-answer hash to the oracle.
-`eval codex verify` replays the full local evidence graph; `eval codex receipt`
-exports only a self-hashed aggregate receipt.
+`eval codex verify` reparses raw Codex JSONL and replays the complete local
+retrieval, injection, plan, artifact, execution, and report graph. `eval codex
+receipt` exports only a self-hashed aggregate receipt. The self-hash detects byte
+changes; it is not a signature. The reviewed Git commit and repository account
+provide publication provenance.
 
 A task may use caller-provided context for debugging, but that source is always
 reported as diagnostic. Only an `injection_id` resolved from a fully verified

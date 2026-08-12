@@ -103,12 +103,14 @@ real Codex history. One command imports, derives, verifies, and reports the next
 operator action:
 
 ```powershell
+$Evidence = Join-Path ([System.IO.Path]::GetTempPath()) ("agentmem-" + [guid]::NewGuid())
 $Onboard = .\bin\agentmem.exe onboard codex --root $Evidence --path .\examples\quickstart | ConvertFrom-Json
 .\bin\agentmem.exe status --root $Evidence
 .\bin\agentmem.exe review list --root $Evidence --status review_ready --limit 20
 ```
 
 ```sh
+evidence="$(mktemp -d)/evidence"
 ./bin/agentmem onboard codex --root "$evidence" --path ./examples/quickstart
 ./bin/agentmem status --root "$evidence"
 ./bin/agentmem review list --root "$evidence" --status review_ready --limit 20

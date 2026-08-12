@@ -220,15 +220,7 @@ func runArm(ctx context.Context, store *ledger.Store, options Options, plan Seal
 		return result, err
 	}
 	result.WorkspaceBeforeSHA256 = artifactSetSHA256(before)
-	prompt := resolved.task.Prompt
-	if condition == "memory" {
-		prompt += "\n\nReviewed project memory follows. Apply it only when relevant to this task:\n<project_memory>\n" +
-			resolved.task.MemoryContext + "\n</project_memory>"
-	}
-	if resolved.task.ToolPolicy == "forbid" {
-		prompt += "\n\nDo not call tools, inspect files, search the filesystem, or use external sources. " +
-			"Answer only from the task prompt and any project memory supplied above."
-	}
+	prompt := benchmarkPrompt(resolved.task, condition)
 	startedPayload, _ := json.Marshal(map[string]any{"schema_version": "codex-benchmark-arm-start/v1alpha1",
 		"plan_sha256": plan.PlanSHA256, "task_id": result.TaskID, "condition": condition,
 		"prompt_sha256": sha256Hex([]byte(prompt)), "workspace_sha256": result.WorkspaceBeforeSHA256,
@@ -423,7 +415,6 @@ func resolveTasks(store *ledger.Store, base, outputRoot string, plan Plan) ([]re
 		if err != nil {
 			return nil, err
 		}
-		order := []string{"baseline", "memory"}
 		stagedOracle := filepath.Join(outputRoot, "runtime", "oracle-"+task.TaskID+filepath.Ext(oraclePath))
 		oracleArtifact, err = bindArtifactBlob(store, oraclePath, oracleArtifact)
 		if err != nil {
@@ -434,13 +425,8 @@ func resolveTasks(store *ledger.Store, base, outputRoot string, plan Plan) ([]re
 		}
 		oraclePath = stagedOracle
 		oracleArtifact.Path = filepath.ToSlash(filepath.Join("runtime", filepath.Base(stagedOracle)))
-		assignment := sha256.Sum256([]byte(strings.Join([]string{
-			RunnerVersion, task.TaskID, task.ClusterID, sha256Hex([]byte(task.Prompt)), sha256Hex([]byte(task.MemoryContext)),
-			task.ToolPolicy, artifactSetSHA256(workspaceFiles), artifactSetSHA256(oracleFiles), oracleArtifact.SHA256,
-		}, "\x00")))
-		if assignment[0]&1 == 1 {
-			order[0], order[1] = order[1], order[0]
-		}
+		order := benchmarkExecutionOrder(task, task.MemoryContext, artifactSetSHA256(workspaceFiles),
+			artifactSetSHA256(oracleFiles), oracleArtifact.SHA256)
 		sealed := SealedTask{TaskID: task.TaskID, ClusterID: task.ClusterID, PromptSHA256: sha256Hex([]byte(task.Prompt)),
 			MemorySHA256: sha256Hex([]byte(task.MemoryContext)), MemorySource: memorySource, InjectionID: task.InjectionID,
 			RetrievalReceiptID: retrievalReceiptID, MemoryReferences: memoryReferences,
@@ -452,6 +438,31 @@ func resolveTasks(store *ledger.Store, base, outputRoot string, plan Plan) ([]re
 		result = append(result, resolvedTask{task: task, oraclePath: oraclePath, sealed: sealed})
 	}
 	return result, nil
+}
+
+func benchmarkPrompt(task Task, condition string) string {
+	prompt := task.Prompt
+	if condition == "memory" {
+		prompt += "\n\nReviewed project memory follows. Apply it only when relevant to this task:\n<project_memory>\n" +
+			task.MemoryContext + "\n</project_memory>"
+	}
+	if task.ToolPolicy == "forbid" {
+		prompt += "\n\nDo not call tools, inspect files, search the filesystem, or use external sources. " +
+			"Answer only from the task prompt and any project memory supplied above."
+	}
+	return prompt
+}
+
+func benchmarkExecutionOrder(task Task, memoryContext, workspaceSHA, oracleOverlaySHA, oracleExecutableSHA string) []string {
+	order := []string{"baseline", "memory"}
+	assignment := sha256.Sum256([]byte(strings.Join([]string{
+		RunnerVersion, task.TaskID, task.ClusterID, sha256Hex([]byte(task.Prompt)), sha256Hex([]byte(memoryContext)),
+		task.ToolPolicy, workspaceSHA, oracleOverlaySHA, oracleExecutableSHA,
+	}, "\x00")))
+	if assignment[0]&1 == 1 {
+		order[0], order[1] = order[1], order[0]
+	}
+	return order
 }
 
 func treeArtifacts(root string) ([]Artifact, int64, error) {
