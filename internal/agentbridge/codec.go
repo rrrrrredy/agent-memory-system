@@ -211,6 +211,33 @@ func readBlob(store *ledger.Store, reference ledger.BlobRef) ([]byte, error) {
 	return data, nil
 }
 
+func verifyBlobReference(store *ledger.Store, reference ledger.BlobRef) error {
+	file, err := store.OpenBlob(reference)
+	if err != nil {
+		return err
+	}
+	verifyErr := verifyBlobContent(file, reference)
+	closeErr := file.Close()
+	if verifyErr != nil {
+		return verifyErr
+	}
+	return closeErr
+}
+
+func verifyBlobContent(reader io.Reader, reference ledger.BlobRef) error {
+	if reader == nil || !validSHA256(reference.SHA256) || reference.Bytes < 0 {
+		return errors.New("blob reference is invalid")
+	}
+	hasher := sha256.New()
+	bytesCopied, err := io.Copy(hasher, reader)
+	if err != nil {
+		return err
+	}
+	if bytesCopied != reference.Bytes || hex.EncodeToString(hasher.Sum(nil)) != reference.SHA256 {
+		return errors.New("blob bytes differ from their reference")
+	}
+	return nil
+}
 func buildArguments(request RunRequest) []string {
 	arguments := []string{
 		"exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",

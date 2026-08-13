@@ -78,7 +78,9 @@ local executable bytes, process result, and visible Codex JSONL. The archive
 content address and canonical regular-file tree are verified before the native
 start and again immediately before process launch; the start binds both. The
 sealed tree is materialized in a per-run temporary directory outside the
-evidence store and removed after its terminal result. This does not authenticate
+evidence store, portable memory repository, and any Git worktree. Removal is
+attempted on every return path and any failure is returned. This does not
+authenticate
 the remote model/provider or provider-private reasoning. Task selection is not
 blind or independently randomized; both limits remain part of the descriptive
 claim boundary. The supported workflow guarantees the first study-bound

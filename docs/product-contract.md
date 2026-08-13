@@ -274,11 +274,13 @@ timeout, nonzero exit, or missing result MUST append a terminal failure and
 consume the reservation. A direct native receipt or a second reservation MUST
 be ineligible. The runner MUST verify the exact archive content address,
 materialize the sealed regular-file tree in a per-run temporary directory
-outside the evidence store, and verify that tree before recording the native
-start and again immediately before process launch. The native start MUST bind
-the archive, canonical tree digest, snapshot policy, and measurements. A failed
-second preflight MUST append a native failure receipt and study terminal without
-launching the process. Every terminal path MUST remove the temporary tree.
+outside the evidence store, portable memory repository, and every detected Git
+worktree, and verify that tree before recording the native start and again
+immediately before process launch. The native start MUST bind the archive,
+canonical tree digest, snapshot policy, and measurements. A failed second
+preflight MUST append a native failure receipt and study terminal without
+launching the process. Every return path MUST attempt to remove the temporary
+tree, and a cleanup failure MUST be returned to the operator.
 Later changes to the source directory MUST NOT affect the executed bytes.
 
 Within the honest-local-operator boundary this enforces the first study-bound

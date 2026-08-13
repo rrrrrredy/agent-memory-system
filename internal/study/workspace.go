@@ -207,27 +207,52 @@ func verifyWorkspaceSnapshot(store *ledger.Store, snapshot WorkspaceSnapshot, so
 	return nil
 }
 
-func reserveIsolatedWorkspace(store *ledger.Store) (string, func(), error) {
+func reserveIsolatedWorkspace(store *ledger.Store, forbiddenRoots ...string) (string, func() error, error) {
 	root, err := os.MkdirTemp("", "agentmem-study-")
 	if err != nil {
 		return "", nil, err
 	}
-	cleanup := func() { _ = os.RemoveAll(root) }
+	cleanup := func() error { return os.RemoveAll(root) }
+	cleanupFailure := func(cause error) error { return errors.Join(cause, cleanup()) }
 	if err := os.Chmod(root, 0o700); err != nil {
-		cleanup()
-		return "", nil, err
+		return "", nil, cleanupFailure(err)
 	}
 	resolved, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		cleanup()
-		return "", nil, err
+		return "", nil, cleanupFailure(err)
 	}
 	root = resolved
-	if pathsOverlap(root, store.Root()) {
-		cleanup()
-		return "", nil, errors.New("isolated study workspace overlaps the evidence store")
+	forbiddenRoots = append([]string{store.Root()}, forbiddenRoots...)
+	for _, forbidden := range forbiddenRoots {
+		if strings.TrimSpace(forbidden) == "" {
+			continue
+		}
+		resolvedForbidden, resolveErr := filepath.EvalSymlinks(filepath.Clean(forbidden))
+		if resolveErr != nil {
+			return "", nil, cleanupFailure(resolveErr)
+		}
+		if pathsOverlap(root, resolvedForbidden) {
+			return "", nil, cleanupFailure(errors.New("isolated study workspace overlaps a protected data root"))
+		}
+	}
+	if insideGitWorktree(root) {
+		return "", nil, cleanupFailure(errors.New("isolated study workspace must not be inside a Git worktree"))
 	}
 	return filepath.Join(root, "workspace"), cleanup, nil
+}
+
+func insideGitWorktree(item string) bool {
+	current := filepath.Clean(item)
+	for {
+		if _, err := os.Lstat(filepath.Join(current, ".git")); err == nil || !os.IsNotExist(err) {
+			return true
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return false
+		}
+		current = parent
+	}
 }
 
 func materializeWorkspace(store *ledger.Store, task PlannedTask, destination string) error {

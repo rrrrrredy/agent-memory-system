@@ -169,9 +169,10 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 	if err != nil {
 		return result, err
 	}
+	var stagedExecutableErr error
 	if current, hashErr := hashFile(stagedCodex); hashErr != nil ||
 		current.SHA256 != codexArtifact.SHA256 || current.Bytes != codexArtifact.Bytes {
-		return result, errors.New("staged Codex executable changed before task execution")
+		stagedExecutableErr = errors.New("staged Codex executable changed before task execution")
 	}
 
 	runContext, cancel := context.WithTimeout(ctx, time.Duration(normalized.TimeoutSeconds)*time.Second)
@@ -183,13 +184,16 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
 	var preflightErr error
-	if options.WorkspacePreflight != nil {
+	if stagedExecutableErr == nil && options.WorkspacePreflight != nil {
 		preflightErr = options.WorkspacePreflight()
 	}
 	var runErr error
-	if preflightErr == nil {
+	switch {
+	case stagedExecutableErr != nil:
+		runErr = stagedExecutableErr
+	case preflightErr == nil:
 		runErr = command.Run()
-	} else {
+	default:
 		runErr = preflightErr
 	}
 	exitCode := commandExitCode(runErr, runContext.Err())
@@ -216,6 +220,8 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 	}
 	failureKind := ""
 	switch {
+	case stagedExecutableErr != nil:
+		failureKind = "executable_changed"
 	case preflightErr != nil:
 		failureKind = "workspace_changed"
 	case runContext.Err() != nil:

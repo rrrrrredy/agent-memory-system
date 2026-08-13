@@ -15,8 +15,8 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/retrieval"
 )
 
-func RunTask(ctx context.Context, store *ledger.Store, studyID, taskID string, options RunTaskOptions) (RunTaskResult, error) {
-	result := RunTaskResult{SchemaVersion: RunTaskResultSchema, Privacy: PrivacyLocalOnly}
+func RunTask(ctx context.Context, store *ledger.Store, studyID, taskID string, options RunTaskOptions) (result RunTaskResult, returnErr error) {
+	result = RunTaskResult{SchemaVersion: RunTaskResultSchema, Privacy: PrivacyLocalOnly}
 	if ctx == nil || store == nil || !validPrefixedHash(studyID, "study-") || !safeID(taskID) ||
 		strings.TrimSpace(options.PortableRoot) == "" || strings.TrimSpace(options.CodexPath) == "" {
 		return result, errors.New("context, evidence store, study, task, portable repository, and Codex executable are required")
@@ -56,11 +56,15 @@ func RunTask(ctx context.Context, store *ledger.Store, studyID, taskID string, o
 		}
 		contextReceiptID = contextResult.Receipt.ReceiptID
 	}
-	workspace, cleanupWorkspace, err := reserveIsolatedWorkspace(store)
+	workspace, cleanupWorkspace, err := reserveIsolatedWorkspace(store, options.PortableRoot)
 	if err != nil {
 		return result, err
 	}
-	defer cleanupWorkspace()
+	defer func() {
+		if cleanupErr := cleanupWorkspace(); cleanupErr != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("remove isolated study workspace: %w", cleanupErr))
+		}
+	}()
 	request := expectedStudyRequest(task, contextReceiptID, workspace)
 	planRecord := state.PlanRecords[studyID].Record
 	reservation := TrialReservation{SchemaVersion: TrialReservationSchema, StudyID: studyID,

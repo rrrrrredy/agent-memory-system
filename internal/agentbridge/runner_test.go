@@ -163,6 +163,47 @@ func TestWorkspaceChangeAfterStartedLeavesFailedTerminalWithoutLaunchingCodex(t 
 	}
 }
 
+func TestWorkspaceArchiveVerificationUsesBoundedStreamingReads(t *testing.T) {
+	const size = int64(8 * 1024 * 1024)
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, &boundedZeroReader{remaining: size, maximumRead: 32 * 1024}); err != nil {
+		t.Fatal(err)
+	}
+	reference := ledger.BlobRef{SHA256: hex.EncodeToString(hasher.Sum(nil)), Bytes: size,
+		RelativePath: "blobs/sha256/streaming-test"}
+	reader := &boundedZeroReader{remaining: size, maximumRead: 32 * 1024}
+	if err := verifyBlobContent(reader, reference); err != nil {
+		t.Fatal(err)
+	}
+	if reader.largestRead > reader.maximumRead {
+		t.Fatalf("workspace archive verification requested an unbounded buffer: %d", reader.largestRead)
+	}
+}
+
+type boundedZeroReader struct {
+	remaining   int64
+	maximumRead int
+	largestRead int
+}
+
+func (reader *boundedZeroReader) Read(buffer []byte) (int, error) {
+	if len(buffer) > reader.largestRead {
+		reader.largestRead = len(buffer)
+	}
+	if len(buffer) > reader.maximumRead {
+		return 0, errors.New("reader was asked for an unbounded buffer")
+	}
+	if reader.remaining == 0 {
+		return 0, io.EOF
+	}
+	count := len(buffer)
+	if int64(count) > reader.remaining {
+		count = int(reader.remaining)
+	}
+	clear(buffer[:count])
+	reader.remaining -= int64(count)
+	return count, nil
+}
 func TestRunRejectsUnknownLoadoutReceiptBeforeExecution(t *testing.T) {
 	t.Setenv("AGENTBRIDGE_TEST_HELPER", "1")
 	store, workspace, executable := agentBridgeFixture(t)

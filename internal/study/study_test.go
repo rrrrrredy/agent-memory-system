@@ -167,6 +167,15 @@ func TestCompleteBoundPopulationProducesOnlyADescriptiveSignal(t *testing.T) {
 		verification.StudiesChecked != 1 || verification.ObservationsChecked != 4 {
 		t.Fatalf("study replay failed: %+v", verification)
 	}
+	loaderCalls := 0
+	replayed := replayWithExecutionLoader(fixture.Store,
+		func(store *ledger.Store) ([]agentbridge.VerifiedExecution, error) {
+			loaderCalls++
+			return agentbridge.ListVerifiedExecutions(store)
+		})
+	if loaderCalls != 1 || len(replayed.Issues) != 0 {
+		t.Fatalf("study replay did not reuse one verified execution index: calls=%d issues=%v", loaderCalls, replayed.Issues)
+	}
 }
 
 func TestCallerAndSyntheticObservationsRemainNotEvaluable(t *testing.T) {
@@ -589,7 +598,7 @@ func writeStudyRevision(t *testing.T, root, text string) portable.Revision {
 
 func TestReservedWorkspaceIsOutsideEvidenceAndRemoved(t *testing.T) {
 	fixture := newStudyFixture(t)
-	workspace, cleanup, err := reserveIsolatedWorkspace(fixture.Store)
+	workspace, cleanup, err := reserveIsolatedWorkspace(fixture.Store, fixture.Repository)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -597,8 +606,26 @@ func TestReservedWorkspaceIsOutsideEvidenceAndRemoved(t *testing.T) {
 		t.Fatalf("reserved workspace is not isolated from evidence: %q", workspace)
 	}
 	root := filepath.Dir(workspace)
-	cleanup()
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("reserved workspace root was not removed: %v", err)
+	}
+}
+func TestReservedWorkspaceRejectsPortableGitWorktree(t *testing.T) {
+	fixture := newStudyFixture(t)
+	t.Setenv("TMPDIR", fixture.Repository)
+	t.Setenv("TMP", fixture.Repository)
+	t.Setenv("TEMP", fixture.Repository)
+	workspace, cleanup, err := reserveIsolatedWorkspace(fixture.Store, fixture.Repository)
+	if cleanup != nil {
+		_ = cleanup()
+	}
+	if err == nil {
+		t.Fatalf("portable Git worktree accepted as an isolated study workspace: %q", workspace)
+	}
+	if matches, globErr := filepath.Glob(filepath.Join(fixture.Repository, "agentmem-study-*")); globErr != nil || len(matches) != 0 {
+		t.Fatalf("rejected portable workspace left temporary data: matches=%v err=%v", matches, globErr)
 	}
 }

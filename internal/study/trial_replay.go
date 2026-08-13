@@ -144,7 +144,8 @@ func validateTrialTerminalRecord(item indexedRecord, value TrialTerminal) []stri
 	return issues
 }
 
-func validateTrialLinks(store *ledger.Store, state *replayState) {
+func validateTrialLinks(store *ledger.Store, state *replayState,
+	verifiedExecutions map[string]agentbridge.VerifiedExecution) {
 	for key, trial := range state.Trials {
 		prefix := trial.StudyID + "/" + trial.TaskID + ": "
 		plan, exists := state.Plans[trial.StudyID]
@@ -199,9 +200,9 @@ func validateTrialLinks(store *ledger.Store, state *replayState) {
 			state.Issues = append(state.Issues, prefix+"terminal execution record binding is invalid")
 			continue
 		}
-		execution, err := agentbridge.ResolveVerifiedExecution(store, terminal.Execution.EventID)
+		execution, verified := verifiedExecutions[terminal.Execution.EventID]
 		startedRecord, startedFound := state.Records[execution.Started.StartedEventID]
-		if err != nil || !startedFound || trialRecord.Index >= startedRecord.Index ||
+		if !verified || !startedFound || trialRecord.Index >= startedRecord.Index ||
 			startedRecord.Index >= executionRecord.Index || !hasParent(startedRecord.Record.Event, trial.TrialID) ||
 			!reflect.DeepEqual(execution.Request, trial.Request) || execution.Started.WorkspaceBinding == nil ||
 			!reflect.DeepEqual(*execution.Started.WorkspaceBinding, workspaceBinding(task.WorkspaceSnapshot)) {

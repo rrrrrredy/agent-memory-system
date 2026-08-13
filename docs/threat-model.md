@@ -154,9 +154,10 @@ assignment, Agent, elapsed period, and exact loadout before execution. The
 supported runner atomically writes one single-use task reservation before the
 process and always writes a terminal record. It verifies the archive content
 address, materializes the canonical tree in a random per-run directory outside
-the evidence store, checks it before the native start and immediately before
-launch, binds the archive and tree to the start, and removes it after the
-terminal. Direct receipts, second reservations, changed source directories,
+the evidence store, portable memory repository, and every detected Git worktree,
+checks it before the native start and immediately before launch, binds the
+archive and tree to the start, and surfaces any post-terminal cleanup failure.
+Direct receipts, second reservations, changed source directories,
 workspace changes caught by either preflight, and failed or missing terminals
 are ineligible.
 

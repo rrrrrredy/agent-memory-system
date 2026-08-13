@@ -357,7 +357,7 @@ func validateExecution(store *ledger.Store, receiptIndexed indexedRecord, receip
 	if started.WorkspaceBinding != nil {
 		if validateWorkspaceBinding(*started.WorkspaceBinding) != nil {
 			issues = append(issues, "workspace binding is invalid")
-		} else if _, err := checkedBlob(store, started.WorkspaceBinding.Archive, checked); err != nil {
+		} else if err := checkedBlobReference(store, started.WorkspaceBinding.Archive, checked); err != nil {
 			issues = append(issues, "workspace archive blob is invalid")
 		}
 	}
@@ -486,22 +486,29 @@ func verifyArtifactBlob(store *ledger.Store, artifact Artifact, checked map[stri
 	if err := validateArtifact(artifact); err != nil {
 		return err
 	}
-	data, err := checkedBlob(store, artifact.Blob, checked)
-	if err != nil {
-		return err
-	}
-	if int64(len(data)) != artifact.Bytes || sha256Hex(data) != artifact.SHA256 {
-		return errors.New("artifact differs from its blob")
-	}
-	return nil
+	return checkedBlobReference(store, artifact.Blob, checked)
 }
 
 func checkedBlob(store *ledger.Store, reference ledger.BlobRef, checked map[string]struct{}) ([]byte, error) {
 	data, err := readBlob(store, reference)
 	if err == nil {
-		checked[reference.SHA256] = struct{}{}
+		checked[blobCheckKey(reference)] = struct{}{}
 	}
 	return data, err
+}
+
+func checkedBlobReference(store *ledger.Store, reference ledger.BlobRef, checked map[string]struct{}) error {
+	if _, exists := checked[blobCheckKey(reference)]; exists {
+		return nil
+	}
+	err := verifyBlobReference(store, reference)
+	if err == nil {
+		checked[blobCheckKey(reference)] = struct{}{}
+	}
+	return err
+}
+func blobCheckKey(reference ledger.BlobRef) string {
+	return fmt.Sprintf("%s:%d:%s", reference.SHA256, reference.Bytes, reference.RelativePath)
 }
 
 func decodeCanonicalJSON(data []byte, target any) error {

@@ -126,9 +126,10 @@ need excluded VCS metadata are not covered.
 
 `agentmem study run` writes one single-use task reservation before Codex starts,
 materializes the sealed tree in a random temporary directory outside evidence,
-verifies both the archive and tree before the native start and again immediately
-before launch, binds them to the start, and removes the directory after the
-terminal. It writes a terminal record even for start errors, timeouts, nonzero
+portable memory, and detected Git worktrees, verifies both the archive and tree
+before the native start and again immediately before launch, binds them to the
+start, and returns any cleanup failure after the terminal. It writes a terminal
+record even for start errors, timeouts, nonzero
 exits, missing results, and second-preflight failures. Direct native receipts and
 second reservations are ineligible. `study observe` accepts only a completed
 reserved execution, requires its request and causal chain to match every sealed

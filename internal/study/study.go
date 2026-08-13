@@ -119,9 +119,9 @@ func Observe(store *ledger.Store, request ObservationRequest, now func() time.Ti
 	if !found {
 		return result, closeAppender(appender, errors.New("native Agent execution receipt is unavailable"))
 	}
-	execution, err := agentbridge.ResolveVerifiedExecution(store, request.ExecutionReceiptID)
-	if err != nil {
-		return result, closeAppender(appender, err)
+	execution, verified := state.VerifiedExecutions[request.ExecutionReceiptID]
+	if !verified {
+		return result, closeAppender(appender, errors.New("native Agent execution cannot be replayed"))
 	}
 	if issue := executionEligibility(store, state, plan, task, execution, request.ExecutionReceiptID); issue != "" {
 		return result, closeAppender(appender, errors.New(issue))

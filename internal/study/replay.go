@@ -32,6 +32,7 @@ type replayState struct {
 	OutcomeRecords       map[string]indexedRecord
 	Observations         map[string]map[string]Observation
 	ObservationRecords   map[string]indexedRecord
+	VerifiedExecutions   map[string]agentbridge.VerifiedExecution
 	Issues               []string
 }
 
@@ -48,11 +49,18 @@ func newReplayState() replayState {
 		OutcomeRecords:       map[string]indexedRecord{},
 		Observations:         map[string]map[string]Observation{},
 		ObservationRecords:   map[string]indexedRecord{},
+		VerifiedExecutions:   map[string]agentbridge.VerifiedExecution{},
 		Issues:               []string{},
 	}
 }
 
 func replay(store *ledger.Store) replayState {
+	return replayWithExecutionLoader(store, agentbridge.ListVerifiedExecutions)
+}
+
+type verifiedExecutionLoader func(*ledger.Store) ([]agentbridge.VerifiedExecution, error)
+
+func replayWithExecutionLoader(store *ledger.Store, loadExecutions verifiedExecutionLoader) replayState {
 	state := newReplayState()
 	if store == nil {
 		state.Issues = append(state.Issues, "local evidence store is required")
@@ -191,8 +199,18 @@ func replay(store *ledger.Store) replayState {
 			taskOwners[task.TaskID] = studyID
 		}
 	}
-	validateTrialLinks(store, &state)
-	validateStudyLinks(store, &state)
+	verifiedExecutions := map[string]agentbridge.VerifiedExecution{}
+	executions, err := loadExecutions(store)
+	if err != nil {
+		state.Issues = append(state.Issues, "native Agent executions cannot be replayed")
+	} else {
+		for _, execution := range executions {
+			verifiedExecutions[execution.Receipt.ReceiptID] = execution
+		}
+		state.VerifiedExecutions = verifiedExecutions
+	}
+	validateTrialLinks(store, &state, verifiedExecutions)
+	validateStudyLinks(store, &state, verifiedExecutions)
 	sort.Strings(state.Issues)
 	return state
 }
@@ -339,8 +357,9 @@ func validateObservationRecord(item indexedRecord, observation Observation) []st
 	return issues
 }
 
-func validateStudyLinks(store *ledger.Store, state *replayState) {
-	validateOutcomeLinks(store, state)
+func validateStudyLinks(store *ledger.Store, state *replayState,
+	verifiedExecutions map[string]agentbridge.VerifiedExecution) {
+	validateOutcomeLinks(store, state, verifiedExecutions)
 	for studyID, observations := range state.Observations {
 		plan, exists := state.Plans[studyID]
 		if !exists {
@@ -363,8 +382,8 @@ func validateStudyLinks(store *ledger.Store, state *replayState) {
 				state.Issues = append(state.Issues, prefix+"execution record binding is invalid")
 				continue
 			}
-			execution, err := agentbridge.ResolveVerifiedExecution(store, observation.Execution.EventID)
-			if err != nil {
+			execution, verified := verifiedExecutions[observation.Execution.EventID]
+			if !verified {
 				state.Issues = append(state.Issues, prefix+"native Agent execution cannot be replayed")
 				continue
 			}
@@ -414,7 +433,8 @@ func hasParent(event ledger.Event, parent string) bool {
 	return false
 }
 
-func validateOutcomeLinks(store *ledger.Store, state *replayState) {
+func validateOutcomeLinks(store *ledger.Store, state *replayState,
+	verifiedExecutions map[string]agentbridge.VerifiedExecution) {
 	for _, evidence := range state.Outcomes {
 		prefix := evidence.StudyID + "/" + evidence.TaskID + ": "
 		plan, exists := state.Plans[evidence.StudyID]
@@ -438,8 +458,8 @@ func validateOutcomeLinks(store *ledger.Store, state *replayState) {
 			state.Issues = append(state.Issues, prefix+"outcome evidence order or Agent is invalid")
 			continue
 		}
-		execution, err := agentbridge.ResolveVerifiedExecution(store, evidence.Execution.EventID)
-		if err != nil {
+		execution, verified := verifiedExecutions[evidence.Execution.EventID]
+		if !verified {
 			state.Issues = append(state.Issues, prefix+"outcome execution cannot be replayed")
 			continue
 		}
