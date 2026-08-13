@@ -567,4 +567,7 @@ func TestMaterializedWorkspaceDestinationUsesCanonicalEvidenceRoot(t *testing.T)
 	if got := materializedWorkspaceDestination(store, plan, task); got != want {
 		t.Fatalf("materialized workspace path was not canonicalized: got %q want %q", got, want)
 	}
+	if !pathWithin(materializedWorkspaceRoot(store), want) {
+		t.Fatal("canonical workspace destination escaped its canonical root")
+	}
 }

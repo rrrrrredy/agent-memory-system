@@ -184,20 +184,23 @@ func verifyWorkspaceSnapshot(store *ledger.Store, snapshot WorkspaceSnapshot, so
 	return nil
 }
 
-func materializedWorkspaceDestination(store *ledger.Store, plan Plan, task PlannedTask) string {
+func materializedWorkspaceRoot(store *ledger.Store) string {
 	evidenceRoot := store.Root()
 	if resolved, err := filepath.EvalSymlinks(evidenceRoot); err == nil {
 		evidenceRoot = resolved
 	}
-	root := filepath.Join(evidenceRoot, "state", "study-workspaces")
-	return filepath.Join(root, strings.TrimPrefix(plan.StudyID, "study-"), task.TaskID, "workspace")
+	return filepath.Join(evidenceRoot, "state", "study-workspaces")
+}
+
+func materializedWorkspaceDestination(store *ledger.Store, plan Plan, task PlannedTask) string {
+	return filepath.Join(materializedWorkspaceRoot(store), strings.TrimPrefix(plan.StudyID, "study-"), task.TaskID, "workspace")
 }
 
 func materializeWorkspace(store *ledger.Store, plan Plan, task PlannedTask) (string, error) {
 	if err := verifyWorkspaceSnapshot(store, task.WorkspaceSnapshot, task.WorkingDirectory); err != nil {
 		return "", err
 	}
-	root := filepath.Join(store.Root(), "state", "study-workspaces")
+	root := materializedWorkspaceRoot(store)
 	destination := materializedWorkspaceDestination(store, plan, task)
 	base := filepath.Dir(destination)
 	if !pathWithin(root, destination) {
