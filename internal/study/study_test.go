@@ -553,3 +553,18 @@ func writeStudyRevision(t *testing.T, root, text string) portable.Revision {
 	}
 	return revision
 }
+
+func TestMaterializedWorkspaceDestinationUsesCanonicalEvidenceRoot(t *testing.T) {
+	fixture := newStudyFixture(t)
+	store := fixture.Store
+	resolved, err := filepath.EvalSymlinks(store.Root())
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := Plan{StudyID: "study-" + strings.Repeat("a", 64)}
+	task := PlannedTask{TaskID: "canonical-workspace"}
+	want := filepath.Join(resolved, "state", "study-workspaces", strings.Repeat("a", 64), task.TaskID, "workspace")
+	if got := materializedWorkspaceDestination(store, plan, task); got != want {
+		t.Fatalf("materialized workspace path was not canonicalized: got %q want %q", got, want)
+	}
+}

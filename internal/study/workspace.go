@@ -185,7 +185,11 @@ func verifyWorkspaceSnapshot(store *ledger.Store, snapshot WorkspaceSnapshot, so
 }
 
 func materializedWorkspaceDestination(store *ledger.Store, plan Plan, task PlannedTask) string {
-	root := filepath.Join(store.Root(), "state", "study-workspaces")
+	evidenceRoot := store.Root()
+	if resolved, err := filepath.EvalSymlinks(evidenceRoot); err == nil {
+		evidenceRoot = resolved
+	}
+	root := filepath.Join(evidenceRoot, "state", "study-workspaces")
 	return filepath.Join(root, strings.TrimPrefix(plan.StudyID, "study-"), task.TaskID, "workspace")
 }
 
