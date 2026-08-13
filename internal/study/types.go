@@ -25,6 +25,9 @@ const (
 	PrivacyLocalOnly         = "local_only"
 	AssignmentPolicy         = "content_hash_counterbalanced/v1alpha1"
 	ClaimBoundary            = "prospective local built-in acceptance evidence; descriptive association only; not independent causal or provider certification"
+	WorkspaceSnapshotSchema  = "longitudinal-workspace-snapshot/v1alpha1"
+	WorkspaceArchiveFormat   = "tar/v1"
+	WorkspaceSnapshotPolicy  = "regular_files_excluding_vcs/v1alpha1"
 )
 
 type Condition string
@@ -59,6 +62,16 @@ type AcceptanceContract struct {
 	Assertions    []AcceptanceAssertion `json:"assertions"`
 }
 
+type WorkspaceSnapshot struct {
+	SchemaVersion     string         `json:"schema_version"`
+	SourcePathSHA256  string         `json:"source_path_sha256"`
+	Format            string         `json:"format"`
+	Policy            string         `json:"policy"`
+	Archive           ledger.BlobRef `json:"archive"`
+	Files             int            `json:"files"`
+	UncompressedBytes int64          `json:"uncompressed_bytes"`
+}
+
 type TaskDraft struct {
 	TaskID                 string             `json:"task_id"`
 	ClusterID              string             `json:"cluster_id"`
@@ -90,6 +103,7 @@ type PlannedTask struct {
 	Sandbox                string             `json:"sandbox"`
 	WorkingDirectory       string             `json:"working_directory"`
 	TimeoutSeconds         int                `json:"timeout_seconds"`
+	WorkspaceSnapshot      WorkspaceSnapshot  `json:"workspace_snapshot"`
 	SkipGitRepositoryCheck bool               `json:"skip_git_repository_check"`
 	Acceptance             AcceptanceContract `json:"acceptance"`
 	Order                  int                `json:"order"`

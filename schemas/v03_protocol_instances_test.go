@@ -123,18 +123,17 @@ func TestV03ProducerInstancesMatchPublishedSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := agentbridge.RunRequest{
-		SchemaVersion: agentbridge.RunRequestSchema, TaskID: baselineTask.TaskID, Prompt: baselineTask.Prompt,
-		Model: baselineTask.Model, Sandbox: baselineTask.Sandbox, WorkingDirectory: baselineTask.WorkingDirectory,
-		TimeoutSeconds: baselineTask.TimeoutSeconds, SkipGitRepositoryCheck: baselineTask.SkipGitRepositoryCheck,
-		Privacy: agentbridge.PrivacyLocalOnly,
-	}
-	nativeResult, err := agentbridge.Run(context.Background(), store, request, agentbridge.Options{
-		CodexPath: executable, Now: func() time.Time { return time.Date(2026, 8, 13, 3, 0, 0, 0, time.UTC) },
-	})
+	studyRun, err := study.RunTask(context.Background(), store, studyCreated.Plan.StudyID,
+		baselineTask.TaskID, study.RunTaskOptions{PortableRoot: repository, CodexPath: executable,
+			Now: func() time.Time { return time.Date(2026, 8, 13, 3, 0, 0, 0, time.UTC) }})
 	if err != nil {
 		t.Fatal(err)
 	}
+	if studyRun.Execution == nil {
+		t.Fatal("study producer emitted no native execution")
+	}
+	request := studyRun.Trial.Request
+	nativeResult := *studyRun.Execution
 	nativeVerification := agentbridge.Verify(store)
 	nativeStart := loadNativeStart(t, store)
 	observationRequest := study.ObservationRequest{SchemaVersion: study.ObserveRequestSchema,
@@ -176,6 +175,10 @@ func TestV03ProducerInstancesMatchPublishedSchemas(t *testing.T) {
 		"longitudinal-study-acceptance.schema.json":            acceptance,
 		"longitudinal-study-plan.schema.json":                  studyCreated.Plan,
 		"longitudinal-study-create-result.schema.json":         studyCreated,
+		"longitudinal-workspace-snapshot.schema.json":          baselineTask.WorkspaceSnapshot,
+		"longitudinal-study-trial-reservation.schema.json":     studyRun.Trial,
+		"longitudinal-study-trial-terminal.schema.json":        studyRun.Terminal,
+		"longitudinal-study-run-result.schema.json":            studyRun,
 		"longitudinal-study-observation-request.schema.json":   observationRequest,
 		"longitudinal-study-outcome-evidence.schema.json":      studyObserved.Outcome,
 		"longitudinal-study-observation.schema.json":           studyObserved.Observation,
@@ -198,6 +201,12 @@ func TestV03ProducerInstancesMatchPublishedSchemas(t *testing.T) {
 	falseAuthority.OutcomeAuthority = study.OutcomeAuthority("caller_attestation")
 	rejectPublishedInstance(t, "longitudinal-study-observation.schema.json", falseAuthority)
 	wrongPacket := packet
+	wrongSnapshot := baselineTask.WorkspaceSnapshot
+	wrongSnapshot.Files = -1
+	rejectPublishedInstance(t, "longitudinal-workspace-snapshot.schema.json", wrongSnapshot)
+	missingExecution := studyRun.Terminal
+	missingExecution.Execution = nil
+	rejectPublishedInstance(t, "longitudinal-study-trial-terminal.schema.json", missingExecution)
 	wrongPacket.SourceEvidenceRecords = 0
 	rejectPublishedInstance(t, "candidate-review-packet.schema.json", wrongPacket)
 }

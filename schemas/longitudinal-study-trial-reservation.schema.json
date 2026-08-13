@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-study-trial-reservation.schema.json",
+  "title": "Longitudinal Study Trial Reservation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "trial_id", "study_id", "task_id", "condition", "plan", "request", "workspace_snapshot", "reserved_at", "privacy"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-study-trial-reservation/v1alpha1"},
+    "trial_id": {"type": "string", "pattern": "^study-trial-[a-f0-9]{64}$"},
+    "study_id": {"type": "string", "pattern": "^study-[a-f0-9]{64}$"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
+    "condition": {"enum": ["baseline", "memory"]},
+    "plan": {"$ref": "longitudinal-study-observation.schema.json#/$defs/bound_event"},
+    "request": {"$ref": "native-agent-run-request.schema.json"},
+    "workspace_snapshot": {"$ref": "longitudinal-workspace-snapshot.schema.json"},
+    "reserved_at": {"type": "string", "format": "date-time"},
+    "privacy": {"const": "local_only"}
+  }
+}

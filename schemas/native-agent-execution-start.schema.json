@@ -9,7 +9,7 @@
     "request_blob", "prompt_sha256", "prompt_blob", "codex_executable", "codex_version",
     "runner_executable", "arguments", "arguments_sha256", "environment_policy",
     "environment_names_sha256", "environment_names_count", "working_directory_sha256",
-    "memory_references", "started_at", "privacy"
+    "parent_event_ids", "memory_references", "started_at", "privacy"
   ],
   "properties": {
     "schema_version": {"const": "native-agent-execution-start/v1alpha1"},
@@ -32,6 +32,10 @@
     "environment_names_sha256": {"$ref": "#/$defs/sha256"},
     "environment_names_count": {"type": "integer", "minimum": 1},
     "working_directory_sha256": {"$ref": "#/$defs/sha256"},
+    "parent_event_ids": {
+      "type": "array", "maxItems": 8, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 512}
+    },
     "loadout_context_receipt_id": {"type": "string", "pattern": "^loadout-context-.+"},
     "memory_references": {
       "type": "array", "maxItems": 64, "uniqueItems": true,

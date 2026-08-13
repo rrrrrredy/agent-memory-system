@@ -52,7 +52,7 @@ func BuildSnapshot(store *ledger.Store, options Options) Snapshot {
 	}
 	snapshot := Snapshot{SchemaVersion: SchemaVersion, GeneratedAt: options.Now().UTC(),
 		StudyReports: []study.Report{}, Issues: []string{},
-		PrivacyBoundary: "summary metadata only; raw transcripts, tool payloads, reasoning, memory text, and secrets are not served",
+		PrivacyBoundary: "summary metadata only; raw transcripts, tool payloads, reasoning, memory text, secrets, local paths, and raw verifier errors are not served",
 		Privacy:         "local_only"}
 	if store == nil {
 		snapshot.Issues = append(snapshot.Issues, "local evidence store is required")
@@ -71,25 +71,32 @@ func BuildSnapshot(store *ledger.Store, options Options) Snapshot {
 		snapshot.Loadouts = portable.ListLoadoutStatus(options.Repository)
 	}
 	if reports, err := study.ListReports(store, options.Now); err != nil {
-		snapshot.Issues = append(snapshot.Issues, err.Error())
+		snapshot.Issues = append(snapshot.Issues, "study reports: verification_failed")
 	} else {
 		snapshot.StudyReports = reports
 	}
-	appendIssues := func(component string, issues []string) {
-		for _, issue := range issues {
-			snapshot.Issues = append(snapshot.Issues, component+": "+issue)
+	appendIssueCode := func(component string, count int) {
+		if count != 0 {
+			snapshot.Issues = append(snapshot.Issues, component+": verification_failed")
 		}
 	}
-	appendIssues("evidence", snapshot.Evidence.Issues)
-	appendIssues("reviews", snapshot.Reviews.Issues)
-	appendIssues("promotions", snapshot.Promotions.Issues)
-	appendIssues("retrieval", snapshot.Retrieval.Issues)
-	appendIssues("loadout contexts", snapshot.LoadoutContexts.Issues)
-	appendIssues("native executions", snapshot.NativeExecutions.Issues)
-	appendIssues("studies", snapshot.Studies.Issues)
-	for _, issue := range snapshot.Loadouts.Repository.Issues {
-		snapshot.Issues = append(snapshot.Issues, "portable repository: "+issue.Message)
-	}
+	appendIssueCode("evidence", len(snapshot.Evidence.Issues))
+	appendIssueCode("reviews", len(snapshot.Reviews.Issues))
+	appendIssueCode("promotions", len(snapshot.Promotions.Issues))
+	appendIssueCode("retrieval", len(snapshot.Retrieval.Issues))
+	appendIssueCode("loadout contexts", len(snapshot.LoadoutContexts.Issues))
+	appendIssueCode("native executions", len(snapshot.NativeExecutions.Issues))
+	appendIssueCode("studies", len(snapshot.Studies.Issues))
+	appendIssueCode("portable repository", len(snapshot.Loadouts.Repository.Issues))
+	// Dashboard-specific DTOs retain counters and stable status codes only.
+	snapshot.Evidence.Issues = []string{}
+	snapshot.Reviews.Issues = []string{}
+	snapshot.Promotions.Issues = []string{}
+	snapshot.Retrieval.Issues = []string{}
+	snapshot.LoadoutContexts.Issues = []string{}
+	snapshot.NativeExecutions.Issues = []string{}
+	snapshot.Studies.Issues = []string{}
+	snapshot.Loadouts.Repository.Issues = []portable.VerificationIssue{}
 	snapshot.Ready = len(snapshot.Issues) == 0
 	return snapshot
 }

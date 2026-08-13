@@ -2,9 +2,11 @@ package dashboard
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -104,6 +106,42 @@ func TestDashboardIndexContainsNoExternalResources(t *testing.T) {
 	if response.Code != http.StatusOK || strings.Contains(content, "http://") ||
 		strings.Contains(content, "https://") || !strings.Contains(content, "Read-only local integrity") {
 		t.Fatalf("dashboard index is not self-contained: code=%d", response.Code)
+	}
+}
+
+func TestDashboardRedactsPrivatePathsFromEveryFailureSurface(t *testing.T) {
+	privateMarker := "PRIVATE-PROJECT-SENTINEL"
+	root := filepath.Join(t.TempDir(), privateMarker)
+	store, err := ledger.Init(filepath.Join(root, "evidence"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := filepath.Join(root, "portable")
+	if err := portable.InitRepository(repository); err != nil {
+		t.Fatal(err)
+	}
+	events := filepath.Join(store.Root(), "evidence", "events.jsonl")
+	if err := os.Remove(events); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(events, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	request.Host = "127.0.0.1:8765"
+	NewHandler(store, Options{Repository: repository}).ServeHTTP(response, request)
+	data := response.Body.String()
+	if response.Code != http.StatusOK || strings.Contains(data, privateMarker) {
+		t.Fatalf("dashboard exposed a private failure path: code=%d body=%s", response.Code, data)
+	}
+	var snapshot Snapshot
+	if err := json.Unmarshal([]byte(data), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Ready || len(snapshot.Issues) == 0 || len(snapshot.Evidence.Issues) != 0 ||
+		len(snapshot.Reviews.Issues) != 0 || len(snapshot.NativeExecutions.Issues) != 0 {
+		t.Fatalf("dashboard failure summary is incomplete or unsafe: %+v", snapshot)
 	}
 }
 

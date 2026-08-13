@@ -46,6 +46,9 @@ The command reports:
 provider access, hook installation, native event capture, or task quality.
 `--require-all` returns a nonzero exit status unless every selected executable
 is available.
+The default probe reads the executable once, content-addresses those bytes,
+stages a private temporary copy, and runs that exact copy for its version output;
+the reported hash therefore names the bytes that were executed.
 
 On Windows, an app-execution alias can be readable and hashable while direct
 version probing is blocked by application control. In that case runtime status

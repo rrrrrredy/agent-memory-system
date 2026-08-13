@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-workspace-snapshot.schema.json",
+  "title": "Longitudinal Workspace Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source_path_sha256", "format", "policy", "archive", "files", "uncompressed_bytes"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-workspace-snapshot/v1alpha1"},
+    "source_path_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "format": {"const": "tar/v1"},
+    "policy": {"const": "regular_files_excluding_vcs/v1alpha1"},
+    "archive": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "files": {"type": "integer", "minimum": 0, "maximum": 100000},
+    "uncompressed_bytes": {"type": "integer", "minimum": 0, "maximum": 4294967296}
+  }
+}

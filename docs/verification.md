@@ -118,17 +118,23 @@ placeholder.
 ### Prospective longitudinal observation
 
 `agentmem study create` seals the complete task and cluster population, every
-prompt and native run setting, immutable Agent-message SHA-256 acceptance
-assertions, exact loadout, minimum elapsed period, Agent, and deterministic
-balanced assignment before eligible execution. `study observe` accepts only
-the first later completed execution for that task, requires its request to
-match every sealed field, derives the outcome with the built-in evaluator, and
-binds a dedicated replayable outcome event. The caller cannot submit a result.
+prompt and native run setting, a content-addressed snapshot of each working
+directory, immutable Agent-message SHA-256 acceptance assertions, exact
+loadout, minimum elapsed period, Agent, and deterministic balanced assignment
+before eligible execution. `agentmem study run` writes one single-use task
+reservation before Codex starts, materializes the private snapshot, and writes
+a terminal record even for start errors, timeouts, nonzero exits, and missing
+results. Direct native receipts and second reservations are ineligible.
+`study observe` accepts only a completed reserved execution, requires its
+request and causal chain to match every sealed field, hashes the complete Agent
+message, derives the outcome with the built-in evaluator, and binds a dedicated
+replayable outcome event. The caller cannot submit a result. Undisclosed runs
+outside the supported study command remain within the honest-operator boundary.
 
 The report remains `not_evaluable` for an incomplete population, insufficient
 elapsed time, an arm with fewer than two observations, a synthetic observation,
 a replaced or retried execution, an outcome that differs from built-in replay,
-missing causal evidence, or any replay failure. A complete report is
+a missing or failed terminal, missing causal evidence, or any replay failure. A complete report is
 labelled `descriptive_signal` and carries this boundary:
 
 ```text

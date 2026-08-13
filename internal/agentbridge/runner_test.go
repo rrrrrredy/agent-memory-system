@@ -2,6 +2,9 @@ package agentbridge
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
+	loadoutcontext "github.com/rrrrrredy/agent-memory-system/internal/loadout"
+	"github.com/rrrrrredy/agent-memory-system/internal/portable"
+	"github.com/rrrrrredy/agent-memory-system/internal/retrieval"
+	"github.com/rrrrrredy/agent-memory-system/internal/review"
 )
 
 func TestMain(m *testing.M) {
@@ -39,6 +47,23 @@ func runAgentBridgeTestHelper() {
 		os.Exit(5)
 	}
 	fmt.Println(`{"type":"thread.started","thread_id":"native-thread"}`)
+	if ready := os.Getenv("AGENTBRIDGE_BLOCK_READY"); ready != "" {
+		if err := os.WriteFile(ready, []byte("ready"), 0o600); err != nil {
+			os.Exit(6)
+		}
+		release := os.Getenv("AGENTBRIDGE_BLOCK_RELEASE")
+		deadline := time.Now().Add(15 * time.Second)
+		for {
+			if _, err := os.Stat(release); err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				os.Exit(7)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
 	if strings.Contains(string(prompt), "force process failure") {
 		fmt.Println(`{"type":`)
 		fmt.Fprintln(os.Stderr, "forced failure")
@@ -125,6 +150,72 @@ func TestRunRejectsUnknownLoadoutReceiptBeforeExecution(t *testing.T) {
 	}
 }
 
+func TestLoadoutUseLeaseBlocksPortableMutationThroughNativeExecution(t *testing.T) {
+	t.Setenv("AGENTBRIDGE_TEST_HELPER", "1")
+	store, workspace, executable := agentBridgeFixture(t)
+	repository := filepath.Join(t.TempDir(), "portable")
+	if err := portable.InitRepository(repository); err != nil {
+		t.Fatal(err)
+	}
+	revision := writeAgentBridgeRevision(t, repository, "Keep the verified memory head stable during delivery.")
+	created, err := portable.CreateLoadout(repository, portable.LoadoutCreateOptions{
+		Name: "Stable delivery", Agents: []ledger.Agent{ledger.AgentCodex},
+		Scope: review.Scope{Kind: review.ScopeGlobal, Value: "*"}, MemoryIDs: []string{revision.MemoryID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	contextResult, err := loadoutcontext.BuildContext(store, repository, created.Loadout.LoadoutID,
+		retrieval.Context{Agent: ledger.AgentCodex, ThreadID: "lease-thread", Task: "native-smoke",
+			Channel: retrieval.ChannelHarness})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := testRunRequest(workspace, "Return a verified answer.")
+	request.LoadoutContextReceiptID = contextResult.Receipt.ReceiptID
+	ready := filepath.Join(t.TempDir(), "helper-ready")
+	release := filepath.Join(t.TempDir(), "helper-release")
+	t.Setenv("AGENTBRIDGE_BLOCK_READY", ready)
+	t.Setenv("AGENTBRIDGE_BLOCK_RELEASE", release)
+	type executionResult struct {
+		result RunResult
+		err    error
+	}
+	completed := make(chan executionResult, 1)
+	go func() {
+		result, err := Run(context.Background(), store, request, Options{CodexPath: executable,
+			PortableRoot: repository, Now: fixedAgentBridgeClock()})
+		completed <- executionResult{result: result, err: err}
+	}()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("native execution did not reach the loadout-backed process boundary")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if mutationLock, err := portable.AcquireRepositoryLock(repository); err == nil {
+		_ = mutationLock.Release()
+		t.Fatal("portable mutation lock was acquired during loadout-backed execution")
+	} else if !strings.Contains(err.Error(), "repository is locked") {
+		t.Fatalf("unexpected portable mutation failure: %v", err)
+	}
+	if err := os.WriteFile(release, []byte("release"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case finished := <-completed:
+		if finished.err != nil || finished.result.Receipt.Outcome != OutcomeCompleted {
+			t.Fatalf("loadout-backed native execution failed: result=%+v err=%v", finished.result, finished.err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("loadout-backed native execution did not finish")
+	}
+}
+
 func TestParserAcceptsAdditiveFieldsAndRejectsMalformedEvents(t *testing.T) {
 	valid := strings.Join([]string{
 		`{"type":"thread.started","thread_id":"thread","unknown":1}`,
@@ -166,4 +257,51 @@ func testRunRequest(workspace, prompt string) RunRequest {
 
 func fixedAgentBridgeClock() func() time.Time {
 	return func() time.Time { return time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC) }
+}
+
+func writeAgentBridgeRevision(t *testing.T, root, text string) portable.Revision {
+	t.Helper()
+	textDigest := sha256.Sum256([]byte(text))
+	textSHA := hex.EncodeToString(textDigest[:])
+	memoryEnvelope := struct {
+		Version            string       `json:"version"`
+		RedactedTextSHA256 string       `json:"redacted_text_sha256"`
+		Scope              review.Scope `json:"scope"`
+	}{"memory-identity/v1alpha1", textSHA, review.Scope{Kind: review.ScopeGlobal, Value: "*"}}
+	memoryData, _ := json.Marshal(memoryEnvelope)
+	memoryDigest := sha256.Sum256(memoryData)
+	revision := portable.Revision{
+		SchemaVersion:           portable.RevisionSchemaVersion,
+		MemoryID:                "memory-" + hex.EncodeToString(memoryDigest[:]),
+		Action:                  portable.ActionPromote,
+		Status:                  portable.StatusActive,
+		Kind:                    candidates.KindDirective,
+		ScopeKind:               review.ScopeGlobal,
+		ScopeValue:              "*",
+		EvidenceBasis:           []review.Basis{review.BasisExplicitRemember},
+		Text:                    text,
+		TextSHA256:              textSHA,
+		RuleChangeAuthorization: "not_granted",
+		Privacy:                 portable.PortablePrivacy,
+	}
+	identity := revision
+	identity.Text = ""
+	identity.RevisionID = ""
+	revisionData, _ := json.Marshal(identity)
+	revisionDigest := sha256.Sum256(revisionData)
+	revision.RevisionID = "portable-revision-" + hex.EncodeToString(revisionDigest[:])
+	data, err := portable.RenderRevision(revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	memoryHash := strings.TrimPrefix(revision.MemoryID, "memory-")
+	revisionHash := strings.TrimPrefix(revision.RevisionID, "portable-revision-")
+	path := filepath.Join(root, "memories", memoryHash[:2], memoryHash, revisionHash+".md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return revision
 }

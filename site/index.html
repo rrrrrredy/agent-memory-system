@@ -204,7 +204,7 @@
         </div>
       </div>
       <div class="flow" aria-label="Memory lifecycle">
-        <article class="stage"><h2>Local evidence</h2><p>Raw, immutable, kept on your machine.</p><div class="orb"><svg viewBox="0 0 80 80" fill="none" stroke-width="2"><path d="M14 21h28l8 8h16v37H14z"/><path d="M23 14h27l10 10v15M28 25h14M28 33h20M26 51h28M26 58h20"/></svg></div><div class="note">Unredacted notes, logs, traces, and artifacts.</div></article>
+        <article class="stage"><h2>Local evidence</h2><p>Raw, append-only, integrity-checked, and kept on your machine.</p><div class="orb"><svg viewBox="0 0 80 80" fill="none" stroke-width="2"><path d="M14 21h28l8 8h16v37H14z"/><path d="M23 14h27l10 10v15M28 25h14M28 33h20M26 51h28M26 58h20"/></svg></div><div class="note">Unredacted notes, logs, traces, and artifacts stay local.</div></article>
         <article class="stage"><h2>Reviewed memory</h2><p>Operator-attested, redacted, ready to share.</p><div class="orb"><svg viewBox="0 0 80 80" fill="none" stroke-width="2"><rect x="16" y="10" width="48" height="58" rx="5"/><path d="m25 27 5 5 9-10m-14 24 5 5 9-10m7-14h10m-10 19h10"/></svg></div><div class="note">Policy requires human inspection; caller identity is not authenticated.</div></article>
         <article class="stage"><h2>Private Git</h2><p>Versioned memory under your control.</p><div class="orb"><svg viewBox="0 0 80 80" fill="none" stroke-width="2"><path d="M40 11 66 38 40 66 14 38z"/><circle cx="31" cy="29" r="4"/><circle cx="49" cy="48" r="4"/><path d="M31 33v13a5 5 0 0 0 5 5h9m-14-5 18-18"/></svg></div><div class="note">Portable, auditable, conflict-aware revisions.</div></article>
         <article class="stage"><h2>Coding agents</h2><p>Codex, Claude Code, and OpenCode.</p><div class="orb"><svg viewBox="0 0 80 80" fill="none" stroke-width="2"><rect x="10" y="14" width="60" height="50" rx="5"/><path d="M10 27h60M19 21h1m7 0h1m7 0h1M28 39l-8 7 8 7m8 0h18"/></svg></div><div class="note">Retrieve what helps. Record what was delivered.</div></article>
@@ -228,7 +228,7 @@
           <article class="feature"><small>Capture</small><h3>Append-only local evidence</h3><p>Source bytes, normalized events, completeness gaps, and capture receipts stay in a hash-chained local store.</p></article>
           <article class="feature"><small>Review</small><h3>Evidence-bound review packets</h3><p>A concise local packet shows the exact candidate, support, conflicts, and content hash without combining validation and promotion attestations.</p></article>
           <article class="feature"><small>Distribution</small><h3>Verified memory loadouts</h3><p>Named, immutable sets bind exact active revisions, agent eligibility, scope, and budgets for reproducible task context.</p></article>
-          <article class="feature"><small>Measurement</small><h3>Prospective longitudinal studies</h3><p>Full task requests and acceptance hashes are sealed before execution. Changed requests, retries, missing arms, or short duration remain not evaluable.</p></article>
+          <article class="feature"><small>Measurement</small><h3>Prospective longitudinal studies</h3><p>Requests, workspace snapshots, and acceptance hashes are sealed before execution. Reused reservations, failed or missing trials, missing arms, and short duration remain not evaluable.</p></article>
         </div>
       </div>
     </section>

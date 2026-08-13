@@ -1,10 +1,8 @@
 package study
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"reflect"
 	"sort"
 	"strings"
@@ -34,7 +32,7 @@ func Create(store *ledger.Store, draft Draft, options CreateOptions) (CreateResu
 	if options.Now != nil {
 		now = options.Now
 	}
-	plan, err := buildPlan(draft, selected, now().UTC())
+	plan, err := buildPlan(store, draft, selected, now().UTC())
 	if err != nil {
 		return result, err
 	}
@@ -393,33 +391,18 @@ func evaluateOutcome(store *ledger.Store, plan Plan, task PlannedTask, execution
 	for _, assertion := range task.Acceptance.Assertions {
 		item := AssertionResult{Kind: assertion.Kind, Path: assertion.Path,
 			ExpectedSHA256: assertion.ExpectedSHA256, Status: "failed"}
-		var data []byte
 		switch assertion.Kind {
 		case "agent_message_sha256":
 			if execution.Receipt.AgentMessageBlob != nil {
-				input, openErr := store.OpenBlob(*execution.Receipt.AgentMessageBlob)
-				if openErr != nil {
-					return evidence, openErr
+				reference := *execution.Receipt.AgentMessageBlob
+				// ResolveVerifiedExecution already replayed the complete raw JSONL
+				// and exact message blob. Reuse that whole-blob binding instead of
+				// reading or hashing an arbitrary prefix.
+				item.CapturedBlob = &reference
+				item.ActualSHA256 = reference.SHA256
+				if item.ActualSHA256 == item.ExpectedSHA256 {
+					item.Status = "passed"
 				}
-				data, err = io.ReadAll(io.LimitReader(input, 4*1024*1024+1))
-				closeErr := input.Close()
-				if err == nil {
-					err = closeErr
-				}
-			}
-		}
-		if err != nil {
-			return evidence, err
-		}
-		if data != nil {
-			reference, putErr := store.PutBlob(bytes.NewReader(data))
-			if putErr != nil {
-				return evidence, putErr
-			}
-			item.CapturedBlob = &reference
-			item.ActualSHA256 = digest(data)
-			if item.ActualSHA256 == item.ExpectedSHA256 {
-				item.Status = "passed"
 			}
 		}
 		if item.Status != "passed" {

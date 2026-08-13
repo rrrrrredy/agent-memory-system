@@ -95,7 +95,7 @@ func validateObservationRequest(request ObservationRequest) error {
 	return nil
 }
 
-func buildPlan(draft Draft, loadout portable.Loadout, createdAt time.Time) (Plan, error) {
+func buildPlan(store *ledger.Store, draft Draft, loadout portable.Loadout, createdAt time.Time) (Plan, error) {
 	tasks := append([]TaskDraft(nil), draft.Tasks...)
 	sort.Slice(tasks, func(i, j int) bool { return tasks[i].TaskID < tasks[j].TaskID })
 	plan := Plan{
@@ -113,13 +113,18 @@ func buildPlan(draft Draft, loadout portable.Loadout, createdAt time.Time) (Plan
 		if err != nil || !info.IsDir() {
 			return Plan{}, errors.New("longitudinal study working directory is not a directory")
 		}
+		snapshot, err := snapshotWorkspace(store, resolved)
+		if err != nil {
+			return Plan{}, fmt.Errorf("seal longitudinal study workspace: %w", err)
+		}
 		assertions := append([]AcceptanceAssertion(nil), task.Acceptance.Assertions...)
 		sort.Slice(assertions, func(i, j int) bool { return assertionKey(assertions[i]) < assertionKey(assertions[j]) })
 		plan.Tasks[index] = PlannedTask{TaskID: task.TaskID, ClusterID: task.ClusterID,
 			Prompt: task.Prompt, Model: task.Model, Sandbox: task.Sandbox, WorkingDirectory: resolved,
 			TimeoutSeconds: task.TimeoutSeconds, SkipGitRepositoryCheck: task.SkipGitRepositoryCheck,
-			Acceptance: AcceptanceContract{SchemaVersion: AcceptanceSchema, Mode: "all", Assertions: assertions},
-			Order:      index + 1}
+			WorkspaceSnapshot: snapshot,
+			Acceptance:        AcceptanceContract{SchemaVersion: AcceptanceSchema, Mode: "all", Assertions: assertions},
+			Order:             index + 1}
 	}
 	seed, err := assignmentSeed(plan)
 	if err != nil {
@@ -187,7 +192,7 @@ func validatePlan(plan Plan) error {
 		if err := validateTaskContract(TaskDraft{TaskID: task.TaskID, ClusterID: task.ClusterID,
 			Prompt: task.Prompt, Model: task.Model, Sandbox: task.Sandbox,
 			WorkingDirectory: task.WorkingDirectory, TimeoutSeconds: task.TimeoutSeconds,
-			SkipGitRepositoryCheck: task.SkipGitRepositoryCheck, Acceptance: task.Acceptance}); err != nil ||
+			SkipGitRepositoryCheck: task.SkipGitRepositoryCheck, Acceptance: task.Acceptance}); err != nil || validateWorkspaceSnapshotEnvelope(task.WorkspaceSnapshot, task.WorkingDirectory) != nil ||
 			task.TaskID <= previous || task.Order != index+1 || task.Condition != expected {
 			return errors.New("longitudinal study task assignment is invalid")
 		}
@@ -238,7 +243,7 @@ func validateTaskContract(task TaskDraft) error {
 		strings.TrimSpace(task.Prompt) == "" || len([]byte(task.Prompt)) > 128*1024 ||
 		strings.TrimSpace(task.Model) == "" || len(task.Model) > 128 ||
 		!filepath.IsAbs(task.WorkingDirectory) || strings.ContainsRune(task.WorkingDirectory, 0) ||
-		task.TimeoutSeconds < 30 || task.TimeoutSeconds > 3600 {
+		task.TimeoutSeconds < 30 || task.TimeoutSeconds > 3600 || !task.SkipGitRepositoryCheck {
 		return errors.New("longitudinal study task contract is invalid")
 	}
 	if task.Sandbox != "read-only" && task.Sandbox != "workspace-write" {

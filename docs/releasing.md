@@ -38,9 +38,10 @@ scans protected `main` and tag history, and builds Windows, macOS, and Linux
 archives for amd64 and arm64. Separate GitHub-hosted Windows, macOS, and Linux
 jobs then download the exact staging artifact, verify its checksum, execute the
 embedded version metadata, and run the full quickstart with the archived
-binary. Only after all three jobs pass does the workflow write `SHA256SUMS`,
-`REQUIRED_CHECKS.json`, hosted acceptance receipts, and `PROVENANCE.json` into
-a 14-day verified release artifact.
+binary. The build job writes the staging `SHA256SUMS`; only after all three
+acceptance jobs pass does the workflow assemble the final 14-day candidate with
+that checksum file, `REQUIRED_CHECKS.json`, hosted acceptance receipts, and
+`PROVENANCE.json`.
 
 The workflow cannot push a tag or create a release.
 

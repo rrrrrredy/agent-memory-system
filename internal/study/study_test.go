@@ -89,12 +89,12 @@ func TestPlanCounterbalancesAStablePopulationWithoutUsingCreationTimeAsSeed(t *t
 func TestObservationRejectsAnExecutionThatPredatesTheSealedPlan(t *testing.T) {
 	fixture := newStudyFixture(t)
 	draft := studyDraft(fixture.Loadout.LoadoutID, fixture.Workspace, 7)
-	preview, err := buildPlan(draft, fixture.Loadout, time.Date(2026, 8, 3, 0, 0, 0, 0, time.UTC))
+	preview, err := buildPlan(fixture.Store, draft, fixture.Loadout, time.Date(2026, 8, 3, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
 	baseline := taskWithCondition(t, preview, ConditionBaseline)
-	receipt := runStudyTask(t, fixture, baseline, "", time.Date(2026, 8, 3, 1, 0, 0, 0, time.UTC))
+	receipt := runUnboundStudyTask(t, fixture, baseline, "", time.Date(2026, 8, 3, 1, 0, 0, 0, time.UTC))
 	created, err := Create(fixture.Store, draft, CreateOptions{PortableRoot: fixture.Repository,
 		Now: fixedStudyClock(time.Date(2026, 8, 3, 2, 0, 0, 0, time.UTC))})
 	if err != nil {
@@ -103,7 +103,7 @@ func TestObservationRejectsAnExecutionThatPredatesTheSealedPlan(t *testing.T) {
 	_, err = Observe(fixture.Store, observationRequest(created.Plan.StudyID, baseline.TaskID,
 		receipt.ReceiptID, "caller_attestation"),
 		fixedStudyClock(time.Date(2026, 8, 3, 3, 0, 0, 0, time.UTC)))
-	if err == nil || !strings.Contains(err.Error(), "prospectively ordered") {
+	if err == nil || !strings.Contains(err.Error(), "one-shot reservation") {
 		t.Fatalf("pre-plan execution was accepted: %v", err)
 	}
 }
@@ -112,11 +112,11 @@ func TestObservationRejectsBaselineForAMemoryAssignment(t *testing.T) {
 	fixture := newStudyFixture(t)
 	created := createStudyPlan(t, fixture, time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC), 7)
 	memoryTask := taskWithCondition(t, created.Plan, ConditionMemory)
-	receipt := runStudyTask(t, fixture, memoryTask, "", time.Date(2026, 8, 4, 1, 0, 0, 0, time.UTC))
+	receipt := runUnboundStudyTask(t, fixture, memoryTask, "", time.Date(2026, 8, 4, 1, 0, 0, 0, time.UTC))
 	_, err := Observe(fixture.Store, observationRequest(created.Plan.StudyID, memoryTask.TaskID,
 		receipt.ReceiptID, "caller_attestation"),
 		fixedStudyClock(time.Date(2026, 8, 4, 2, 0, 0, 0, time.UTC)))
-	if err == nil || !strings.Contains(err.Error(), "sealed loadout") {
+	if err == nil || !strings.Contains(err.Error(), "one-shot reservation") {
 		t.Fatalf("memory assignment accepted an execution without memory: %v", err)
 	}
 }
@@ -127,11 +127,7 @@ func TestCompleteBoundPopulationProducesOnlyADescriptiveSignal(t *testing.T) {
 	created := createStudyPlan(t, fixture, start, 3)
 	for index, task := range created.Plan.Tasks {
 		at := start.Add(time.Duration(index+1) * 24 * time.Hour)
-		contextID := ""
-		if task.Condition == ConditionMemory {
-			contextID = buildStudyContext(t, fixture, task.TaskID)
-		}
-		receipt := runStudyTask(t, fixture, task, contextID, at)
+		receipt := runStudyTask(t, fixture, task, at)
 		result, err := Observe(fixture.Store, observationRequest(created.Plan.StudyID, task.TaskID,
 			receipt.ReceiptID, "caller_attestation"),
 			fixedStudyClock(at.Add(time.Hour)))
@@ -172,7 +168,7 @@ func TestCallerAndSyntheticObservationsRemainNotEvaluable(t *testing.T) {
 	start := time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)
 	created := createStudyPlan(t, fixture, start, 1)
 	baseline := taskWithCondition(t, created.Plan, ConditionBaseline)
-	receipt := runStudyTask(t, fixture, baseline, "", start.Add(24*time.Hour))
+	receipt := runStudyTask(t, fixture, baseline, start.Add(24*time.Hour))
 	if _, err := Observe(fixture.Store, observationRequest(created.Plan.StudyID, baseline.TaskID,
 		receipt.ReceiptID, "synthetic_test"), fixedStudyClock(start.Add(48*time.Hour))); err != nil {
 		t.Fatal(err)
@@ -187,24 +183,88 @@ func TestCallerAndSyntheticObservationsRemainNotEvaluable(t *testing.T) {
 	}
 }
 
-func TestObservationRejectsRewrittenTaskAndCherryPickedRetry(t *testing.T) {
+func TestOnlyTheReservedStudyBoundAttemptCanBeObserved(t *testing.T) {
 	fixture := newStudyFixture(t)
 	start := time.Date(2026, 8, 6, 0, 0, 0, 0, time.UTC)
 	created := createStudyPlan(t, fixture, start, 1)
 	task := taskWithCondition(t, created.Plan, ConditionBaseline)
 	rewritten := task
 	rewritten.Prompt = "Complete a different task under the same identifier."
-	first := runStudyTask(t, fixture, rewritten, "", start.Add(time.Hour))
+	first := runUnboundStudyTask(t, fixture, rewritten, "", start.Add(time.Hour))
 	_, err := Observe(fixture.Store, observationRequest(created.Plan.StudyID, task.TaskID,
 		first.ReceiptID, "caller_attestation"), fixedStudyClock(start.Add(2*time.Hour)))
-	if err == nil || !strings.Contains(err.Error(), "sealed task contract") {
+	if err == nil || !strings.Contains(err.Error(), "one-shot reservation") {
 		t.Fatalf("rewritten task was accepted: %v", err)
 	}
-	second := runStudyTask(t, fixture, task, "", start.Add(3*time.Hour))
-	_, err = Observe(fixture.Store, observationRequest(created.Plan.StudyID, task.TaskID,
-		second.ReceiptID, "caller_attestation"), fixedStudyClock(start.Add(4*time.Hour)))
-	if err == nil || !strings.Contains(err.Error(), "first post-plan attempt") {
-		t.Fatalf("later favorable retry was accepted: %v", err)
+	second := runStudyTask(t, fixture, task, start.Add(3*time.Hour))
+	if _, err = Observe(fixture.Store, observationRequest(created.Plan.StudyID, task.TaskID,
+		second.ReceiptID, "caller_attestation"), fixedStudyClock(start.Add(4*time.Hour))); err != nil {
+		t.Fatalf("reserved study-bound execution was rejected: %v", err)
+	}
+	if _, err := RunTask(context.Background(), fixture.Store, created.Plan.StudyID, task.TaskID,
+		RunTaskOptions{PortableRoot: fixture.Repository, CodexPath: fixture.Executable}); err == nil ||
+		!strings.Contains(err.Error(), "already consumed") {
+		t.Fatalf("second study-bound attempt was accepted: %v", err)
+	}
+}
+
+func TestStudyRunUsesTheSealedWorkspaceSnapshotAfterTheSourceChanges(t *testing.T) {
+	fixture := newStudyFixture(t)
+	sealedPath := filepath.Join(fixture.Workspace, "task-input.txt")
+	if err := os.WriteFile(sealedPath, []byte("sealed before assignment\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	created := createStudyPlan(t, fixture, start, 1)
+	task := taskWithCondition(t, created.Plan, ConditionBaseline)
+	if err := os.WriteFile(sealedPath, []byte("changed after assignment\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := RunTask(context.Background(), fixture.Store, created.Plan.StudyID, task.TaskID,
+		RunTaskOptions{PortableRoot: fixture.Repository, CodexPath: fixture.Executable,
+			Now: fixedStudyClock(start.Add(time.Hour))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Trial.Request.WorkingDirectory == fixture.Workspace {
+		t.Fatal("study executed in the mutable source workspace")
+	}
+	materialized, err := os.ReadFile(filepath.Join(result.Trial.Request.WorkingDirectory, "task-input.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(materialized) != "sealed before assignment\n" {
+		t.Fatalf("study did not execute the sealed workspace bytes: %q", materialized)
+	}
+}
+
+func TestOutcomeHashesTheCompleteAgentMessageBeyondFourMiB(t *testing.T) {
+	fixture := newStudyFixture(t)
+	message := strings.Repeat("x", (4<<20)+17) + "complete-tail"
+	reference, err := fixture.Store.PutBlob(strings.NewReader(message))
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256([]byte(message))
+	expected := hex.EncodeToString(digest[:])
+	plan := Plan{StudyID: "study-" + strings.Repeat("a", 64)}
+	task := PlannedTask{TaskID: "task-large-message", Acceptance: AcceptanceContract{
+		SchemaVersion: AcceptanceSchema, Mode: "all", Assertions: []AcceptanceAssertion{{
+			Kind: "agent_message_sha256", ExpectedSHA256: expected,
+		}},
+	}}
+	execution := agentbridge.VerifiedExecution{Receipt: agentbridge.Receipt{AgentMessageBlob: &reference}}
+	evidence, err := evaluateOutcome(fixture.Store, plan, task, execution,
+		BoundEvent{EventID: "native-agent-receipt-" + strings.Repeat("b", 64),
+			RecordSHA256: strings.Repeat("c", 64)}, time.Date(2026, 8, 6, 13, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evidence.Outcome != OutcomeSuccess || len(evidence.AssertionResults) != 1 ||
+		evidence.AssertionResults[0].ActualSHA256 != expected ||
+		evidence.AssertionResults[0].CapturedBlob == nil ||
+		!reflect.DeepEqual(*evidence.AssertionResults[0].CapturedBlob, reference) {
+		t.Fatalf("complete Agent message was not evaluated exactly: %+v", evidence)
 	}
 }
 
@@ -222,7 +282,7 @@ func TestOutcomeIsDerivedFromTheSealedAcceptanceContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	task := taskWithCondition(t, created.Plan, ConditionBaseline)
-	receipt := runStudyTask(t, fixture, task, "", start.Add(time.Hour))
+	receipt := runStudyTask(t, fixture, task, start.Add(time.Hour))
 	result, err := Observe(fixture.Store, observationRequest(created.Plan.StudyID, task.TaskID,
 		receipt.ReceiptID, "caller_attestation"), fixedStudyClock(start.Add(2*time.Hour)))
 	if err != nil {
@@ -251,7 +311,7 @@ func TestObservationRecoversAnOutcomeRecordedBeforeAnInterruptedAppend(t *testin
 	start := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
 	created := createStudyPlan(t, fixture, start, 1)
 	task := taskWithCondition(t, created.Plan, ConditionBaseline)
-	receipt := runStudyTask(t, fixture, task, "", start.Add(time.Hour))
+	receipt := runStudyTask(t, fixture, task, start.Add(time.Hour))
 	execution, err := agentbridge.ResolveVerifiedExecution(fixture.Store, receipt.ReceiptID)
 	if err != nil {
 		t.Fatal(err)
@@ -362,7 +422,29 @@ func taskWithCondition(t *testing.T, plan Plan, condition Condition) PlannedTask
 	return PlannedTask{}
 }
 
-func runStudyTask(t *testing.T, fixture studyFixture, task PlannedTask, contextID string, at time.Time) agentbridge.Receipt {
+func runStudyTask(t *testing.T, fixture studyFixture, task PlannedTask, at time.Time) agentbridge.Receipt {
+	t.Helper()
+	state := replay(fixture.Store)
+	studyID := ""
+	for candidate, plan := range state.Plans {
+		if _, found := plannedTask(plan, task.TaskID); found {
+			studyID = candidate
+			break
+		}
+	}
+	if studyID == "" {
+		t.Fatal("study task has no sealed plan")
+	}
+	result, err := RunTask(context.Background(), fixture.Store, studyID, task.TaskID,
+		RunTaskOptions{PortableRoot: fixture.Repository, CodexPath: fixture.Executable,
+			Now: fixedStudyClock(at)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result.Execution.Receipt
+}
+
+func runUnboundStudyTask(t *testing.T, fixture studyFixture, task PlannedTask, contextID string, at time.Time) agentbridge.Receipt {
 	t.Helper()
 	request := agentbridge.RunRequest{SchemaVersion: agentbridge.RunRequestSchema, TaskID: task.TaskID,
 		Prompt: task.Prompt, Model: task.Model, Sandbox: task.Sandbox,

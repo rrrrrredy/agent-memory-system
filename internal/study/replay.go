@@ -21,26 +21,34 @@ type indexedRecord struct {
 }
 
 type replayState struct {
-	Records            map[string]indexedRecord
-	Plans              map[string]Plan
-	PlanRecords        map[string]indexedRecord
-	Outcomes           map[string]OutcomeEvidence
-	OutcomeRecords     map[string]indexedRecord
-	Observations       map[string]map[string]Observation
-	ObservationRecords map[string]indexedRecord
-	Issues             []string
+	Records              map[string]indexedRecord
+	Plans                map[string]Plan
+	PlanRecords          map[string]indexedRecord
+	Trials               map[string]TrialReservation
+	TrialRecords         map[string]indexedRecord
+	TrialTerminals       map[string]TrialTerminal
+	TrialTerminalRecords map[string]indexedRecord
+	Outcomes             map[string]OutcomeEvidence
+	OutcomeRecords       map[string]indexedRecord
+	Observations         map[string]map[string]Observation
+	ObservationRecords   map[string]indexedRecord
+	Issues               []string
 }
 
 func newReplayState() replayState {
 	return replayState{
-		Records:            map[string]indexedRecord{},
-		Plans:              map[string]Plan{},
-		PlanRecords:        map[string]indexedRecord{},
-		Outcomes:           map[string]OutcomeEvidence{},
-		OutcomeRecords:     map[string]indexedRecord{},
-		Observations:       map[string]map[string]Observation{},
-		ObservationRecords: map[string]indexedRecord{},
-		Issues:             []string{},
+		Records:              map[string]indexedRecord{},
+		Plans:                map[string]Plan{},
+		PlanRecords:          map[string]indexedRecord{},
+		Trials:               map[string]TrialReservation{},
+		TrialRecords:         map[string]indexedRecord{},
+		TrialTerminals:       map[string]TrialTerminal{},
+		TrialTerminalRecords: map[string]indexedRecord{},
+		Outcomes:             map[string]OutcomeEvidence{},
+		OutcomeRecords:       map[string]indexedRecord{},
+		Observations:         map[string]map[string]Observation{},
+		ObservationRecords:   map[string]indexedRecord{},
+		Issues:               []string{},
 	}
 }
 
@@ -92,6 +100,40 @@ func replay(store *ledger.Store) replayState {
 			}
 			state.Plans[plan.StudyID] = plan
 			state.PlanRecords[plan.StudyID] = item
+		case TrialReservationMediaType:
+			trial, err := decodeTrialReservationEvent(event)
+			if err != nil {
+				state.Issues = append(state.Issues, event.EventID+": "+err.Error())
+				continue
+			}
+			if issues := validateTrialReservationRecord(item, trial); len(issues) != 0 {
+				state.Issues = append(state.Issues, issues...)
+				continue
+			}
+			key := outcomeKey(trial.StudyID, trial.TaskID)
+			if _, duplicate := state.Trials[key]; duplicate {
+				state.Issues = append(state.Issues, trial.StudyID+"/"+trial.TaskID+": trial reservation is duplicated")
+				continue
+			}
+			state.Trials[key] = trial
+			state.TrialRecords[trial.TrialID] = item
+		case TrialTerminalMediaType:
+			terminal, err := decodeTrialTerminalEvent(event)
+			if err != nil {
+				state.Issues = append(state.Issues, event.EventID+": "+err.Error())
+				continue
+			}
+			if issues := validateTrialTerminalRecord(item, terminal); len(issues) != 0 {
+				state.Issues = append(state.Issues, issues...)
+				continue
+			}
+			key := outcomeKey(terminal.StudyID, terminal.TaskID)
+			if _, duplicate := state.TrialTerminals[key]; duplicate {
+				state.Issues = append(state.Issues, terminal.StudyID+"/"+terminal.TaskID+": trial terminal is duplicated")
+				continue
+			}
+			state.TrialTerminals[key] = terminal
+			state.TrialTerminalRecords[terminal.TerminalID] = item
 		case OutcomeEvidenceMediaType:
 			evidence, err := decodeOutcomeEvidenceEvent(event)
 			if err != nil {
@@ -138,6 +180,9 @@ func replay(store *ledger.Store) replayState {
 	taskOwners := map[string]string{}
 	for studyID, plan := range state.Plans {
 		for _, task := range plan.Tasks {
+			if err := verifyWorkspaceSnapshot(store, task.WorkspaceSnapshot, task.WorkingDirectory); err != nil {
+				state.Issues = append(state.Issues, studyID+"/"+task.TaskID+": sealed workspace snapshot is invalid")
+			}
 			if owner, exists := taskOwners[task.TaskID]; exists && owner != studyID {
 				state.Issues = append(state.Issues,
 					studyID+"/"+task.TaskID+": task id is already sealed by study "+owner)
@@ -146,6 +191,7 @@ func replay(store *ledger.Store) replayState {
 			taskOwners[task.TaskID] = studyID
 		}
 	}
+	validateTrialLinks(store, &state)
 	validateStudyLinks(store, &state)
 	sort.Strings(state.Issues)
 	return state
@@ -415,34 +461,31 @@ func executionEligibility(store *ledger.Store, state replayState, plan Plan, tas
 	planRecord, planExists := state.PlanRecords[plan.StudyID]
 	receiptRecord, receiptExists := state.Records[receiptID]
 	startedRecord, startedExists := state.Records[execution.Started.StartedEventID]
-	if !planExists || !receiptExists || !startedExists ||
-		planRecord.Index >= startedRecord.Index || startedRecord.Index >= receiptRecord.Index {
-		return prefix + "execution was not prospectively ordered after the plan"
+	key := outcomeKey(plan.StudyID, task.TaskID)
+	trial, trialExists := state.Trials[key]
+	terminal, terminalExists := state.TrialTerminals[key]
+	trialRecord, trialRecorded := state.TrialRecords[trial.TrialID]
+	terminalRecord, terminalRecorded := state.TrialTerminalRecords[terminal.TerminalID]
+	if !planExists || !receiptExists || !startedExists || !trialExists || !terminalExists ||
+		!trialRecorded || !terminalRecorded || planRecord.Index >= trialRecord.Index ||
+		trialRecord.Index >= startedRecord.Index || startedRecord.Index >= receiptRecord.Index ||
+		receiptRecord.Index >= terminalRecord.Index {
+		return prefix + "execution is not the terminal result of its prospective one-shot reservation"
 	}
 	if execution.Receipt.Outcome != agentbridge.OutcomeCompleted ||
 		execution.Receipt.TaskID != task.TaskID || execution.Request.TaskID != task.TaskID {
 		return prefix + "native Agent execution is not verified and completed"
 	}
-	request := execution.Request
-	if request.Prompt != task.Prompt || request.Model != task.Model || request.Sandbox != task.Sandbox ||
-		request.WorkingDirectory != task.WorkingDirectory || request.TimeoutSeconds != task.TimeoutSeconds ||
-		request.SkipGitRepositoryCheck != task.SkipGitRepositoryCheck {
-		return prefix + "execution request differs from the prospectively sealed task contract"
+	if terminal.Outcome != "completed" || terminal.Execution == nil || terminal.Execution.EventID != receiptID ||
+		terminal.Execution.RecordSHA256 != receiptRecord.Record.RecordHash ||
+		trial.Plan.EventID != plan.StudyID || trial.Plan.RecordSHA256 != planRecord.Record.RecordHash ||
+		trial.Condition != task.Condition || !reflect.DeepEqual(trial.WorkspaceSnapshot, task.WorkspaceSnapshot) ||
+		!reflect.DeepEqual(trial.Request, execution.Request) || !hasParent(startedRecord.Record.Event, trial.TrialID) {
+		return prefix + "execution does not replay from the sealed one-shot trial"
 	}
-	executions, err := agentbridge.ListVerifiedExecutions(store)
-	if err != nil {
-		return prefix + "native Agent execution population cannot be verified"
-	}
-	for _, candidate := range executions {
-		candidateRecord, exists := state.Records[candidate.Started.StartedEventID]
-		if !exists || candidateRecord.Index <= planRecord.Index ||
-			candidate.Started.StartedEventID == execution.Started.StartedEventID ||
-			candidate.Request.TaskID != task.TaskID {
-			continue
-		}
-		if candidateRecord.Index < startedRecord.Index {
-			return prefix + "selected execution is not the first post-plan attempt for this task"
-		}
+	expectedRequest := expectedStudyRequest(store, plan, task, execution.Request.LoadoutContextReceiptID)
+	if !reflect.DeepEqual(execution.Request, expectedRequest) {
+		return prefix + "execution request differs from the sealed snapshot task contract"
 	}
 	for otherStudyID, otherObservations := range state.Observations {
 		for otherTaskID, other := range otherObservations {

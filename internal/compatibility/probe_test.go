@@ -2,6 +2,8 @@ package compatibility
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -65,6 +67,36 @@ func TestProbeSeparatesShippedIntegrationFromRuntimeAvailability(t *testing.T) {
 	}
 }
 
+func TestDefaultProbeRunsTheExactBytesItHashes(t *testing.T) {
+	t.Setenv("AGENTMEM_COMPATIBILITY_HELPER", "1")
+	stageRoot := t.TempDir()
+	t.Setenv("TMP", stageRoot)
+	t.Setenv("TEMP", stageRoot)
+	t.Setenv("TMPDIR", stageRoot)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := sha256.Sum256(data)
+	report := Probe(context.Background(), Options{Agents: []ledger.Agent{ledger.AgentCodex},
+		LookPath: func(string) (string, error) { return executable, nil }})
+	if !report.Ready || len(report.Agents) != 1 || report.Agents[0].RuntimeStatus != RuntimeAvailable ||
+		report.Agents[0].Version != "codex-compatibility-test 1.0" ||
+		report.Agents[0].ExecutableSHA256 != hex.EncodeToString(expected[:]) {
+		t.Fatalf("default probe did not execute the exact hashed bytes: %+v", report)
+	}
+	entries, err := filepath.Glob(filepath.Join(stageRoot, "agentmem-compatibility-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("compatibility probe left staged executables behind: %v", entries)
+	}
+}
 func TestProbeFailsClosedOnUnexecutableAndEmptyVersionCommands(t *testing.T) {
 	calls := 0
 	report := Probe(context.Background(), Options{

@@ -80,6 +80,7 @@ type Started struct {
 	EnvironmentNamesSHA256  string                      `json:"environment_names_sha256"`
 	EnvironmentNamesCount   int                         `json:"environment_names_count"`
 	WorkingDirectorySHA256  string                      `json:"working_directory_sha256"`
+	ParentEventIDs          []string                    `json:"parent_event_ids"`
 	LoadoutContextReceiptID string                      `json:"loadout_context_receipt_id,omitempty"`
 	MemoryReferences        []retrieval.MemoryReference `json:"memory_references"`
 	StartedAt               time.Time                   `json:"started_at"`
@@ -131,9 +132,10 @@ type VerifiedExecution struct {
 }
 
 type Options struct {
-	CodexPath    string
-	PortableRoot string
-	Now          func() time.Time
+	CodexPath      string
+	PortableRoot   string
+	ParentEventIDs []string
+	Now            func() time.Time
 }
 
 type ExecutionError struct {

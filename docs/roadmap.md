@@ -84,8 +84,9 @@ longitudinal study remains future evidence, not a release claim.
 - Replay-verifiable local Codex execution receipts with explicit provider
   authority limits.
 - Honest Claude Code protocol-only and hosted-only OpenCode execution evidence.
-- Prospective full-task contracts, deterministic balanced assignment,
-  first-attempt enforcement, built-in replay-derived outcome evidence, and
+- Prospective full-task contracts with content-addressed workspace snapshots,
+  deterministic balanced assignment, single-use study-bound reservations,
+  terminal failure capture, built-in replay-derived outcome evidence, and
   descriptive longitudinal reports.
 - Loopback-only read-only operational dashboard.
 - Static public product documentation through GitHub Pages.

@@ -354,6 +354,9 @@ func validateExecution(store *ledger.Store, receiptIndexed indexedRecord, receip
 	add(started.ArgumentsSHA256 == argumentSHA, "Codex argument hash is invalid")
 	add(started.WorkingDirectorySHA256 == sha256Hex([]byte(request.WorkingDirectory)),
 		"working directory hash is invalid")
+	expectedParents, parentErr := executionParentIDs(request, withoutString(started.ParentEventIDs, request.LoadoutContextReceiptID))
+	add(parentErr == nil && reflect.DeepEqual(started.ParentEventIDs, expectedParents),
+		"native Agent execution parent bindings are invalid")
 	add(strings.TrimSpace(started.CodexVersion) != "" && len(started.CodexVersion) <= 256,
 		"Codex version disclosure is invalid")
 	add(started.EnvironmentPolicy == "inherited_for_auth; names hashed; values intentionally not recorded",
@@ -421,10 +424,6 @@ func validateExecution(store *ledger.Store, receiptIndexed indexedRecord, receip
 }
 
 func validStartedEvent(event ledger.Event, started Started) bool {
-	expectedParents := []string{}
-	if started.LoadoutContextReceiptID != "" {
-		expectedParents = []string{started.LoadoutContextReceiptID}
-	}
 	return event.Kind == ledger.KindSystemEvent &&
 		event.Source.Agent == ledger.AgentCodex &&
 		event.Source.Adapter == "agentmem-native-agent" &&
@@ -436,7 +435,17 @@ func validStartedEvent(event ledger.Event, started Started) bool {
 		event.ObservedAt.Equal(started.StartedAt) && event.RecordedAt.Equal(started.StartedAt) &&
 		event.Completeness.Status == ledger.CompletenessComplete &&
 		event.Privacy.Classification == PrivacyLocalOnly &&
-		reflect.DeepEqual(parentIDs(event), expectedParents)
+		reflect.DeepEqual(parentIDs(event), started.ParentEventIDs)
+}
+
+func withoutString(values []string, excluded string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != excluded {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func validReceiptEvent(event ledger.Event, receipt Receipt) bool {

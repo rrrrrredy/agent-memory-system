@@ -30,7 +30,9 @@ serve summary metadata only. They do not serve:
 `GET /api/status` returns the versioned
 `agent-memory-dashboard-snapshot/v1alpha1` envelope. The root page supports
 only `GET` and `HEAD`; write methods return `405 Method Not Allowed`. Responses
-set no-store and restrictive browser security headers.
+set no-store and restrictive browser security headers. Verification failures
+are reduced to stable component codes and counts; raw nested verifier errors are
+never serialized because operating-system errors may contain private paths.
 
 Loopback is a network-exposure control, not user authentication. Another
 process running as the same local user may still reach the endpoint. Stop the

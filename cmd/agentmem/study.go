@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"os"
@@ -13,6 +14,8 @@ func runStudy(args []string) error {
 	switch args[0] {
 	case "create":
 		return runStudyCreate(args[1:])
+	case "run":
+		return runStudyTask(args[1:])
 	case "observe":
 		return runStudyObserve(args[1:])
 	case "report":
@@ -56,6 +59,34 @@ func runStudyCreate(args []string) error {
 		return err
 	}
 	return encodeIndented(result)
+}
+
+func runStudyTask(args []string) error {
+	flags := flag.NewFlagSet("study run", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	studyID := flags.String("study", "", "sealed study id (required)")
+	taskID := flags.String("task", "", "sealed task id (required)")
+	codex := flags.String("codex", "", "Codex executable (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *repository == "" || *studyID == "" || *taskID == "" || *codex == "" {
+		return errors.New("study run requires --root, --repo, --study, --task, and --codex")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, runErr := study.RunTask(context.Background(), store, *studyID, *taskID,
+		study.RunTaskOptions{PortableRoot: *repository, CodexPath: *codex})
+	if runErr != nil && result.Trial.TrialID == "" {
+		return runErr
+	}
+	if err := encodeIndented(result); err != nil {
+		return err
+	}
+	return runErr
 }
 
 func runStudyObserve(args []string) error {

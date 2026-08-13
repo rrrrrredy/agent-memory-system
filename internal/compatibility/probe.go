@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -79,10 +80,35 @@ func Probe(ctx context.Context, options Options) Report {
 			digest := sha256.Sum256(data)
 			item.ExecutableSHA256 = hex.EncodeToString(digest[:])
 		}
+		runVersion := options.RunVersion
+		runPath := path
+		cleanup := func() {}
+		if runVersion == nil {
+			if readErr != nil {
+				item.RuntimeStatus = RuntimeBlocked
+				item.RuntimeIssue = "executable_read_failed"
+				report.Ready = false
+				report.Agents = append(report.Agents, item)
+				continue
+			}
+			staged, remove, stageErr := stageVersionProbe(data, filepath.Ext(path))
+			if stageErr != nil {
+				item.RuntimeStatus = RuntimeBlocked
+				item.RuntimeIssue = "version_probe_staging_failed"
+				report.Ready = false
+				report.Agents = append(report.Agents, item)
+				continue
+			}
+			runPath, cleanup = staged, remove
+			runVersion = func(ctx context.Context, executable string) ([]byte, error) {
+				return exec.CommandContext(ctx, executable, "--version").CombinedOutput()
+			}
+		}
 		versionContext, cancel := context.WithTimeout(ctx, options.Timeout)
-		output, runErr := options.RunVersion(versionContext, path)
+		output, runErr := runVersion(versionContext, runPath)
 		deadline := errors.Is(versionContext.Err(), context.DeadlineExceeded)
 		cancel()
+		cleanup()
 		if deadline {
 			item.RuntimeStatus = RuntimeBlocked
 			item.RuntimeIssue = "version_probe_timeout"
@@ -133,19 +159,33 @@ func defaults(options Options) Options {
 	if options.LookPath == nil {
 		options.LookPath = exec.LookPath
 	}
-	if options.RunVersion == nil {
-		options.RunVersion = func(ctx context.Context, path string) ([]byte, error) {
-			return exec.CommandContext(ctx, path, "--version").CombinedOutput()
-		}
-	}
 	if options.ReadFile == nil {
 		options.ReadFile = os.ReadFile
 	}
 	return options
 }
 
+func stageVersionProbe(data []byte, suffix string) (string, func(), error) {
+	directory, err := os.MkdirTemp("", "agentmem-compatibility-")
+	if err != nil {
+		return "", func() {}, err
+	}
+	cleanup := func() { _ = os.RemoveAll(directory) }
+	if suffix != "" && strings.ContainsAny(suffix, `/\\`) {
+		cleanup()
+		return "", func() {}, errors.New("runtime executable suffix is invalid")
+	}
+	path := filepath.Join(directory, "runtime"+suffix)
+	if err := os.WriteFile(path, data, 0o700); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	return path, cleanup, nil
+}
+
 func normalizedAgents(values []ledger.Agent) []ledger.Agent {
 	seen := map[ledger.Agent]struct{}{}
+
 	result := make([]ledger.Agent, 0, len(values))
 	for _, value := range values {
 		if _, exists := seen[value]; exists {

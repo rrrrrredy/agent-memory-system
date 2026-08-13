@@ -26,7 +26,7 @@ go build -o ./bin/agentmem ./cmd/agentmem
 
 ## Install a tagged release
 
-Tagged releases include Windows and macOS archives for amd64 and arm64 plus a
+Tagged releases include Windows, macOS, and Linux archives for amd64 and arm64 plus a
 `SHA256SUMS` file. The installers download both the archive and checksum file,
 verify the selected archive, stage the binary, run `agentmem version`, and only
 then replace the installed binary.

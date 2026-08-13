@@ -31,6 +31,17 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 	if err != nil {
 		return result, err
 	}
+	var useLease *portable.RepositoryLock
+	if normalized.LoadoutContextReceiptID != "" {
+		if strings.TrimSpace(options.PortableRoot) == "" {
+			return result, errors.New("loadout-backed native Agent execution requires a portable repository")
+		}
+		useLease, err = portable.AcquireRepositoryUseLease(options.PortableRoot)
+		if err != nil {
+			return result, fmt.Errorf("acquire portable loadout use lease: %w", err)
+		}
+		defer func() { _ = useLease.Release() }()
+	}
 	if report := store.Verify(); len(report.Issues) != 0 {
 		return result, fmt.Errorf("evidence ledger verification failed: %s", strings.Join(report.Issues, "; "))
 	}
@@ -92,6 +103,10 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 	if err != nil || strings.TrimSpace(version) == "" {
 		return result, errors.New("Codex executable version probe failed")
 	}
+	parents, err := executionParentIDs(normalized, options.ParentEventIDs)
+	if err != nil {
+		return result, err
+	}
 	arguments := buildArguments(normalized)
 	names := environmentNames()
 	started := Started{
@@ -110,6 +125,7 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 		EnvironmentNamesSHA256:  environmentNamesSHA256(names),
 		EnvironmentNamesCount:   len(names),
 		WorkingDirectorySHA256:  sha256Hex([]byte(normalized.WorkingDirectory)),
+		ParentEventIDs:          parents,
 		LoadoutContextReceiptID: normalized.LoadoutContextReceiptID,
 		MemoryReferences:        memoryReferences,
 		StartedAt:               startedAt,
@@ -130,10 +146,6 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 	startedBlob, err := store.PutBlob(bytes.NewReader(startedData))
 	if err != nil {
 		return result, err
-	}
-	parents := []string{}
-	if normalized.LoadoutContextReceiptID != "" {
-		parents = append(parents, normalized.LoadoutContextReceiptID)
 	}
 	startedRecord, err := appendEvent(store, started.StartedEventID, ledger.KindSystemEvent,
 		executionID, startedBlob, StartedMediaType, parents, nil, startedAt)
@@ -302,6 +314,27 @@ func deliveryMemoryReferences(receipt *loadoutcontext.ContextReceipt) []retrieva
 		return []retrieval.MemoryReference{}
 	}
 	return append([]retrieval.MemoryReference(nil), receipt.Memories...)
+}
+
+func executionParentIDs(request RunRequest, additional []string) ([]string, error) {
+	if len(additional) > 7 {
+		return nil, errors.New("native Agent execution has too many parent events")
+	}
+	result := append([]string{}, additional...)
+	if request.LoadoutContextReceiptID != "" {
+		result = append(result, request.LoadoutContextReceiptID)
+	}
+	seen := map[string]struct{}{}
+	for _, eventID := range result {
+		if strings.TrimSpace(eventID) == "" || len(eventID) > 512 {
+			return nil, errors.New("native Agent execution parent event id is invalid")
+		}
+		if _, duplicate := seen[eventID]; duplicate {
+			return nil, errors.New("native Agent execution parent event ids must be unique")
+		}
+		seen[eventID] = struct{}{}
+	}
+	return result, nil
 }
 
 func appendEvent(store *ledger.Store, eventID string, kind ledger.EventKind, threadID string,

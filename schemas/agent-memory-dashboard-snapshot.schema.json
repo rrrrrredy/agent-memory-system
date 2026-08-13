@@ -19,7 +19,7 @@
     "studies": {"$ref": "longitudinal-study-verification.schema.json"},
     "study_reports": {"type": "array", "items": {"$ref": "longitudinal-study-report.schema.json"}},
     "issues": {"type": "array", "items": {"type": "string", "minLength": 1}},
-    "privacy_boundary": {"const": "summary metadata only; raw transcripts, tool payloads, reasoning, memory text, and secrets are not served"},
+    "privacy_boundary": {"const": "summary metadata only; raw transcripts, tool payloads, reasoning, memory text, secrets, local paths, and raw verifier errors are not served"},
     "privacy": {"const": "local_only"}
   },
   "$defs": {

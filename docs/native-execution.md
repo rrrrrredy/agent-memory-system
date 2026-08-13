@@ -51,7 +51,10 @@ receipt ID to the request:
 
 Then pass `--repo <portable-memory-directory>`. The bridge refuses a portable
 repository without a loadout receipt and refuses a receipt whose Agent, task
-scope, loadout, or exact active revisions no longer match.
+scope, loadout, or exact active revisions no longer match. For loadout-backed
+runs it holds the portable repository use lock from delivery verification until
+the terminal receipt is written, so supersession, revocation, and export cannot
+interleave after a stale-head check.
 
 ## Preserved evidence
 

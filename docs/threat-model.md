@@ -148,14 +148,21 @@ operator while making supported cherry-picking and post-hoc labeling paths
 auditable and fail-closed.
 
 Prospective studies seal the population, complete native request fields,
-immutable Agent-message acceptance hashes, deterministic balanced assignment,
-Agent, elapsed period, and exact loadout before execution. Only the first
-post-plan attempt can be eligible, and its request must match the plan exactly.
+content-addressed working-directory snapshots, immutable Agent-message
+acceptance hashes, deterministic balanced assignment, Agent, elapsed period,
+and exact loadout before execution. The supported runner atomically writes one
+single-use task reservation before the process and always writes a terminal
+record. It materializes the sealed workspace privately and binds the native
+execution graph to the reservation. Direct receipts, second reservations,
+changed source directories, and failed or missing terminals are ineligible.
+
 A built-in evaluator derives a dedicated outcome-evidence event from the
-immutable Agent-message blob; the caller cannot supply a label or arbitrary
-tool result, and synthetic observations remain non-evaluable. Because task
-selection and operator behavior are not independently blinded, a complete
-report is a descriptive association rather than a causal claim.
+complete immutable Agent-message blob; the caller cannot supply a label or
+arbitrary tool result, and synthetic observations remain non-evaluable. The
+system does not detect undisclosed rehearsal outside the supported command or
+forgery by a local administrator. Task selection and operator behavior are not
+independently blinded, so a complete report is a descriptive association rather
+than a causal claim.
 
 The evaluator binds its executable, system prompt, tool registry, harness, and
 adapter artifacts, then freezes episode generation, the corpus, the complete

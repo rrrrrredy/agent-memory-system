@@ -67,15 +67,17 @@ history.
   was delivered.
 - A memory loadout names exact active revision heads. Supersession or revocation
   makes the old loadout stale instead of silently substituting new content.
+  Loadout-backed native execution holds the portable repository use lock from
+  freshness verification through the terminal receipt.
 - Review packets freeze the displayed candidate text, provenance, generation,
   and evidence prefix without combining validation and promotion authority.
 - Native Codex receipts bind exact local executable bytes, request, JSONL,
   output, usage, and terminal state; they do not authenticate the remote
   provider, server-side model, or hidden reasoning.
-- Prospective studies seal every native request field and immutable acceptance
-  assertion before execution, accept only the first matching attempt, and
-  derive outcomes by replaying the Agent-message bytes. Reports remain
-  descriptive rather than causal.
+- Prospective studies seal every request, acceptance assertion, and workspace
+  snapshot before execution. A single-use study reservation is written before
+  Codex starts; failures consume it, and outcomes replay the complete
+  Agent-message bytes. Reports remain descriptive rather than causal.
 - Raw evidence backup is optional, encrypted with age, and completely separate
   from the readable memory repository.
 - `AGENTS.md`, Skills, and other rule surfaces are never changed without a
@@ -108,8 +110,9 @@ go build -o ./bin/agentmem ./cmd/agentmem
 ./bin/agentmem version
 ```
 
-Tagged releases provide checksum-verified Windows and macOS installers. See
-[install, upgrade, and uninstall](docs/install.md).
+Tagged releases provide checksum-verified Windows, macOS, and Linux archives;
+the supported installers target Windows and macOS. See [install, upgrade, and
+uninstall](docs/install.md).
 
 ## Try the complete lifecycle
 
@@ -161,7 +164,7 @@ version probe does not hide a working offline importer.
 | Native Codex memory diagnostic | A frozen 20-cluster synthetic suite ran 20 paired authenticated `codex exec` tasks with sealed no-tools policy and verified retrieval injections: 19 wins, 1 tie, 0 losses; baseline 1/20, memory 20/20; one-sided sign-test p=0.0000019073. This is bounded capability evidence, not longitudinal certification; see the [aggregate receipt](evals/results/codex-memory-capability-v1-2026-08-12.json) |
 | Native Codex process receipts | Exact local Codex and runner bytes, request, arguments, raw JSONL, usage, output, and terminal state are replayed; provider, model, and private reasoning are not independently attested |
 | Portable loadouts | Content-addressed exact revision sets, scope, Agent allowlist, budgets, stale-head rejection, and composite delivery receipts |
-| Prospective studies | Pre-sealed full native requests, immutable Agent-message acceptance hashes, deterministic balanced assignment, first-attempt enforcement, and replay-derived outcomes; no completed real-world longitudinal efficacy claim is made |
+| Prospective studies | Pre-sealed requests and workspace snapshots, immutable Agent-message acceptance hashes, deterministic balanced assignment, one single-use study-bound attempt, and replay-derived outcomes; no completed real-world longitudinal efficacy claim is made |
 | Learning efficacy | Frozen-corpus metrics and replay are implemented; efficacy certification remains blocked unless task execution is independently verified |
 
 Run a local, non-mutating runtime probe:

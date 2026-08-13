@@ -258,20 +258,30 @@ identity. It MUST preserve terminal failures and MUST NOT authenticate a remote
 provider, server-side model, account, or provider-hidden reasoning.
 
 A prospective study MUST append its complete task and cluster identities, every
-native request field, immutable acceptance assertions, Agent, exact current
+native request field, a private content-addressed snapshot of each complete
+working directory, immutable acceptance assertions, Agent, exact current
 loadout, minimum elapsed period, deterministic assignment policy, and all
 assignments before any eligible execution. Task IDs MUST be unique across the
 evidence store. Baseline tasks MUST have no memory receipt. Memory tasks MUST
 bind a verified context receipt for the exact embedded loadout.
 
-Only the first post-plan native execution attempt for a planned task can be
-eligible. Its prompt, model, sandbox, canonical working directory, timeout,
-repository-check policy, task identity, condition, and loadout binding MUST
-match the sealed plan exactly. A later favorable retry MUST NOT replace an
-earlier attempt.
+The supported study runner MUST atomically append one single-use reservation
+before starting the local process. That reservation MUST bind the plan, task,
+condition, exact request, workspace snapshot, and loadout. A start failure,
+timeout, nonzero exit, or missing result MUST append a terminal failure and
+consume the reservation. A direct native receipt or a second reservation MUST
+be ineligible. The runner MUST materialize the sealed workspace in a private
+temporary directory and bind the native start, visible events, receipt, and
+study terminal as causal descendants. Later changes to the source directory
+MUST NOT affect the executed bytes.
+
+Within the honest-local-operator boundary this enforces the first study-bound
+attempt. It cannot prove that no undisclosed rehearsal occurred outside the
+supported command and MUST NOT be described as enforcing the first execution
+performed by a local administrator.
 
 The outcome MUST be derived by the supported built-in evaluator from the
-immutable Agent-message blob and prospectively sealed acceptance assertions.
+complete immutable Agent-message blob and prospectively sealed acceptance assertions.
 A dedicated local outcome-evidence event MUST bind the plan, execution,
 acceptance hash, assertion results, and derived outcome before the observation.
 Replay MUST reproduce that event exactly. The caller MUST NOT submit an outcome

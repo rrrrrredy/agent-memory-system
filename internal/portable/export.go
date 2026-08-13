@@ -354,6 +354,15 @@ func AcquireRepositoryLock(repositoryRoot string) (*RepositoryLock, error) {
 	return &RepositoryLock{path: path}, nil
 }
 
+// AcquireRepositoryUseLease takes the same exclusive lock used by every
+// portable-repository mutation. A caller must hold the lease from current-head
+// verification until the consumer has durably bound and finished using the
+// selected bytes. This prevents a concurrent export, sync, loadout creation,
+// supersession, or revocation from invalidating an in-flight delivery.
+func AcquireRepositoryUseLease(repositoryRoot string) (*RepositoryLock, error) {
+	return AcquireRepositoryLock(repositoryRoot)
+}
+
 func (lock *RepositoryLock) Release() error {
 	if lock == nil || lock.path == "" {
 		return nil

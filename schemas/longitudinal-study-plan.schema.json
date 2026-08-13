@@ -22,7 +22,7 @@
   "$defs": {
     "task": {
       "type": "object", "additionalProperties": false,
-      "required": ["task_id", "cluster_id", "prompt", "model", "sandbox", "working_directory", "timeout_seconds", "skip_git_repository_check", "acceptance", "order", "condition"],
+      "required": ["task_id", "cluster_id", "prompt", "model", "sandbox", "working_directory", "timeout_seconds", "workspace_snapshot", "skip_git_repository_check", "acceptance", "order", "condition"],
       "properties": {
         "task_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
         "cluster_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
@@ -31,6 +31,7 @@
         "sandbox": {"enum": ["read-only", "workspace-write"]},
         "working_directory": {"type": "string", "minLength": 1, "pattern": "^[^\\x00]+$"},
         "timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+        "workspace_snapshot": {"$ref": "longitudinal-workspace-snapshot.schema.json"},
         "skip_git_repository_check": {"type": "boolean"},
         "acceptance": {"$ref": "longitudinal-study-acceptance.schema.json"},
         "order": {"type": "integer", "minimum": 1, "maximum": 500},

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-study-trial-terminal.schema.json",
+  "title": "Longitudinal Study Trial Terminal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "terminal_id", "study_id", "task_id", "trial", "outcome", "finished_at", "privacy"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-study-trial-terminal/v1alpha1"},
+    "terminal_id": {"type": "string", "pattern": "^study-trial-terminal-[a-f0-9]{64}$"},
+    "study_id": {"type": "string", "pattern": "^study-[a-f0-9]{64}$"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
+    "trial": {"$ref": "longitudinal-study-observation.schema.json#/$defs/bound_event"},
+    "execution": {"$ref": "longitudinal-study-observation.schema.json#/$defs/bound_event"},
+    "outcome": {"enum": ["completed", "failed"]},
+    "failure_kind": {"type": "string", "minLength": 1, "maxLength": 128},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"outcome": {"const": "completed"}}},
+      "then": {"required": ["execution"], "not": {"required": ["failure_kind"]}}
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "failed"}}},
+      "then": {"required": ["failure_kind"]}
+    }
+  ]
+}

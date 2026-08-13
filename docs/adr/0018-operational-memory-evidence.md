@@ -29,9 +29,12 @@ local evidence, human judgment, and portable distribution.
    receipt exists. Keep OpenCode validation on the disposable hosted runtime;
    do not install it on the user's workstation.
 5. Add a prospective study ledger that seals complete native requests,
-   immutable Agent-message acceptance hashes, task and cluster identities,
-   assignment policy, Agent, elapsed period, and exact loadout before eligible
-   execution. Only the first matching native attempt is eligible. A built-in
+   content-addressed workspace snapshots, immutable Agent-message acceptance
+   hashes, task and cluster identities, assignment policy, Agent, elapsed
+   period, and exact loadout before eligible execution. The supported runner
+   writes one single-use reservation before Codex starts, materializes the
+   private snapshot, and records terminal failures. Only that study-bound
+   native attempt is eligible. A built-in
    replay evaluator, not the caller, derives and records the outcome. Do not
    call the resulting descriptive signal causal or independently
    provider-certified.
@@ -42,6 +45,8 @@ local evidence, human judgment, and portable distribution.
 
 - Automatically promoting candidate summaries to remove review friction.
 - Making loadouts mutable pointers that silently follow new revision heads.
+- Inferring a study attempt from an unreserved generic native receipt or from a
+  caller-supplied task ID after execution.
 - Treating delivery as adoption or a completed process as provider identity.
 - Uploading native execution evidence to the portable Git repository.
 - Letting a caller submit an outcome, bind an arbitrary tool result, or replace

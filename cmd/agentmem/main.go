@@ -2823,7 +2823,7 @@ func agentRunUsageError() error {
 	return errors.New("usage: agentmem agent run codex --root <local-evidence-directory> --file <request.json> --codex <executable> [--repo <portable-memory-directory>]")
 }
 func studyUsageError() error {
-	return errors.New("usage: agentmem study <create|observe|report|verify> [options]")
+	return errors.New("usage: agentmem study <create|run|observe|report|verify> [options]")
 }
 
 func recallUsageError() error {

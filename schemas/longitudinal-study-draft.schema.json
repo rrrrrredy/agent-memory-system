@@ -30,7 +30,7 @@
         "sandbox": {"enum": ["read-only", "workspace-write"]},
         "working_directory": {"type": "string", "minLength": 1, "pattern": "^[^\\x00]+$"},
         "timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 3600},
-        "skip_git_repository_check": {"type": "boolean"},
+        "skip_git_repository_check": {"const": true},
         "acceptance": {"$ref": "longitudinal-study-acceptance.schema.json"}
       }
     }

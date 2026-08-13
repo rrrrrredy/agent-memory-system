@@ -16,10 +16,11 @@ Semantic Versioning after the first tagged public release.
 - A native Codex execution bridge that preserves exact local runner and Codex
   bytes, canonical requests, arguments, raw JSONL, usage, terminal output, and
   completed or failed receipts, plus complete replay verification.
-- Prospective longitudinal study plans that seal complete native requests and
-  immutable acceptance hashes, deterministically counterbalance assignments,
-  reject replacement attempts, derive outcomes from replayed Agent-message
-  bytes, fail closed on incomplete populations, and report descriptive results.
+- Prospective longitudinal study plans that seal complete native requests,
+  content-addressed workspace snapshots, and immutable acceptance hashes;
+  deterministically counterbalance assignments; reserve one study-bound
+  attempt before execution; derive outcomes from complete replayed
+  Agent-message bytes; and report descriptive results.
 - A loopback-only read-only dashboard for evidence, review, promotion,
   retrieval, loadout, native-execution, and study verification summaries.
 - Public JSON Schemas and real producer instances for every new v0.3 protocol.
@@ -31,16 +32,17 @@ Semantic Versioning after the first tagged public release.
   revoked, missing, or no longer the exact active head; no partial or silent
   replacement is allowed.
 - Loadout-backed native execution requires an exact verified context receipt
-  and re-verifies the complete portable repository before the process starts.
+  and holds the portable repository use lock through the terminal receipt.
 - Native execution stages and re-hashes content-addressed executable bytes,
   records terminal failures without a retry loophole, and labels remote
   provider, model, and private-reasoning authority as unverified.
-- Longitudinal observations reject pre-plan or replacement executions, request
-  changes, assignment mismatches, duplicate tasks, and outcome evidence that
-  differs from built-in replay. Callers cannot submit outcome labels, and
-  synthetic observations cannot clear the evaluability gate.
+- Longitudinal execution seals workspace bytes, writes a single-use reservation
+  before Codex starts, records every terminal failure, and rejects generic or
+  replacement receipts. Callers cannot submit outcome labels, and synthetic
+  observations cannot clear the evaluability gate.
 - The dashboard refuses non-loopback listeners, serves summary metadata only,
-  exposes no write route, and ships no external browser resources.
+  exposes no write route, ships no external browser resources, and replaces
+  raw verifier errors with stable issue codes so private paths are not returned.
 
 ### Known limits
 
