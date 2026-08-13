@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-study-report.schema.json",
+  "title": "Longitudinal memory study report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "study_id", "generated_at", "status", "reasons", "planned_tasks", "observed_tasks", "missing_task_ids", "elapsed_days", "minimum_elapsed_days", "builtin_evaluator_outcomes", "synthetic_observations", "baseline", "memory", "success_delta_basis_points", "claim_boundary", "privacy"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-study-report/v1alpha1"},
+    "study_id": {"type": "string", "pattern": "^study-[a-f0-9]{64}$"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["not_evaluable", "descriptive_signal"]},
+    "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "planned_tasks": {"type": "integer", "minimum": 4, "maximum": 500},
+    "observed_tasks": {"type": "integer", "minimum": 0, "maximum": 500},
+    "missing_task_ids": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"}, "uniqueItems": true},
+    "elapsed_days": {"type": "integer", "minimum": 0},
+    "minimum_elapsed_days": {"type": "integer", "minimum": 1, "maximum": 365},
+    "builtin_evaluator_outcomes": {"type": "integer", "minimum": 0, "maximum": 500},
+    "synthetic_observations": {"type": "integer", "minimum": 0, "maximum": 500},
+    "baseline": {"$ref": "#/$defs/arm"},
+    "memory": {"$ref": "#/$defs/arm"},
+    "success_delta_basis_points": {"type": "integer", "minimum": -10000, "maximum": 10000},
+    "claim_boundary": {"const": "prospective local built-in acceptance evidence; descriptive association only; not independent causal or provider certification"},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "arm": {
+      "type": "object", "additionalProperties": false,
+      "required": ["planned", "observed", "successes", "failures", "success_rate_basis_points"],
+      "properties": {
+        "planned": {"type": "integer", "minimum": 0, "maximum": 250},
+        "observed": {"type": "integer", "minimum": 0, "maximum": 250},
+        "successes": {"type": "integer", "minimum": 0, "maximum": 250},
+        "failures": {"type": "integer", "minimum": 0, "maximum": 250},
+        "success_rate_basis_points": {"type": "integer", "minimum": 0, "maximum": 10000}
+      }
+    }
+  }
+}

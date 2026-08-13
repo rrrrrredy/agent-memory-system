@@ -91,6 +91,13 @@ A review transition MUST bind the candidate content hash, expected prior state,
 caller-supplied reviewer attestation, confirmed scope, and evidence basis in an
 append-only record. The attestation is not identity authentication. Validation alone does not create promoted memory.
 
+A review packet MAY reduce repeated operator lookup, but it MUST be immutable,
+local-only, and bound to the exact candidate generation, evidence-ledger prefix,
+candidate content and displayed-text hashes, provenance, and current review
+metadata. Consuming a packet MUST re-verify those bindings. A packet MUST NOT
+authenticate a person, combine validation with promotion, approve a conflict
+group, or make an otherwise stale candidate current.
+
 A promotion transition MUST bind the exact current validation record,
 candidate content and semantic identity, confirmed scope, deterministic scan,
 reviewed redacted-text hash, and expected parent revision. Redaction may remove
@@ -150,6 +157,9 @@ phrase alone is not proof that the task goal drifted.
   forbidden.
 - Deletions use auditable tombstones or revocations, not unexplained history
   removal.
+- Portable loadouts are immutable content-addressed metadata in the private
+  memory repository. They may reference only exact active portable revision
+  heads and MUST become ineligible when any head changes.
 
 ## Retrieval contract
 
@@ -167,6 +177,12 @@ phrase alone is not proof that the task goal drifted.
   cross-Agent query interface.
 - Agent availability errors fail open without memory. Memory verification fails
   closed without partial or stale fallback.
+- A loadout delivery MUST verify the complete portable repository, exact
+  revision heads, Agent allowlist, trusted scope, and both budgets before
+  rendering one context. It MUST record the exact composite content and
+  underlying retrieval receipts locally.
+- Loadout delivery is not adoption or outcome evidence. A stale loadout MUST
+  fail as a whole and MUST NOT follow new revision heads automatically.
 
 ## Evaluation contract
 
@@ -232,6 +248,43 @@ It MUST NOT be described as covering ordinary tasks that lacked an evaluation
 contract, promoting memory, authorizing a rule change, or proving general
 real-world efficacy.
 
+### Native execution and prospective studies
+
+A native execution receipt MAY establish which exact local Agent and runner
+bytes were staged, which canonical request and arguments were used, which raw
+events and output were observed, and how the local process terminated. Replay
+MUST bind all those artifacts, event order, usage, outcome, and receipt
+identity. It MUST preserve terminal failures and MUST NOT authenticate a remote
+provider, server-side model, account, or provider-hidden reasoning.
+
+A prospective study MUST append its complete task and cluster identities, every
+native request field, immutable acceptance assertions, Agent, exact current
+loadout, minimum elapsed period, deterministic assignment policy, and all
+assignments before any eligible execution. Task IDs MUST be unique across the
+evidence store. Baseline tasks MUST have no memory receipt. Memory tasks MUST
+bind a verified context receipt for the exact embedded loadout.
+
+Only the first post-plan native execution attempt for a planned task can be
+eligible. Its prompt, model, sandbox, canonical working directory, timeout,
+repository-check policy, task identity, condition, and loadout binding MUST
+match the sealed plan exactly. A later favorable retry MUST NOT replace an
+earlier attempt.
+
+The outcome MUST be derived by the supported built-in evaluator from the
+immutable Agent-message blob and prospectively sealed acceptance assertions.
+A dedicated local outcome-evidence event MUST bind the plan, execution,
+acceptance hash, assertion results, and derived outcome before the observation.
+Replay MUST reproduce that event exactly. The caller MUST NOT submit an outcome
+label or arbitrary tool result. Missing tasks, duplicate observations,
+synthetic observations, insufficient elapsed time, fewer than two observations
+per arm, changed requests, retries, or non-replayable outcomes MUST yield
+`not_evaluable`.
+
+Even a complete report is limited to a prospective descriptive association.
+The supported protocol does not blind task selection, independently randomize
+operator behavior, or attest the provider. It MUST NOT be described as causal
+or independently provider-certified efficacy.
+
 ### Cross-device and cross-agent reliability
 
 - Windows/macOS bidirectional synchronization;
@@ -257,4 +310,6 @@ remain unlabeled until an independent review or attestation is recorded.
 - Treating a hook, Skill, plugin, SQLite database, or vector index as the sole
   source of truth.
 - Automatically turning model-written summaries into global rules.
+- Treating a local process receipt or descriptive study as independent proof of
+  a provider, model, human identity, or causal learning effect.
 - Measuring success by note count, hook invocations, or retrieval volume alone.

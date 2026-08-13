@@ -6,10 +6,10 @@
   "additionalProperties": false,
   "required": ["schema_version", "os", "runner_arch", "archive", "archive_sha256", "version", "quickstart"],
   "properties": {
-    "schema_version": {"const": "agentmem-candidate-acceptance/v1alpha1"},
-    "os": {"enum": ["windows", "macos"]},
+    "schema_version": {"const": "agentmem-candidate-acceptance/v1alpha2"},
+    "os": {"enum": ["windows", "macos", "linux"]},
     "runner_arch": {"enum": ["X64", "ARM64"]},
-    "archive": {"type": "string", "pattern": "^agentmem_v[^/]+_(?:windows|darwin)_(?:amd64|arm64)\\.(?:zip|tar\\.gz)$"},
+    "archive": {"type": "string", "pattern": "^agentmem_v[^/]+_(?:windows|darwin|linux)_(?:amd64|arm64)\\.(?:zip|tar\\.gz)$"},
     "archive_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "version": {"$ref": "agent-memory-version.schema.json"},
     "quickstart": {"$ref": "quickstart-smoke.schema.json"}
@@ -30,6 +30,15 @@
         "properties": {
           "archive": {"pattern": "_darwin_(?:amd64|arm64)\\.tar\\.gz$"},
           "version": {"properties": {"platform": {"pattern": "^darwin/(?:amd64|arm64)$"}}, "required": ["platform"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"os": {"const": "linux"}}, "required": ["os"]},
+      "then": {
+        "properties": {
+          "archive": {"pattern": "_linux_(?:amd64|arm64)\\.tar\\.gz$"},
+          "version": {"properties": {"platform": {"pattern": "^linux/(?:amd64|arm64)$"}}, "required": ["platform"]}
         }
       }
     },

@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Exact current SemVer release label, for example v0.2.0
+        description: Exact current SemVer release label, for example v0.3.0
         required: true
-        default: v0.2.0
+        default: v0.3.0
         type: string
 
 permissions:
@@ -182,8 +182,11 @@ jobs:
           }
           $quickstart = (& ./scripts/quickstart-smoke.ps1 -BinaryPath $binary | ConvertFrom-Json)
           if ($quickstart.selected_memories -ne 1) { throw 'candidate quickstart did not retrieve the promoted memory' }
+          if ($quickstart.review_packet_items -ne 1 -or $quickstart.loadouts_checked -ne 1 -or $quickstart.loadout_selected_memories -ne 1) {
+            throw 'candidate quickstart did not verify the v0.3 review packet and loadout path'
+          }
           [ordered]@{
-            schema_version = 'agentmem-candidate-acceptance/v1alpha1'
+            schema_version = 'agentmem-candidate-acceptance/v1alpha2'
             os = 'windows'
             runner_arch = $env:RUNNER_ARCH
             archive = $asset
@@ -233,10 +236,10 @@ jobs:
           version_output="$("${binary}" version)"
           printf '%s\n' "${version_output}" | jq -e --arg version "${VERSION}" --arg commit "${GITHUB_SHA}" '.version == $version and .commit == $commit' >/dev/null
           quickstart="$(AGENTMEM_BINARY="${binary}" sh ./scripts/quickstart-smoke.sh)"
-          printf '%s\n' "${quickstart}" | jq -e '.selected_memories == 1' >/dev/null
+          printf '%s\n' "${quickstart}" | jq -e '.selected_memories == 1 and .review_packet_items == 1 and .loadouts_checked == 1 and .loadout_selected_memories == 1' >/dev/null
           jq -n --arg os macos --arg runner_arch "${RUNNER_ARCH}" --arg archive "${asset}" --arg archive_sha256 "${actual}" \
             --argjson version "${version_output}" --argjson quickstart "${quickstart}" \
-            '{schema_version:"agentmem-candidate-acceptance/v1alpha1",os:$os,runner_arch:$runner_arch,archive:$archive,archive_sha256:$archive_sha256,version:$version,quickstart:$quickstart}' \
+            '{schema_version:"agentmem-candidate-acceptance/v1alpha2",os:$os,runner_arch:$runner_arch,archive:$archive,archive_sha256:$archive_sha256,version:$version,quickstart:$quickstart}' \
             > acceptance-macos.json
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -245,8 +248,55 @@ jobs:
           if-no-files-found: error
           retention-days: 2
 
+
+  accept-linux:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.STAGING_ARTIFACT }}
+          path: candidate
+      - name: Verify and exercise exact Linux archive
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            aarch64|arm64) arch=arm64 ;;
+            x86_64) arch=amd64 ;;
+            *) echo "unsupported hosted Linux architecture" >&2; exit 1 ;;
+          esac
+          asset="agentmem_${VERSION}_linux_${arch}.tar.gz"
+          expected="$(awk -v file="${asset}" '$2 == file || $2 == "./" file || $2 == "*" file {print $1}' candidate/SHA256SUMS)"
+          test -n "${expected}" && test "$(printf '%s\n' "${expected}" | wc -l | tr -d ' ')" = 1
+          actual="$(sha256sum "candidate/${asset}" | awk '{print $1}')"
+          test "${actual}" = "${expected}"
+          mkdir extracted
+          tar -xzf "candidate/${asset}" -C extracted
+          binary="$(pwd)/extracted/agentmem"
+          chmod 0755 "${binary}"
+          version_output="$("${binary}" version)"
+          printf '%s\n' "${version_output}" | jq -e --arg version "${VERSION}" --arg commit "${GITHUB_SHA}" '.version == $version and .commit == $commit' >/dev/null
+          quickstart="$(AGENTMEM_BINARY="${binary}" sh ./scripts/quickstart-smoke.sh)"
+          printf '%s\n' "${quickstart}" | jq -e '.selected_memories == 1 and .review_packet_items == 1 and .loadouts_checked == 1 and .loadout_selected_memories == 1' >/dev/null
+          jq -n --arg os linux --arg runner_arch "${RUNNER_ARCH}" --arg archive "${asset}" --arg archive_sha256 "${actual}" \
+            --argjson version "${version_output}" --argjson quickstart "${quickstart}" \
+            '{schema_version:"agentmem-candidate-acceptance/v1alpha2",os:$os,runner_arch:$runner_arch,archive:$archive,archive_sha256:$archive_sha256,version:$version,quickstart:$quickstart}' \
+            > acceptance-linux.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: acceptance-linux-${{ github.sha }}
+          path: acceptance-linux.json
+          if-no-files-found: error
+          retention-days: 2
   publish-candidate:
-    needs: [build, accept-windows, accept-macos]
+    needs: [build, accept-windows, accept-macos, accept-linux]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -266,6 +316,10 @@ jobs:
         with:
           name: acceptance-macos-${{ github.sha }}
           path: acceptance
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: acceptance-linux-${{ github.sha }}
+          path: acceptance
       - name: Seal candidate provenance after hosted acceptance
         shell: bash
         env:
@@ -280,12 +334,14 @@ jobs:
           }
           cp acceptance/acceptance-windows.json candidate/ACCEPTANCE-WINDOWS.json
           cp acceptance/acceptance-macos.json candidate/ACCEPTANCE-MACOS.json
+          cp acceptance/acceptance-linux.json candidate/ACCEPTANCE-LINUX.json
           sums_sha256="$(sha256sum candidate/SHA256SUMS | cut -d' ' -f1)"
           checks_sha256="$(sha256sum candidate/REQUIRED_CHECKS.json | cut -d' ' -f1)"
           windows_sha256="$(sha256sum candidate/ACCEPTANCE-WINDOWS.json | cut -d' ' -f1)"
           macos_sha256="$(sha256sum candidate/ACCEPTANCE-MACOS.json | cut -d' ' -f1)"
+          linux_sha256="$(sha256sum candidate/ACCEPTANCE-LINUX.json | cut -d' ' -f1)"
           jq -n \
-            --arg schema_version "agentmem-release-provenance/v1alpha1" \
+            --arg schema_version "agentmem-release-provenance/v1alpha2" \
             --arg version "${VERSION}" \
             --arg commit "${GITHUB_SHA}" \
             --arg observed_main "${observed_main}" \
@@ -297,9 +353,11 @@ jobs:
             --arg windows_acceptance_sha256 "${windows_sha256}" \
             --arg macos_acceptance_sha256 "${macos_sha256}" \
             --slurpfile required_checks candidate/REQUIRED_CHECKS.json \
+            --arg linux_acceptance_sha256 "${linux_sha256}" \
             --slurpfile windows_acceptance candidate/ACCEPTANCE-WINDOWS.json \
             --slurpfile macos_acceptance candidate/ACCEPTANCE-MACOS.json \
-            '{schema_version:$schema_version,version:$version,commit:$commit,observed_main:$observed_main,ref:$ref,repository:$repository,workflow_run_id:$workflow_run_id,sha256sums_sha256:$sha256sums_sha256,required_checks_sha256:$required_checks_sha256,windows_acceptance_sha256:$windows_acceptance_sha256,macos_acceptance_sha256:$macos_acceptance_sha256,required_checks:$required_checks[0],hosted_acceptance:[$windows_acceptance[0],$macos_acceptance[0]]}' \
+            --slurpfile linux_acceptance candidate/ACCEPTANCE-LINUX.json \
+            '{schema_version:$schema_version,version:$version,commit:$commit,observed_main:$observed_main,ref:$ref,repository:$repository,workflow_run_id:$workflow_run_id,sha256sums_sha256:$sha256sums_sha256,required_checks_sha256:$required_checks_sha256,windows_acceptance_sha256:$windows_acceptance_sha256,macos_acceptance_sha256:$macos_acceptance_sha256,linux_acceptance_sha256:$linux_acceptance_sha256,required_checks:$required_checks[0],hosted_acceptance:[$windows_acceptance[0],$macos_acceptance[0],$linux_acceptance[0]]}' \
             > candidate/PROVENANCE.json
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:

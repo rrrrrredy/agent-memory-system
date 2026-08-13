@@ -13,6 +13,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 	"github.com/rrrrrredy/agent-memory-system/internal/promotion"
 	"github.com/rrrrrredy/agent-memory-system/internal/review"
+	"github.com/rrrrrredy/agent-memory-system/internal/reviewpacket"
 )
 
 func runReviewList(args []string) error {
@@ -48,6 +49,41 @@ func runReviewList(args []string) error {
 		return err
 	}
 	result, err := generation.List(candidates.ListOptions{Statuses: statuses, Limit: *limit})
+	if err != nil {
+		return err
+	}
+	return encodeIndented(result)
+}
+
+func runReviewPacket(args []string) error {
+	flags := flag.NewFlagSet("review packet", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	generationName := flags.String("candidates", "", "candidate generation path or directory name; defaults to current")
+	var values repeatedStrings
+	flags.Var(&values, "status", "candidate derivation status: review_ready, untrusted, or quarantined; repeatable")
+	limit := flags.Int("limit", reviewpacket.MaxItems, "maximum candidates in the immutable packet (1-1000)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" {
+		return errors.New("review packet requires --root")
+	}
+	statuses := []candidates.ReviewStatus{candidates.StatusReviewReady}
+	if len(values) != 0 {
+		statuses = statuses[:0]
+		for _, value := range values {
+			statuses = append(statuses, candidates.ReviewStatus(value))
+		}
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := reviewpacket.Build(store, reviewpacket.BuildOptions{
+		Generation: *generationName,
+		Statuses:   statuses,
+		Limit:      *limit,
+	})
 	if err != nil {
 		return err
 	}
@@ -142,14 +178,18 @@ func runPromoteCandidate(args []string) error {
 	candidateID := flags.String("candidate", "", "validated candidate id (required)")
 	approverID := flags.String("approver", "", "caller attestation id (required)")
 	approverKind := flags.String("approver-kind", promotion.ApproverKindCallerAttestation, "caller_attestation or synthetic_test")
-	confirmedTextSHA := flags.String("confirm-text-sha256", "", "SHA-256 of the exact candidate text shown by review list (required)")
+	packetPath := flags.String("packet", "", "immutable review packet path or id")
+	confirmedTextSHA := flags.String("confirm-text-sha256", "", "SHA-256 of the exact displayed candidate text; optional with --packet")
 	reason := flags.String("reason", "", "promotion reason (required)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *root == "" || *candidateID == "" ||
-		strings.TrimSpace(*approverID) == "" || *confirmedTextSHA == "" || strings.TrimSpace(*reason) == "" {
-		return errors.New("promote candidate requires --root, --candidate, --approver, --confirm-text-sha256, and --reason")
+		strings.TrimSpace(*approverID) == "" || strings.TrimSpace(*reason) == "" {
+		return errors.New("promote candidate requires --root, --candidate, --approver, and --reason")
+	}
+	if strings.TrimSpace(*packetPath) == "" && strings.TrimSpace(*confirmedTextSHA) == "" {
+		return errors.New("promote candidate requires either --packet or --confirm-text-sha256")
 	}
 	if *approverKind != promotion.ApproverKindCallerAttestation && *approverKind != promotion.ApproverKindSyntheticTest {
 		return errors.New("approver-kind must be caller_attestation or synthetic_test")
@@ -158,9 +198,26 @@ func runPromoteCandidate(args []string) error {
 	if err != nil {
 		return err
 	}
+	var packetItem reviewpacket.Item
+	packetGeneration := ""
+	if strings.TrimSpace(*packetPath) != "" {
+		packet, item, resolveErr := reviewpacket.ResolveCandidate(store, *packetPath, *candidateID)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		packetGeneration = packet.Generation
+		packetItem = item
+		if strings.TrimSpace(*generationName) == "" {
+			*generationName = packet.Generation
+		}
+	}
+
 	generation, err := resolveCandidateGeneration(store, *generationName)
 	if err != nil {
 		return err
+	}
+	if packetGeneration != "" && generation.Name != packetGeneration {
+		return errors.New("review packet belongs to a different candidate generation")
 	}
 	if err := generation.RequireCurrentEvidence(store); err != nil {
 		return err
@@ -185,7 +242,14 @@ func runPromoteCandidate(args []string) error {
 	}
 	digest := sha256.Sum256([]byte(validated.Candidate.Text))
 	textSHA := hex.EncodeToString(digest[:])
-	if *confirmedTextSHA != textSHA {
+	expectedTextSHA := strings.TrimSpace(*confirmedTextSHA)
+	if packetGeneration != "" {
+		if expectedTextSHA != "" && expectedTextSHA != packetItem.TextSHA256 {
+			return errors.New("explicit text hash does not match the review packet")
+		}
+		expectedTextSHA = packetItem.TextSHA256
+	}
+	if expectedTextSHA != textSHA {
 		return errors.New("confirmed text hash does not match the exact validated candidate text")
 	}
 	scan, err := promotion.ScanCandidate(store, generation.Name, candidate.CandidateID)

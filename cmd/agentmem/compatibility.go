@@ -14,6 +14,7 @@ func runCompatibility(args []string) error {
 	flags := flag.NewFlagSet("compatibility", flag.ContinueOnError)
 	var values repeatedStrings
 	flags.Var(&values, "agent", "Agent runtime to probe: codex, claude-code, or opencode; repeatable")
+	root := flags.String("root", "", "optional local evidence root used to verify native Codex receipts")
 	timeout := flags.Duration("timeout", 5*time.Second, "maximum version-probe duration per Agent")
 	requireAll := flags.Bool("require-all", false, "return a non-zero status unless every requested Agent is executable")
 	if err := flags.Parse(args); err != nil {
@@ -30,7 +31,17 @@ func runCompatibility(args []string) error {
 		}
 		agents = append(agents, agent)
 	}
-	report := compatibility.Probe(context.Background(), compatibility.Options{Agents: agents, Timeout: *timeout})
+	var store *ledger.Store
+	if *root != "" {
+		opened, err := ledger.Open(*root)
+		store = opened
+		if err != nil {
+			return err
+		}
+	}
+	report := compatibility.Probe(context.Background(), compatibility.Options{
+		Agents: agents, Timeout: *timeout, EvidenceStore: store,
+	})
 	if err := encodeIndented(report); err != nil {
 		return err
 	}

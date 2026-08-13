@@ -73,3 +73,25 @@ operational acceptance requirement, not a claim made by the synthetic suite.
 - Windows/macOS and three-Agent synchronization suite.
 - Optional encrypted evidence backup and verified restore.
 - Install, doctor, upgrade, and new-device recovery flows.
+
+## M5: Repeatable operations and prospective evidence
+
+Status: operational controls are implemented in v0.3.0. A completed real-world
+longitudinal study remains future evidence, not a release claim.
+
+- Immutable exact-revision memory loadouts with scope, Agent, and budgets.
+- Immutable evidence-bound review packets for lower-friction operator review.
+- Replay-verifiable local Codex execution receipts with explicit provider
+  authority limits.
+- Honest Claude Code protocol-only and hosted-only OpenCode execution evidence.
+- Prospective full-task contracts, deterministic balanced assignment,
+  first-attempt enforcement, built-in replay-derived outcome evidence, and
+  descriptive longitudinal reports.
+- Loopback-only read-only operational dashboard.
+- Static public product documentation through GitHub Pages.
+
+Exit for implementation: public schemas, producer instances, adversarial
+failure tests, cross-platform CI, one real local Codex acceptance, and release
+artifact verification. Exit for longitudinal efficacy is separate: the full
+prospective period and population must complete without weakening the claim
+boundary.

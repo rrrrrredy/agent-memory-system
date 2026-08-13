@@ -71,16 +71,18 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "capture supervisor watch flags", args: []string{"capture", "supervisor", "watch"}, message: "requires --root"},
 		{name: "capture supervisor status flags", args: []string{"capture", "supervisor", "status"}, message: "requires --root"},
 		{name: "capture supervisor recover flags", args: []string{"capture", "supervisor", "recover"}, message: "requires --root"},
-		{name: "missing review subcommand", args: []string{"review"}, message: "review <list|decide|apply|status|verify>"},
-		{name: "unknown review subcommand", args: []string{"review", "unknown"}, message: "review <list|decide|apply|status|verify>"},
+		{name: "missing review subcommand", args: []string{"review"}, message: "review <list|packet|decide|apply|status|verify>"},
+		{name: "unknown review subcommand", args: []string{"review", "unknown"}, message: "review <list|packet|decide|apply|status|verify>"},
 		{name: "review list flags", args: []string{"review", "list"}, message: "requires --root"},
+		{name: "review packet flags", args: []string{"review", "packet"}, message: "requires --root"},
 		{name: "review decide flags", args: []string{"review", "decide"}, message: "requires --root, --candidate, --action, --reviewer, and --reason"},
 		{name: "review apply flags", args: []string{"review", "apply"}, message: "requires --root, --candidates, and --file"},
 		{name: "review status flags", args: []string{"review", "status"}, message: "requires --root, --candidates, and --candidate"},
 		{name: "review verify flags", args: []string{"review", "verify"}, message: "requires --root"},
 		{name: "missing promote subcommand", args: []string{"promote"}, message: "promote <candidate|scan|apply|status|verify>"},
 		{name: "unknown promote subcommand", args: []string{"promote", "unknown"}, message: "promote <candidate|scan|apply|status|verify>"},
-		{name: "promote candidate flags", args: []string{"promote", "candidate"}, message: "requires --root, --candidate, --approver, --confirm-text-sha256, and --reason"},
+		{name: "promote candidate flags", args: []string{"promote", "candidate"}, message: "requires --root, --candidate, --approver, and --reason"},
+		{name: "promote candidate display binding", args: []string{"promote", "candidate", "--root", "x", "--candidate", "x", "--approver", "owner", "--reason", "reviewed"}, message: "requires either --packet or --confirm-text-sha256"},
 		{name: "promote scan flags", args: []string{"promote", "scan"}, message: "requires --root, --candidates, and --candidate"},
 		{name: "promote apply flags", args: []string{"promote", "apply"}, message: "requires --root and --file"},
 		{name: "promote status flags", args: []string{"promote", "status"}, message: "requires --root and --memory"},
@@ -95,6 +97,17 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "portable init flags", args: []string{"portable", "init"}, message: "requires --repo"},
 		{name: "portable export flags", args: []string{"portable", "export"}, message: "requires --root and --repo"},
 		{name: "portable verify flags", args: []string{"portable", "verify"}, message: "requires --repo"},
+		{name: "missing loadout subcommand", args: []string{"loadout"}, message: "loadout <create|list|verify|context>"},
+		{name: "unknown loadout subcommand", args: []string{"loadout", "unknown"}, message: "loadout <create|list|verify|context>"},
+		{name: "loadout create flags", args: []string{"loadout", "create"}, message: "requires --repo, --name, --scope-kind, --scope-value"},
+		{name: "loadout list flags", args: []string{"loadout", "list"}, message: "requires --repo"},
+		{name: "loadout verify flags", args: []string{"loadout", "verify"}, message: "requires --repo and --loadout"},
+		{name: "loadout context flags", args: []string{"loadout", "context"}, message: "requires --root, --repo, --loadout, and --agent"},
+		{name: "missing agent subcommand", args: []string{"agent"}, message: "agent <run|verify>"},
+		{name: "unknown agent subcommand", args: []string{"agent", "unknown"}, message: "agent <run|verify>"},
+		{name: "missing agent run adapter", args: []string{"agent", "run"}, message: "agent run codex"},
+		{name: "agent run flags", args: []string{"agent", "run", "codex"}, message: "requires --root, --file, and --codex"},
+		{name: "agent verify flags", args: []string{"agent", "verify"}, message: "requires --root"},
 		{name: "missing recall subcommand", args: []string{"recall"}, message: "recall <search|get|context|adoption|verify>"},
 		{name: "unknown recall subcommand", args: []string{"recall", "unknown"}, message: "recall <search|get|context|adoption|verify>"},
 		{name: "recall search flags", args: []string{"recall", "search"}, message: "requires --query"},
@@ -102,9 +115,16 @@ func TestDeriveCommandDispatchAndRequiredFlags(t *testing.T) {
 		{name: "recall context flags", args: []string{"recall", "context"}, message: "requires --root and --repo"},
 		{name: "recall adoption flags", args: []string{"recall", "adoption"}, message: "requires --root and --file"},
 		{name: "recall verify flags", args: []string{"recall", "verify"}, message: "requires --root"},
-		{name: "missing serve subcommand", args: []string{"serve"}, message: "serve mcp"},
-		{name: "unknown serve subcommand", args: []string{"serve", "unknown"}, message: "serve mcp"},
+		{name: "missing serve subcommand", args: []string{"serve"}, message: "serve <mcp|dashboard>"},
+		{name: "missing study subcommand", args: []string{"study"}, message: "study <create|observe|report|verify>"},
+		{name: "unknown study subcommand", args: []string{"study", "unknown"}, message: "study <create|observe|report|verify>"},
+		{name: "study create flags", args: []string{"study", "create"}, message: "requires --root, --repo, and --file"},
+		{name: "study observe flags", args: []string{"study", "observe"}, message: "requires --root and --file"},
+		{name: "study report flags", args: []string{"study", "report"}, message: "requires --root and --study"},
+		{name: "study verify flags", args: []string{"study", "verify"}, message: "requires --root"},
+		{name: "unknown serve subcommand", args: []string{"serve", "unknown"}, message: "serve <mcp|dashboard>"},
 		{name: "serve mcp flags", args: []string{"serve", "mcp"}, message: "requires --root, --repo, and --agent"},
+		{name: "serve dashboard flags", args: []string{"serve", "dashboard"}, message: "requires --root and --repo"},
 		{name: "missing sync subcommand", args: []string{"sync"}, message: "sync <bootstrap|verify|run|install-hooks|auto>"},
 		{name: "unknown sync subcommand", args: []string{"sync", "unknown"}, message: "sync <bootstrap|verify|run|install-hooks|auto>"},
 		{name: "sync bootstrap flags", args: []string{"sync", "bootstrap"}, message: "requires --repo"},
@@ -179,7 +199,7 @@ func TestTopLevelHelpSucceeds(t *testing.T) {
 func TestCommandGroupHelpSucceeds(t *testing.T) {
 	for _, group := range []string{
 		"onboard", "import", "inject", "capture", "backup", "derive", "eval", "review", "promote",
-		"rule-approval", "portable", "recall", "serve", "sync",
+		"rule-approval", "portable", "loadout", "agent", "study", "recall", "serve", "sync",
 	} {
 		if err := run([]string{group, "--help"}); err != nil {
 			t.Fatalf("%s --help: %v", group, err)
@@ -191,9 +211,18 @@ func TestLeafCommandHelpSucceeds(t *testing.T) {
 	for _, args := range [][]string{
 		{"doctor", "--help"},
 		{"review", "decide", "--help"},
+		{"review", "packet", "--help"},
 		{"promote", "candidate", "--help"},
 		{"portable", "verify", "--help"},
+		{"loadout", "context", "--help"},
+		{"agent", "run", "codex", "--help"},
+		{"agent", "verify", "--help"},
+		{"study", "create", "--help"},
+		{"study", "observe", "--help"},
+		{"study", "report", "--help"},
+		{"study", "verify", "--help"},
 		{"recall", "search", "--help"},
+		{"serve", "dashboard", "--help"},
 	} {
 		if err := runForExit(args); err != nil {
 			t.Fatalf("%v: %v", args, err)
@@ -206,6 +235,7 @@ func TestNestedCommandGroupHelpSucceeds(t *testing.T) {
 		args []string
 		want string
 	}{
+		{[]string{"agent", "run", "--help"}, "agent run codex"},
 		{[]string{"capture", "hook", "--help"}, "capture hook <codex|claude-code>"},
 		{[]string{"capture", "supervisor", "--help"}, "capture supervisor <configure|run|watch|status|recover|clear-stale-lock>"},
 		{[]string{"eval", "corpus", "--help"}, "eval corpus <baseline|freeze|verify|review-pack|review-queue|agent-assessment>"},
@@ -275,7 +305,7 @@ func TestSyncBootstrapLeavesRepositoryHooksDisabledByDefault(t *testing.T) {
 	}
 	runTestGit(t, repository, "init", "--initial-branch", "main")
 	runTestGit(t, repository, "config", "user.name", "Test User")
-	runTestGit(t, repository, "config", "user.email", "test@example.invalid")
+	runTestGit(t, repository, "config", "user.email", "test@example.com")
 	if err := run([]string{"sync", "bootstrap", "--repo", repository}); err != nil {
 		t.Fatal(err)
 	}

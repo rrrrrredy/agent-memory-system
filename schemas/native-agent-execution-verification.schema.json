@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/native-agent-execution-verification.schema.json",
+  "title": "Native Codex execution verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "records_checked", "blobs_checked", "receipts_checked", "issues", "privacy"],
+  "properties": {
+    "schema_version": {"const": "native-agent-execution-verification/v1alpha1"},
+    "records_checked": {"type": "integer", "minimum": 0},
+    "blobs_checked": {"type": "integer", "minimum": 0},
+    "receipts_checked": {"type": "integer", "minimum": 0},
+    "issues": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "privacy": {"const": "local_only"}
+  }
+}

@@ -4,14 +4,15 @@
   "title": "Portable memory verification report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "files_checked", "revisions_checked", "memories_checked", "active_memories", "revoked_memories", "issues", "privacy"],
+  "required": ["schema_version", "files_checked", "revisions_checked", "memories_checked", "active_memories", "revoked_memories", "loadouts_checked", "issues", "privacy"],
   "properties": {
-    "schema_version": {"const": "portable-memory-verification/v1alpha1"},
+    "schema_version": {"const": "portable-memory-verification/v1alpha2"},
     "files_checked": {"type": "integer", "minimum": 0},
     "revisions_checked": {"type": "integer", "minimum": 0},
     "memories_checked": {"type": "integer", "minimum": 0},
     "active_memories": {"type": "integer", "minimum": 0},
     "revoked_memories": {"type": "integer", "minimum": 0},
+    "loadouts_checked": {"type": "integer", "minimum": 0},
     "issues": {
       "type": "array",
       "items": {
@@ -20,6 +21,7 @@
         "required": ["code", "message"],
         "properties": {
           "code": {"type": "string", "minLength": 1},
+          "loadout_id": {"type": "string", "pattern": "^loadout-[a-f0-9]{64}$"},
           "memory_id": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"},
           "revision_id": {"type": "string", "pattern": "^portable-revision-[a-f0-9]{64}$"},
           "related_memory_ids": {"type": "array", "items": {"type": "string", "pattern": "^memory-[a-f0-9]{64}$"}, "uniqueItems": true},

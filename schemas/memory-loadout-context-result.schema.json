@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-loadout-context-result.schema.json",
+  "title": "Composite loadout context result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "receipt", "privacy"],
+  "properties": {
+    "schema_version": {"const": "memory-loadout-context-result/v1alpha1"},
+    "receipt": {"$ref": "memory-loadout-context-receipt.schema.json"},
+    "privacy": {"const": "local_only"}
+  }
+}

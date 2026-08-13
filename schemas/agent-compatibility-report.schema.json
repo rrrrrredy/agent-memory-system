@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "generated_at", "ready", "agents", "privacy"],
   "properties": {
-    "schema_version": {"const": "agent-compatibility-report/v1alpha1"},
+    "schema_version": {"const": "agent-compatibility-report/v1alpha2"},
     "generated_at": {"type": "string", "format": "date-time"},
     "ready": {"type": "boolean"},
     "agents": {
@@ -17,7 +17,7 @@
         "additionalProperties": false,
         "required": [
           "agent", "command", "runtime_status", "history_import_available", "capture_modes", "retrieval_modes",
-          "native_execution_verified", "limitations"
+          "native_execution_verified", "execution_evidence", "provider_independently_attested", "limitations"
         ],
         "properties": {
           "agent": {"enum": ["codex", "claude_code", "opencode"]},
@@ -32,6 +32,10 @@
           "capture_modes": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
           "retrieval_modes": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
           "native_execution_verified": {"type": "boolean"},
+          "execution_evidence": {
+            "enum": ["not_verified", "local_replayable_receipt", "adapter_protocol_only", "hosted_runtime_smoke_only", "unsupported"]
+          },
+          "provider_independently_attested": {"const": false},
           "limitations": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
         },
         "allOf": [
@@ -42,6 +46,14 @@
           {
             "if": {"properties": {"runtime_status": {"enum": ["blocked", "not_found"]}}, "required": ["runtime_status"]},
             "then": {"required": ["runtime_issue"]}
+          },
+          {
+            "if": {"properties": {"execution_evidence": {"const": "local_replayable_receipt"}}, "required": ["execution_evidence"]},
+            "then": {"properties": {"native_execution_verified": {"const": true}}}
+          },
+          {
+            "if": {"properties": {"native_execution_verified": {"const": true}}, "required": ["native_execution_verified"]},
+            "then": {"properties": {"execution_evidence": {"const": "local_replayable_receipt"}}}
           }
         ]
       }

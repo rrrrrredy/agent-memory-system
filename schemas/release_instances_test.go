@@ -63,25 +63,33 @@ func TestReleaseAndHostedReceiptInstancesMatchPublishedSchemas(t *testing.T) {
 	hash64 := strings.Repeat("a", 64)
 	hash40 := strings.Repeat("b", 40)
 	quickstart := map[string]any{
-		"schema_version": "quickstart-smoke/v1alpha1", "fixture_sha256": hash64,
+		"schema_version": "quickstart-smoke/v1alpha2", "fixture_sha256": hash64,
 		"simulated_attestations": true, "gaps_appended": 0, "doctor_ready": true,
 		"review_ready": 1, "revisions_written": 1, "active_memories": 1, "selected_memories": 1,
+		"review_packet_items": 1, "loadouts_checked": 1, "loadout_selected_memories": 1,
 	}
 	version := map[string]any{
 		"schema_version": "agent-memory-version/v1alpha1", "version": "v0.1.0-rc.1",
 		"commit": hash40, "build_date": "2026-08-11T00:00:00Z", "go_version": "go1.26.5", "platform": "windows/amd64",
 	}
 	windows := map[string]any{
-		"schema_version": "agentmem-candidate-acceptance/v1alpha1", "os": "windows", "runner_arch": "X64",
+		"schema_version": "agentmem-candidate-acceptance/v1alpha2", "os": "windows", "runner_arch": "X64",
 		"archive": "agentmem_v0.1.0-rc.1_windows_amd64.zip", "archive_sha256": hash64,
 		"version": version, "quickstart": quickstart,
 	}
 	macVersion := cloneMap(t, version)
 	macVersion["platform"] = "darwin/arm64"
 	macos := map[string]any{
-		"schema_version": "agentmem-candidate-acceptance/v1alpha1", "os": "macos", "runner_arch": "ARM64",
+		"schema_version": "agentmem-candidate-acceptance/v1alpha2", "os": "macos", "runner_arch": "ARM64",
 		"archive": "agentmem_v0.1.0-rc.1_darwin_arm64.tar.gz", "archive_sha256": hash64,
 		"version": macVersion, "quickstart": quickstart,
+	}
+	linuxVersion := cloneMap(t, version)
+	linuxVersion["platform"] = "linux/amd64"
+	linux := map[string]any{
+		"schema_version": "agentmem-candidate-acceptance/v1alpha2", "os": "linux", "runner_arch": "X64",
+		"archive": "agentmem_v0.1.0-rc.1_linux_amd64.tar.gz", "archive_sha256": hash64,
+		"version": linuxVersion, "quickstart": quickstart,
 	}
 	job := func(id int, name string) map[string]any {
 		return map[string]any{"id": id, "name": name, "status": "completed", "conclusion": "success",
@@ -96,12 +104,12 @@ func TestReleaseAndHostedReceiptInstancesMatchPublishedSchemas(t *testing.T) {
 			job(4, "race"), job(5, "fuzz-smoke"), job(6, "opencode-runtime"), job(7, "public-tree-privacy")},
 	}
 	provenance := map[string]any{
-		"schema_version": "agentmem-release-provenance/v1alpha1", "version": "v0.1.0-rc.1",
+		"schema_version": "agentmem-release-provenance/v1alpha2", "version": "v0.1.0-rc.1",
 		"commit": hash40, "observed_main": hash40, "ref": "refs/heads/main",
 		"repository": "rrrrrredy/agent-memory-system", "workflow_run_id": "1",
 		"sha256sums_sha256": hash64, "required_checks_sha256": hash64,
-		"windows_acceptance_sha256": hash64, "macos_acceptance_sha256": hash64,
-		"required_checks": requiredChecks, "hosted_acceptance": []any{windows, macos},
+		"windows_acceptance_sha256": hash64, "macos_acceptance_sha256": hash64, "linux_acceptance_sha256": hash64,
+		"required_checks": requiredChecks, "hosted_acceptance": []any{windows, macos, linux},
 	}
 	opencode := map[string]any{
 		"schema_version": "opencode-runtime-smoke/v1alpha1", "runtime_version": "1.18.11",
@@ -117,6 +125,7 @@ func TestReleaseAndHostedReceiptInstancesMatchPublishedSchemas(t *testing.T) {
 		{"opencode-runtime-smoke.schema.json", opencode},
 		{"agentmem-candidate-acceptance.schema.json", windows},
 		{"agentmem-candidate-acceptance.schema.json", macos},
+		{"agentmem-candidate-acceptance.schema.json", linux},
 		{"agentmem-required-checks.schema.json", requiredChecks},
 		{"agentmem-release-provenance.schema.json", provenance},
 	}
@@ -138,7 +147,7 @@ func TestReleaseAndHostedReceiptInstancesMatchPublishedSchemas(t *testing.T) {
 	rejectPublishedInstance(t, "agentmem-candidate-acceptance.schema.json", wrongWindows)
 
 	duplicateOS := cloneMap(t, provenance)
-	duplicateOS["hosted_acceptance"] = []any{windows, windows}
+	duplicateOS["hosted_acceptance"] = []any{windows, windows, linux}
 	rejectPublishedInstance(t, "agentmem-release-provenance.schema.json", duplicateOS)
 }
 

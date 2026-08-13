@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-study-plan.schema.json",
+  "title": "Sealed prospective longitudinal study plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "study_id", "created_at", "name", "hypothesis", "agent", "loadout", "minimum_elapsed_days", "assignment_policy", "assignment_seed_sha256", "tasks", "privacy"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-study-plan/v1alpha1"},
+    "study_id": {"type": "string", "pattern": "^study-[a-f0-9]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "name": {"type": "string", "minLength": 1, "maxLength": 128},
+    "hypothesis": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "agent": {"const": "codex"},
+    "loadout": {"$ref": "portable-memory-loadout.schema.json#/$defs/loadout"},
+    "minimum_elapsed_days": {"type": "integer", "minimum": 1, "maximum": 365},
+    "assignment_policy": {"const": "content_hash_counterbalanced/v1alpha1"},
+    "assignment_seed_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "tasks": {"type": "array", "minItems": 4, "maxItems": 500, "items": {"$ref": "#/$defs/task"}},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "task": {
+      "type": "object", "additionalProperties": false,
+      "required": ["task_id", "cluster_id", "prompt", "model", "sandbox", "working_directory", "timeout_seconds", "skip_git_repository_check", "acceptance", "order", "condition"],
+      "properties": {
+        "task_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
+        "cluster_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
+        "prompt": {"type": "string", "minLength": 1, "maxLength": 131072},
+        "model": {"type": "string", "minLength": 1, "maxLength": 128},
+        "sandbox": {"enum": ["read-only", "workspace-write"]},
+        "working_directory": {"type": "string", "minLength": 1, "pattern": "^[^\\x00]+$"},
+        "timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+        "skip_git_repository_check": {"type": "boolean"},
+        "acceptance": {"$ref": "longitudinal-study-acceptance.schema.json"},
+        "order": {"type": "integer", "minimum": 1, "maximum": 500},
+        "condition": {"enum": ["baseline", "memory"]}
+      }
+    }
+  }
+}

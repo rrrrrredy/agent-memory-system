@@ -47,7 +47,7 @@ func RunOpenAIAssessment(
 	if options.ConfirmRemoteDisclosureID != payload.PayloadID {
 		return result, errors.New("remote disclosure confirmation must exactly match the payload id")
 	}
-	if !safeAPIKey(options.APIKey) {
+	if !safeAPIKey(options.Credential) {
 		return result, errors.New("OPENAI_API_KEY is missing or invalid")
 	}
 	scan, err := scanBlindPayload(payload)
@@ -91,7 +91,7 @@ func RunOpenAIAssessment(
 	if err != nil {
 		return result, errors.New("create OpenAI request")
 	}
-	request.Header.Set("Authorization", "Bearer "+options.APIKey)
+	request.Header.Set("Authorization", "Bearer "+options.Credential)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Accept-Encoding", "identity")

@@ -18,7 +18,15 @@ Unit, integration, schema, and cross-platform tests verify invariants such as:
 - Git divergence, offline operation, and recovery;
 - retrieval scope, budgets, exact injection receipts, and adoption evidence;
 - encrypted backup verification and no-overwrite restore;
-- mixed evidence-event protocol versions and public-schema conformance.
+- mixed evidence-event protocol versions and public-schema conformance;
+- immutable loadout identity, exact-head freshness, scope, Agent, budget, and
+  composite delivery receipts;
+- review-packet freshness and exact candidate display binding;
+- native Codex executable, request, raw JSONL, output, usage, and terminal
+  receipt replay;
+- prospective study ordering, assignment, outcome evidence, and denominator
+  gates; and
+- loopback-only read-only dashboard privacy and method controls.
 
 Stateful safety packages also run under the Go race detector.
 
@@ -49,7 +57,8 @@ The current acceptance includes:
   Ubuntu runner, producing a `session.created` event whose session identifier
   matches the session returned by the server and is imported and verified;
 - GitHub-hosted Windows, macOS, and Ubuntu build, test, installer, and protocol
-  coverage.
+  coverage, plus checksum-, version-, and quickstart-bound execution of the
+  exact Windows, macOS, and Linux release archives;
 - a local authenticated 20-pair `codex exec` suite in which every synthetic
   instruction traversed import, derivation, review, promotion, export,
   retrieval, and a verified injection receipt before exact-oracle evaluation;
@@ -73,6 +82,14 @@ does not establish a general or longitudinal improvement.
 An authenticated Claude Code task and a physical macOS device test are not
 claimed.
 
+The v0.3 native bridge adds a narrower, reproducible local authority: it stages
+and re-hashes exact Codex and runner bytes, then replays the canonical request,
+arguments, raw JSONL, usage, output, event chain, and terminal receipt. This is
+stronger than a version probe or caller statement. It still does not
+independently attest the remote provider, selected server-side model, login
+identity, or hidden reasoning. The release acceptance keeps raw event and local
+path evidence private.
+
 ## 3. Learning efficacy
 
 The evaluator measures:
@@ -95,9 +112,33 @@ The current local execution supervisor can verify a pinned adapter process but
 cannot independently certify that Codex, Claude Code, or OpenCode produced the
 result. The fixed population builder therefore sets
 `verified_agent_execution=false`, and the continuous efficacy report cannot
-
 become release-ready. This is an intentional truth boundary, not a passing
 placeholder.
+
+### Prospective longitudinal observation
+
+`agentmem study create` seals the complete task and cluster population, every
+prompt and native run setting, immutable Agent-message SHA-256 acceptance
+assertions, exact loadout, minimum elapsed period, Agent, and deterministic
+balanced assignment before eligible execution. `study observe` accepts only
+the first later completed execution for that task, requires its request to
+match every sealed field, derives the outcome with the built-in evaluator, and
+binds a dedicated replayable outcome event. The caller cannot submit a result.
+
+The report remains `not_evaluable` for an incomplete population, insufficient
+elapsed time, an arm with fewer than two observations, a synthetic observation,
+a replaced or retried execution, an outcome that differs from built-in replay,
+missing causal evidence, or any replay failure. A complete report is
+labelled `descriptive_signal` and carries this boundary:
+
+```text
+prospective local built-in acceptance evidence; descriptive association only; not independent causal or provider certification
+```
+
+No completed real-world longitudinal study is published with v0.3.0. The
+protocol and failure-path controls are tested; future observed results must be
+reported separately and cannot inherit the frozen synthetic benchmark claim.
+
 ### Native Codex diagnostic benchmark
 
 `agentmem eval codex benchmark` preregisters a local-only paired suite before
@@ -108,9 +149,10 @@ reference unsealed files. The public suite seals a no-tools policy, rejects any
 Codex tool item, and supplies only the expected-answer hash to the oracle.
 `eval codex verify` reparses raw Codex JSONL and replays the complete local
 retrieval, injection, plan, artifact, execution, and report graph. `eval codex
-receipt` exports only a self-hashed aggregate receipt. The self-hash detects byte
-changes; it is not a signature. The reviewed Git commit and repository account
-provide publication provenance.
+receipt` exports only a self-hashed aggregate receipt. The self-hash detects
+canonical field-value changes when the hash is not recomputed; it is not a
+signature and does not authenticate an author. The reviewed Git commit and
+repository account provide publication provenance.
 
 A task may use caller-provided context for debugging, but that source is always
 reported as diagnostic. Only an `injection_id` resolved from a fully verified
@@ -160,6 +202,10 @@ Use these terms precisely:
 - **fixture-tested**: a frozen input exercises a parser or control;
 - **runtime-smoked**: the actual executable and integration ran;
 - **provider-backed**: an authenticated model task ran;
+- **local-process-replayable**: exact supported local process artifacts and
+  output replay, without independent provider or model attestation;
+- **descriptive-signal**: a complete prospective local study association that
+  is neither causal nor independently provider-certified;
 - **release-ready efficacy**: every fixed population gate passed against
   independently verified Agent execution.
 

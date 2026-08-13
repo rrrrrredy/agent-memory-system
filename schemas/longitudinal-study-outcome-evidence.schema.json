@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-study-outcome-evidence.schema.json",
+  "title": "Replayable built-in longitudinal study outcome evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "evidence_id", "study_id", "task_id", "execution", "acceptance_sha256", "outcome", "assertion_results", "evaluator", "evaluated_at", "privacy"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-study-outcome-evidence/v1alpha1"},
+    "evidence_id": {"type": "string", "pattern": "^study-outcome-[a-f0-9]{64}$"},
+    "study_id": {"type": "string", "pattern": "^study-[a-f0-9]{64}$"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
+    "execution": {"$ref": "longitudinal-study-observation.schema.json#/$defs/bound_event"},
+    "acceptance_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "outcome": {"enum": ["success", "failure"]},
+    "assertion_results": {
+      "type": "array", "minItems": 1, "maxItems": 16,
+      "items": {"$ref": "#/$defs/assertion_result"}
+    },
+    "evaluator": {"const": "builtin-exact-sha256/v1"},
+    "evaluated_at": {"type": "string", "format": "date-time"},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "assertion_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "expected_sha256", "status"],
+      "properties": {
+        "kind": {"const": "agent_message_sha256"},
+        "expected_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "actual_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "status": {"enum": ["passed", "failed"]},
+        "captured_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "passed"}}, "required": ["status"]},
+          "then": {"required": ["actual_sha256", "captured_blob"]}
+        }
+      ]
+    }
+  }
+}

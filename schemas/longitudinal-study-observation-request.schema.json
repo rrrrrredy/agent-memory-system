@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-study-observation-request.schema.json",
+  "title": "Longitudinal study observation request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "study_id", "task_id", "execution_receipt_id", "reporter", "reason", "privacy"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-study-observation-request/v1alpha1"},
+    "study_id": {"type": "string", "pattern": "^study-[a-f0-9]{64}$"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
+    "execution_receipt_id": {"type": "string", "pattern": "^native-agent-receipt-[a-f0-9]{64}$"},
+    "reporter": {"$ref": "#/$defs/reporter"},
+    "reason": {"type": "string", "minLength": 10, "maxLength": 2048},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "reporter": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"enum": ["caller_attestation", "synthetic_test"]},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    }
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/native-agent-execution-start.schema.json",
+  "title": "Evidence-bound native Codex execution start",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "started_event_id", "execution_id", "task_id", "request_sha256",
+    "request_blob", "prompt_sha256", "prompt_blob", "codex_executable", "codex_version",
+    "runner_executable", "arguments", "arguments_sha256", "environment_policy",
+    "environment_names_sha256", "environment_names_count", "working_directory_sha256",
+    "memory_references", "started_at", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "native-agent-execution-start/v1alpha1"},
+    "started_event_id": {"type": "string", "pattern": "^native-agent-start-[a-f0-9]{64}$"},
+    "execution_id": {"type": "string", "pattern": "^native-agent-execution-.+"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
+    "request_sha256": {"$ref": "#/$defs/sha256"},
+    "request_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "prompt_sha256": {"$ref": "#/$defs/sha256"},
+    "prompt_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "codex_executable": {"$ref": "#/$defs/artifact"},
+    "codex_version": {"type": "string", "minLength": 1, "maxLength": 256},
+    "runner_executable": {"$ref": "#/$defs/artifact"},
+    "arguments": {
+      "type": "array", "minItems": 12, "maxItems": 20,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "arguments_sha256": {"$ref": "#/$defs/sha256"},
+    "environment_policy": {"const": "inherited_for_auth; names hashed; values intentionally not recorded"},
+    "environment_names_sha256": {"$ref": "#/$defs/sha256"},
+    "environment_names_count": {"type": "integer", "minimum": 1},
+    "working_directory_sha256": {"$ref": "#/$defs/sha256"},
+    "loadout_context_receipt_id": {"type": "string", "pattern": "^loadout-context-.+"},
+    "memory_references": {
+      "type": "array", "maxItems": 64, "uniqueItems": true,
+      "items": {"$ref": "portable-memory-loadout.schema.json#/$defs/memory_reference"}
+    },
+    "started_at": {"type": "string", "format": "date-time"},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256", "bytes", "blob"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"}
+      }
+    },
+    "bound_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "record_sha256"],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1},
+        "record_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_tokens", "cached_input_tokens", "cache_write_input_tokens", "output_tokens", "reasoning_output_tokens"],
+      "properties": {
+        "input_tokens": {"type": "integer", "minimum": 0},
+        "cached_input_tokens": {"type": "integer", "minimum": 0},
+        "cache_write_input_tokens": {"type": "integer", "minimum": 0},
+        "output_tokens": {"type": "integer", "minimum": 0},
+        "reasoning_output_tokens": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

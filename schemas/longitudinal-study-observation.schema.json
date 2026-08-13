@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-study-observation.schema.json",
+  "title": "Evidence-bound longitudinal study observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "observation_id", "study_id", "task_id", "condition", "execution", "outcome", "outcome_authority", "outcome_evidence", "reporter", "reason", "observed_at", "privacy"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-study-observation/v1alpha1"},
+    "observation_id": {"type": "string", "pattern": "^study-observation-[a-f0-9]{64}$"},
+    "study_id": {"type": "string", "pattern": "^study-[a-f0-9]{64}$"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
+    "condition": {"enum": ["baseline", "memory"]},
+    "execution": {"$ref": "#/$defs/bound_event"},
+    "outcome": {"enum": ["success", "failure"]},
+    "outcome_authority": {"const": "builtin_acceptance_replay"},
+    "outcome_evidence": {"$ref": "#/$defs/bound_event"},
+    "reporter": {"$ref": "#/$defs/reporter"},
+    "reason": {"type": "string", "minLength": 10, "maxLength": 2048},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "bound_event": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event_id", "record_sha256"],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "record_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "reporter": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"enum": ["caller_attestation", "synthetic_test"]},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    }
+  }
+}

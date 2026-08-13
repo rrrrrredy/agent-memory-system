@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/portable-memory-loadout-use-verification.schema.json",
+  "title": "Portable memory loadout use verification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "loadout_id", "current", "repository", "privacy"],
+  "properties": {
+    "schema_version": {"const": "portable-memory-loadout-use-verification/v1alpha1"},
+    "loadout_id": {"type": "string", "pattern": "^loadout-[a-f0-9]{64}$"},
+    "current": {"type": "boolean"},
+    "issue": {"type": "string", "minLength": 1},
+    "repository": {"$ref": "portable-memory-verification.schema.json"},
+    "privacy": {"const": "private_git"}
+  }
+}

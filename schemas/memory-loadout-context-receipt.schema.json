@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-loadout-context-receipt.schema.json",
+  "title": "Verified composite loadout context receipt",
+  "$ref": "#/$defs/receipt",
+  "$defs": {
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "channel"],
+      "properties": {
+        "agent": {"enum": ["codex", "claude_code", "opencode"]},
+        "thread_id": {"type": "string", "minLength": 1},
+        "session_id": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1},
+        "project": {"type": "string", "minLength": 1},
+        "task": {"type": "string", "minLength": 1},
+        "channel": {
+          "enum": ["cli", "mcp", "codex_hook", "claude_code_hook", "opencode_plugin", "harness"]
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "receipt_id", "recorded_at", "loadout", "context",
+        "retrieval_receipt_ids", "memories", "content", "content_sha256",
+        "content_bytes", "estimated_tokens", "privacy"
+      ],
+      "properties": {
+        "schema_version": {"const": "memory-loadout-context-receipt/v1alpha1"},
+        "receipt_id": {"type": "string", "pattern": "^loadout-context-.+"},
+        "recorded_at": {"type": "string", "format": "date-time"},
+        "loadout": {"$ref": "portable-memory-loadout.schema.json"},
+        "context": {"$ref": "#/$defs/context"},
+        "retrieval_receipt_ids": {
+          "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^retrieval-.+"}
+        },
+        "memories": {
+          "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true,
+          "items": {"$ref": "portable-memory-loadout.schema.json#/$defs/memory_reference"}
+        },
+        "content": {"type": "string", "minLength": 1, "maxLength": 131072},
+        "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "content_bytes": {"type": "integer", "minimum": 1, "maximum": 131072},
+        "estimated_tokens": {"type": "integer", "minimum": 1, "maximum": 8192},
+        "privacy": {"const": "local_only"}
+      }
+    }
+  }
+}

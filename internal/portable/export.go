@@ -94,8 +94,13 @@ func Export(store *ledger.Store, repositoryRoot string, options ExportOptions) (
 		SchemaVersion: VerificationSchemaVersion, Issues: []VerificationIssue{}, Privacy: PortablePrivacy,
 		RevisionsChecked: len(combined),
 	}
-	combinedState := &repositoryState{revisions: combined, heads: map[string]Revision{}}
+	combinedState := &repositoryState{
+		revisions: combined,
+		heads:     map[string]Revision{},
+		loadouts:  existing.loadouts,
+	}
 	validateRepositoryState(&combinedReport, combinedState)
+	validateLoadoutState(&combinedReport, combinedState)
 	combinedReport = finalizeReport(combinedReport)
 	if len(combinedReport.Issues) != 0 {
 		return result, fmt.Errorf("portable export would create a conflict: %s", combinedReport.Issues[0].Message)

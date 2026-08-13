@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/portable-memory-loadout-list.schema.json",
+  "title": "Portable memory loadout status list",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "loadouts", "repository", "privacy"],
+  "properties": {
+    "schema_version": {"const": "portable-memory-loadout-list/v1alpha1"},
+    "loadouts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["loadout", "current"],
+        "properties": {
+          "loadout": {"$ref": "portable-memory-loadout.schema.json"},
+          "current": {"type": "boolean"},
+          "issue": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "repository": {"$ref": "portable-memory-verification.schema.json"},
+    "privacy": {"const": "private_git"}
+  }
+}

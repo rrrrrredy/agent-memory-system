@@ -40,6 +40,8 @@ printf '%s\n' "$doctor" | jq -e '.ready == true' >/dev/null
 candidates=$(printf '%s\n' "$onboard" | jq '.candidates')
 status=$("$binary" status --root "$evidence")
 queue=$("$binary" review list --root "$evidence" --status review_ready --limit 20)
+packet=$("$binary" review packet --root "$evidence" --status review_ready --limit 20)
+printf '%s\n' "$packet" | jq -e --argjson expected "$(jq '.expected_review_ready' "$manifest")" '.schema_version == "candidate-review-packet-build-result/v1alpha1" and .items == $expected' >/dev/null
 item=$(printf '%s\n' "$queue" | jq -ce '.candidates[0] // error("no review-ready candidate")')
 expected_review_ready=$(jq -r '.expected_review_ready' "$manifest")
 test "$(printf '%s\n' "$candidates" | jq -r '.review_ready')" = "$expected_review_ready"
@@ -53,15 +55,21 @@ basis=$(printf '%s\n' "$item" | jq -r '[.candidate.support_types[] | select(. ==
 test -n "$basis"
 
 "$binary" review decide --root "$evidence" --candidate "$candidate_id" --action validate --reviewer synthetic-test-attestation --reviewer-kind synthetic_test --scope project --scope-value example-project --basis "$basis" --reason 'Recorded a simulated validation for the frozen synthetic fixture.' >/dev/null
-promoted=$("$binary" promote candidate --root "$evidence" --candidate "$candidate_id" --approver synthetic-test-attestation --approver-kind synthetic_test --confirm-text-sha256 "$text_sha256" --reason 'Recorded a simulated promotion for the frozen synthetic fixture.')
+promoted=$("$binary" promote candidate --root "$evidence" --candidate "$candidate_id" --approver synthetic-test-attestation --approver-kind synthetic_test --packet "$(printf '%s\n' "$packet" | jq -r '.packet_id')" --reason 'Recorded a simulated promotion for the frozen synthetic fixture.')
 memory_id=$(printf '%s\n' "$promoted" | jq -r '.revision.memory_id')
 
 portable_init=$("$binary" portable init --repo "$memory")
 printf '%s\n' "$portable_init" | jq -e '.schema_version == "portable-memory-init-result/v1alpha1"' >/dev/null
 exported=$("$binary" portable export --root "$evidence" --repo "$memory")
+loadout=$("$binary" loadout create --repo "$memory" --name 'Synthetic project memory' --description 'Frozen quickstart loadout.' --scope-kind project --scope-value example-project --agent codex --memory "$memory_id")
+printf '%s\n' "$loadout" | jq -e '.schema_version == "portable-memory-loadout-create-result/v1alpha1" and (.loadout.loadout_id | length) > 0' >/dev/null
+loadout_id=$(printf '%s\n' "$loadout" | jq -r '.loadout.loadout_id')
 portable=$("$binary" portable verify --repo "$memory")
+"$binary" loadout verify --repo "$memory" --loadout "$loadout_id" | jq -e '.current == true' >/dev/null
 recall=$("$binary" recall search --root "$evidence" --repo "$memory" --agent codex --scope-project example-project --query "$query")
 printf '%s\n' "$recall" | jq -e --arg id "$memory_id" '.selected | any(.memory_id == $id)' >/dev/null
+loadout_context=$("$binary" loadout context --root "$evidence" --repo "$memory" --loadout "$loadout_id" --agent codex --scope-project example-project)
+printf '%s\n' "$loadout_context" | jq -e --arg id "$memory_id" '(.receipt.memories | any(.memory_id == $id)) and .receipt.content_bytes > 0' >/dev/null
 
 jq -n -c \
   --arg fixture "$(jq -r '.rollout_sha256' "$manifest")" \
@@ -72,4 +80,7 @@ jq -n -c \
   --argjson written "$(printf '%s\n' "$exported" | jq '.revisions_written')" \
   --argjson active "$(printf '%s\n' "$portable" | jq '.active_memories')" \
   --argjson selected "$(printf '%s\n' "$recall" | jq '.selected | length')" \
-  '{schema_version:"quickstart-smoke/v1alpha1",fixture_sha256:$fixture,simulated_attestations:$simulated,gaps_appended:$gaps,doctor_ready:$ready,review_ready:$review,revisions_written:$written,active_memories:$active,selected_memories:$selected}'
+  --argjson packet_items "$(printf '%s\n' "$packet" | jq '.items')" \
+  --argjson loadouts "$(printf '%s\n' "$portable" | jq '.loadouts_checked')" \
+  --argjson loadout_selected "$(printf '%s\n' "$loadout_context" | jq '.receipt.memories | length')" \
+  '{schema_version:"quickstart-smoke/v1alpha2",fixture_sha256:$fixture,simulated_attestations:$simulated,gaps_appended:$gaps,doctor_ready:$ready,review_ready:$review,revisions_written:$written,active_memories:$active,selected_memories:$selected,review_packet_items:$packet_items,loadouts_checked:$loadouts,loadout_selected_memories:$loadout_selected}'

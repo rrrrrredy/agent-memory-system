@@ -2,18 +2,21 @@ package portable
 
 import (
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
+	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 	"github.com/rrrrrredy/agent-memory-system/internal/review"
 )
 
 const (
-	RepositorySchemaVersion   = "portable-memory-repository/v1alpha1"
-	InitResultSchemaVersion   = "portable-memory-init-result/v1alpha1"
-	RevisionSchemaVersion     = "portable-memory-revision/v1alpha1"
-	ExportResultSchemaVersion = "portable-memory-export-result/v1alpha1"
-	VerificationSchemaVersion = "portable-memory-verification/v1alpha1"
-	RepositoryLayout          = "immutable-markdown-revisions"
-	PortablePrivacy           = "private_git"
-	MaxTextBytes              = 64 * 1024
+	RepositorySchemaVersion    = "portable-memory-repository/v1alpha1"
+	InitResultSchemaVersion    = "portable-memory-init-result/v1alpha1"
+	RevisionSchemaVersion      = "portable-memory-revision/v1alpha1"
+	ExportResultSchemaVersion  = "portable-memory-export-result/v1alpha1"
+	VerificationSchemaVersion  = "portable-memory-verification/v1alpha2"
+	LoadoutSchemaVersion       = "portable-memory-loadout/v1alpha1"
+	LoadoutCreateSchemaVersion = "portable-memory-loadout-create-result/v1alpha1"
+	RepositoryLayout           = "immutable-markdown-revisions"
+	PortablePrivacy            = "private_git"
+	MaxTextBytes               = 64 * 1024
 )
 
 type Action string
@@ -49,6 +52,43 @@ type Revision struct {
 	Privacy                            string                   `json:"privacy"`
 }
 
+type LoadoutMemoryReference struct {
+	MemoryID   string `json:"memory_id"`
+	RevisionID string `json:"revision_id"`
+}
+
+type Loadout struct {
+	SchemaVersion string                   `json:"schema_version"`
+	LoadoutID     string                   `json:"loadout_id"`
+	Name          string                   `json:"name"`
+	Description   string                   `json:"description,omitempty"`
+	Agents        []ledger.Agent           `json:"agents"`
+	ScopeKind     review.ScopeKind         `json:"scope_kind"`
+	ScopeValue    string                   `json:"scope_value"`
+	Memories      []LoadoutMemoryReference `json:"memories"`
+	TokenBudget   int                      `json:"token_budget"`
+	ByteBudget    int                      `json:"byte_budget"`
+	Privacy       string                   `json:"privacy"`
+}
+
+type LoadoutCreateOptions struct {
+	Name        string
+	Description string
+	Agents      []ledger.Agent
+	Scope       review.Scope
+	MemoryIDs   []string
+	TokenBudget int
+	ByteBudget  int
+}
+
+type LoadoutCreateResult struct {
+	SchemaVersion string  `json:"schema_version"`
+	Loadout       Loadout `json:"loadout"`
+	RelativePath  string  `json:"relative_path"`
+	Written       bool    `json:"written"`
+	Privacy       string  `json:"privacy"`
+}
+
 type ExportOptions struct {
 	MemoryIDs []string
 }
@@ -71,6 +111,7 @@ type ExportResult struct {
 
 type VerificationIssue struct {
 	Code               string   `json:"code"`
+	LoadoutID          string   `json:"loadout_id,omitempty"`
 	MemoryID           string   `json:"memory_id,omitempty"`
 	RevisionID         string   `json:"revision_id,omitempty"`
 	RelatedMemoryIDs   []string `json:"related_memory_ids,omitempty"`
@@ -85,6 +126,7 @@ type VerificationReport struct {
 	MemoriesChecked  int                 `json:"memories_checked"`
 	ActiveMemories   int                 `json:"active_memories"`
 	RevokedMemories  int                 `json:"revoked_memories"`
+	LoadoutsChecked  int                 `json:"loadouts_checked"`
 	Issues           []VerificationIssue `json:"issues"`
 	Privacy          string              `json:"privacy"`
 }

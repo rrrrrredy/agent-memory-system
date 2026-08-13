@@ -18,9 +18,9 @@ A higher level does not imply access to provider-hidden reasoning.
 
 | Agent | Format contract | Runtime startup | Native event path | Provider-backed task |
 | --- | --- | --- | --- | --- |
-| Codex | Yes | Maintainer-reported private local acceptance | Maintainer-reported real rollout import | Minimal authenticated maintainer acceptance; not independently reproducible from this repository and not an independently certified evaluation bridge |
-| Claude Code | Yes | CLI version probe only | Fixture and hook-contract coverage | Not claimed in the current acceptance record |
-| OpenCode | Yes | Yes, pinned hosted runner | Yes, hosted plugin event to verified ledger | Not claimed; the hosted smoke test intentionally uses no provider key |
+| Codex | Yes | Local probe plus replay-verifiable native process receipt | Rollout import and exact local execution-receipt path | Authenticated local tasks can be preserved, but provider and server-side model identity are not independently attested |
+| Claude Code | Yes | CLI version probe only | Importer and hook protocol conformance | Not claimed; no equivalent native execution receipt exists |
+| OpenCode | Yes | Pinned disposable hosted runner only | Hosted plugin event to verified ledger | Not claimed; the hosted smoke intentionally uses no provider key and OpenCode is not installed locally |
 
 The GitHub-hosted macOS job is a real macOS runner. It is not a physical-device
 acceptance and is not described as one.
@@ -52,6 +52,23 @@ version probing is blocked by application control. In that case runtime status
 is `blocked`, but `history_import_available` remains true because importing an
 existing transcript does not execute the Agent binary.
 
+## Execution evidence modes
+
+The compatibility report keeps executable availability separate from execution
+evidence:
+
+- Codex reports `local_replayable_receipt` only when the supplied evidence root
+  contains a native receipt that passes complete replay.
+- Claude Code reports `adapter_protocol_only`; fixtures and hook conformance do
+  not become a claimed native task.
+- OpenCode reports `hosted_runtime_smoke_only`; the pinned CI runtime is not a
+  local installation and does not invoke a provider model.
+
+All three report `provider_independently_attested=false`. A native Codex receipt
+authenticates the supported local process graph, not the remote provider,
+server-side model, account, or provider-hidden reasoning. See
+[native execution](native-execution.md).
+
 ## Codex
 
 The importer accepts `rollout-*.jsonl` files and recursively discovers them in
@@ -63,6 +80,17 @@ Codex may expose only a summary or encrypted payload for some reasoning. Those
 states are preserved and labelled; they are not expanded into invented text.
 
 See `adapters/codex/CAPABILITIES.md` for the versioned contract.
+
+`agentmem agent run codex` is a separate opt-in path. It uses an exact local
+Codex executable, preserves raw JSONL and terminal evidence, and can consume an
+exact verified loadout context. It does not install hooks or modify Codex
+configuration.
+
+`compatibility --root <evidence>` reports `native_execution_verified=true`
+only when the evidence store contains a fully replayable native receipt whose
+staged Codex executable SHA-256 equals the executable bytes probed by the
+current command. A valid historical receipt for different Codex bytes remains
+visible evidence but does not verify the current runtime.
 
 ## Claude Code
 

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/portable-memory-loadout-create-result.schema.json",
+  "title": "Portable memory loadout creation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "loadout", "relative_path", "written", "privacy"],
+  "properties": {
+    "schema_version": {"const": "portable-memory-loadout-create-result/v1alpha1"},
+    "loadout": {"$ref": "portable-memory-loadout.schema.json"},
+    "relative_path": {
+      "type": "string", "pattern": "^loadouts/[a-f0-9]{64}\\.json$"
+    },
+    "written": {"type": "boolean"},
+    "privacy": {"const": "private_git"}
+  }
+}

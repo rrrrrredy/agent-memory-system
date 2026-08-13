@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-study-observe-result.schema.json",
+  "title": "Longitudinal study observation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "outcome", "observation", "event", "privacy"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-study-observe-result/v1alpha1"},
+    "outcome": {"$ref": "longitudinal-study-outcome-evidence.schema.json"},
+    "observation": {"$ref": "longitudinal-study-observation.schema.json"},
+    "event": {"$ref": "#/$defs/bound_event"},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "bound_event": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event_id", "record_sha256"],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "record_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}
