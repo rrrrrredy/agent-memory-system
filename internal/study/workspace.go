@@ -197,6 +197,10 @@ func verifyWorkspaceSnapshot(store *ledger.Store, snapshot WorkspaceSnapshot, so
 	if err := validateWorkspaceSnapshotEnvelope(snapshot, sourcePath); err != nil {
 		return err
 	}
+	return verifyWorkspaceSnapshotContent(store, snapshot)
+}
+
+func verifyWorkspaceSnapshotContent(store *ledger.Store, snapshot WorkspaceSnapshot) error {
 	tree, err := inspectWorkspaceArchive(store, snapshot.Archive, "")
 	if err != nil {
 		return err

@@ -21,21 +21,35 @@ type indexedRecord struct {
 }
 
 func Verify(store *ledger.Store) VerificationReport {
-	report := VerificationReport{
+	return BuildVerifiedIndex(store).Report
+}
+
+// BuildVerifiedIndex verifies the dependency graph once and returns exact
+// loadout contexts and native executions for snapshot-scoped consumers.
+func BuildVerifiedIndex(store *ledger.Store) VerifiedIndex {
+	index := VerifiedIndex{Report: VerificationReport{
 		SchemaVersion: VerificationSchema,
 		Issues:        []string{},
 		Privacy:       PrivacyLocalOnly,
-	}
+	}, Executions: map[string]VerifiedExecution{},
+		LoadoutContexts: map[string]loadoutcontext.ContextReceipt{}}
+	report := &index.Report
 	if store == nil {
 		report.Issues = append(report.Issues, "local evidence store is required")
-		return report
+		return index
 	}
 	ledgerReport := store.Verify()
 	report.RecordsChecked = ledgerReport.RecordsChecked
 	if len(ledgerReport.Issues) != 0 {
 		report.Issues = append(report.Issues, "evidence ledger verification failed")
-		return report
+		return index
 	}
+	contexts, contextErr := loadoutcontext.ListVerifiedContexts(store)
+	if contextErr != nil {
+		report.Issues = append(report.Issues, "loadout context verification failed")
+		return index
+	}
+	index.LoadoutContexts = contexts
 	checkedBlobs := map[string]struct{}{}
 	starts := map[string]indexedRecord{}
 	receipts := map[string]indexedRecord{}
@@ -64,7 +78,7 @@ func Verify(store *ledger.Store) VerificationReport {
 	})
 	if err != nil {
 		report.Issues = append(report.Issues, "native Agent evidence traversal failed")
-		return report
+		return index
 	}
 	receiptIDs := make([]string, 0, len(receipts))
 	for receiptID := range receipts {
@@ -90,7 +104,8 @@ func Verify(store *ledger.Store) VerificationReport {
 			report.Issues = append(report.Issues, receiptID+": "+startErr.Error())
 			continue
 		}
-		issues := validateExecution(store, indexed, receipt, data, startedIndexed, started, checkedBlobs)
+		issues, request, contextReceipt := validateExecution(store, indexed, receipt, data,
+			startedIndexed, started, checkedBlobs, contexts)
 		if len(issues) != 0 {
 			for _, issue := range issues {
 				report.Issues = append(report.Issues, receiptID+": "+issue)
@@ -98,6 +113,8 @@ func Verify(store *ledger.Store) VerificationReport {
 			continue
 		}
 		report.ReceiptsChecked++
+		index.Executions[receiptID] = VerifiedExecution{Request: request, Started: started,
+			Receipt: receipt, LoadoutContext: contextReceipt}
 	}
 	for startID := range starts {
 		if _, referenced := referencedStarts[startID]; !referenced {
@@ -106,85 +123,37 @@ func Verify(store *ledger.Store) VerificationReport {
 	}
 	report.BlobsChecked = len(checkedBlobs)
 	sort.Strings(report.Issues)
-	return report
+	return index
 }
 
 func ResolveVerifiedReceipt(store *ledger.Store, receiptID string) (Receipt, error) {
 	if strings.TrimSpace(receiptID) == "" {
 		return Receipt{}, errors.New("native Agent receipt id is required")
 	}
-	report := Verify(store)
-	if len(report.Issues) != 0 {
-		return Receipt{}, fmt.Errorf("native Agent receipt verification failed: %s", strings.Join(report.Issues, "; "))
+	index := BuildVerifiedIndex(store)
+	if len(index.Report.Issues) != 0 {
+		return Receipt{}, fmt.Errorf("native Agent receipt verification failed: %s",
+			strings.Join(index.Report.Issues, "; "))
 	}
-	var found *Receipt
-	err := store.VisitRecords(func(record ledger.Record) error {
-		if record.Event.EventID != receiptID {
-			return nil
-		}
-		receipt, _, err := decodeReceiptEvent(store, record.Event, map[string]struct{}{})
-		if err != nil {
-			return err
-		}
-		if found != nil {
-			return errors.New("native Agent receipt id is duplicated")
-		}
-		found = &receipt
-		return nil
-	})
-	if err != nil {
-		return Receipt{}, err
-	}
-	if found == nil {
+	found, exists := index.Executions[receiptID]
+	if !exists {
 		return Receipt{}, errors.New("verified native Agent receipt is unavailable")
 	}
-	return *found, nil
+	return found.Receipt, nil
 }
 
 func ListVerifiedExecutions(store *ledger.Store) ([]VerifiedExecution, error) {
 	if store == nil {
 		return nil, errors.New("local evidence store is required")
 	}
-	report := Verify(store)
-	if len(report.Issues) != 0 {
-		return nil, fmt.Errorf("native Agent receipt verification failed: %s", strings.Join(report.Issues, "; "))
+	index := BuildVerifiedIndex(store)
+	if len(index.Report.Issues) != 0 {
+		return nil, fmt.Errorf("native Agent receipt verification failed: %s",
+			strings.Join(index.Report.Issues, "; "))
 	}
-	starts := map[string]Started{}
-	receipts := []Receipt{}
-	err := store.VisitRecords(func(record ledger.Record) error {
-		if record.Event.Payload == nil {
-			return nil
-		}
-		switch record.Event.Payload.MediaType {
-		case StartedMediaType:
-			started, _, decodeErr := decodeStartedEvent(store, record.Event, map[string]struct{}{})
-			if decodeErr != nil {
-				return decodeErr
-			}
-			starts[started.StartedEventID] = started
-		case ReceiptMediaType:
-			receipt, _, decodeErr := decodeReceiptEvent(store, record.Event, map[string]struct{}{})
-			if decodeErr != nil {
-				return decodeErr
-			}
-			receipts = append(receipts, receipt)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	result := make([]VerifiedExecution, 0, len(receipts))
-	for _, receipt := range receipts {
-		started, exists := starts[receipt.Started.EventID]
-		if !exists {
-			return nil, errors.New("verified native Agent start is unavailable")
-		}
-		request, err := verifiedRequest(store, started)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, VerifiedExecution{Request: request, Started: started, Receipt: receipt})
+	result := make([]VerifiedExecution, 0, len(index.Executions))
+	for _, execution := range index.Executions {
+		result = append(result, execution)
 	}
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].Started.StartedAt.Equal(result[j].Started.StartedAt) {
@@ -196,36 +165,19 @@ func ListVerifiedExecutions(store *ledger.Store) ([]VerifiedExecution, error) {
 }
 
 func ResolveVerifiedExecution(store *ledger.Store, receiptID string) (VerifiedExecution, error) {
-	receipt, err := ResolveVerifiedReceipt(store, receiptID)
-	if err != nil {
-		return VerifiedExecution{}, err
+	if strings.TrimSpace(receiptID) == "" {
+		return VerifiedExecution{}, errors.New("native Agent receipt id is required")
 	}
-	var started *Started
-	err = store.VisitRecords(func(record ledger.Record) error {
-		if record.Event.EventID != receipt.Started.EventID {
-			return nil
-		}
-		value, _, decodeErr := decodeStartedEvent(store, record.Event, map[string]struct{}{})
-		if decodeErr != nil {
-			return decodeErr
-		}
-		if started != nil {
-			return errors.New("native Agent start id is duplicated")
-		}
-		started = &value
-		return nil
-	})
-	if err != nil {
-		return VerifiedExecution{}, err
+	index := BuildVerifiedIndex(store)
+	if len(index.Report.Issues) != 0 {
+		return VerifiedExecution{}, fmt.Errorf("native Agent receipt verification failed: %s",
+			strings.Join(index.Report.Issues, "; "))
 	}
-	if started == nil {
-		return VerifiedExecution{}, errors.New("verified native Agent start is unavailable")
+	execution, exists := index.Executions[receiptID]
+	if !exists {
+		return VerifiedExecution{}, errors.New("verified native Agent execution is unavailable")
 	}
-	request, err := verifiedRequest(store, *started)
-	if err != nil {
-		return VerifiedExecution{}, err
-	}
-	return VerifiedExecution{Request: request, Started: *started, Receipt: receipt}, nil
+	return execution, nil
 }
 
 func verifiedRequest(store *ledger.Store, started Started) (RunRequest, error) {
@@ -285,7 +237,8 @@ func readEventJSON(store *ledger.Store, event ledger.Event, mediaType string,
 }
 
 func validateExecution(store *ledger.Store, receiptIndexed indexedRecord, receipt Receipt, receiptData []byte,
-	startedIndexed indexedRecord, started Started, checked map[string]struct{}) []string {
+	startedIndexed indexedRecord, started Started, checked map[string]struct{},
+	contexts map[string]loadoutcontext.ContextReceipt) ([]string, RunRequest, *loadoutcontext.ContextReceipt) {
 	issues := []string{}
 	add := func(ok bool, message string) {
 		if !ok {
@@ -318,34 +271,36 @@ func validateExecution(store *ledger.Store, receiptIndexed indexedRecord, receip
 
 	requestData, err := checkedBlob(store, started.RequestBlob, checked)
 	var request RunRequest
+	var verifiedContext *loadoutcontext.ContextReceipt
 	if err != nil || decodeCanonicalJSON(requestData, &request) != nil || validateRequest(request) != nil ||
 		started.RequestSHA256 != sha256Hex(requestData) || request.TaskID != started.TaskID {
 		issues = append(issues, "run request blob is invalid")
-		return issues
+		return issues, request, verifiedContext
 	}
 	promptData, err := checkedBlob(store, started.PromptBlob, checked)
 	if err != nil || started.PromptSHA256 != started.PromptBlob.SHA256 ||
 		started.PromptSHA256 != sha256Hex(promptData) {
 		issues = append(issues, "rendered prompt blob is invalid")
-		return issues
+		return issues, request, verifiedContext
 	}
 	expectedPrompt := request.Prompt
 	expectedMemories := []retrieval.MemoryReference{}
 	if started.LoadoutContextReceiptID != "" {
-		contextReceipt, resolveErr := loadoutcontext.ResolveVerifiedContext(store, started.LoadoutContextReceiptID)
-		if resolveErr != nil || request.LoadoutContextReceiptID != started.LoadoutContextReceiptID ||
+		contextReceipt, resolved := contexts[started.LoadoutContextReceiptID]
+		if !resolved || request.LoadoutContextReceiptID != started.LoadoutContextReceiptID ||
 			contextReceipt.Context.Agent != ledger.AgentCodex ||
 			contextReceipt.Context.Task != "" && contextReceipt.Context.Task != request.TaskID {
 			issues = append(issues, "loadout context receipt binding is invalid")
-			return issues
+			return issues, request, verifiedContext
 		}
 		expectedPrompt = contextReceipt.Content +
 			"\nThe following is the current task. Current task instructions override memory:\n" +
 			request.Prompt
+		verifiedContext = &contextReceipt
 		expectedMemories = contextReceipt.Memories
 	} else if request.LoadoutContextReceiptID != "" {
 		issues = append(issues, "request loadout context is missing from the start record")
-		return issues
+		return issues, request, verifiedContext
 	}
 	add(string(promptData) == expectedPrompt && reflect.DeepEqual(started.MemoryReferences, expectedMemories),
 		"rendered prompt does not match its task and memory sources")
@@ -381,7 +336,7 @@ func validateExecution(store *ledger.Store, receiptIndexed indexedRecord, receip
 	parsed, parseErr := parseExecutionJSONL(raw)
 	if rawErr != nil {
 		issues = append(issues, "raw Codex events blob is invalid")
-		return issues
+		return issues, request, verifiedContext
 	}
 	if receipt.StderrBlob != nil {
 		if _, err := checkedBlob(store, *receipt.StderrBlob, checked); err != nil {
@@ -430,7 +385,7 @@ func validateExecution(store *ledger.Store, receiptIndexed indexedRecord, receip
 	default:
 		issues = append(issues, "receipt outcome is invalid")
 	}
-	return issues
+	return issues, request, verifiedContext
 }
 
 func validStartedEvent(event ledger.Event, started Started) bool {

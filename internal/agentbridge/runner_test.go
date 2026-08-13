@@ -163,6 +163,31 @@ func TestWorkspaceChangeAfterStartedLeavesFailedTerminalWithoutLaunchingCodex(t 
 	}
 }
 
+func TestExecutableChangeAfterStartedLeavesVerifiedFailedTerminal(t *testing.T) {
+	t.Setenv("AGENTBRIDGE_TEST_HELPER", "1")
+	store, workspace, executable := agentBridgeFixture(t)
+	checks := 0
+	result, err := Run(context.Background(), store, testRunRequest(workspace, "Return a verified answer."), Options{
+		CodexPath: executable, Now: fixedAgentBridgeClock(),
+		beforeExecutableCheck: func(staged string) error {
+			checks++
+			if writeErr := os.WriteFile(staged, []byte("changed after start"), 0o700); writeErr != nil {
+				return writeErr
+			}
+			return nil
+		},
+	})
+	var executionError *ExecutionError
+	if !errors.As(err, &executionError) || checks != 1 || result.Receipt.Outcome != OutcomeFailed ||
+		result.Receipt.FailureKind != "executable_changed" || result.Receipt.RawEventsBlob.Bytes != 0 ||
+		result.Receipt.AgentMessageBlob != nil {
+		t.Fatalf("executable change did not produce a non-launched terminal: result=%+v checks=%d err=%v", result, checks, err)
+	}
+	if report := Verify(store); len(report.Issues) != 0 || report.ReceiptsChecked != 1 {
+		t.Fatalf("executable-change terminal does not replay: %+v", report)
+	}
+}
+
 func TestWorkspaceArchiveVerificationUsesBoundedStreamingReads(t *testing.T) {
 	const size = int64(8 * 1024 * 1024)
 	hasher := sha256.New()

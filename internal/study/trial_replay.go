@@ -8,7 +8,6 @@ import (
 
 	"github.com/rrrrrredy/agent-memory-system/internal/agentbridge"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
-	loadoutcontext "github.com/rrrrrredy/agent-memory-system/internal/loadout"
 )
 
 func decodeTrialReservationEvent(event ledger.Event) (TrialReservation, error) {
@@ -170,8 +169,8 @@ func validateTrialLinks(store *ledger.Store, state *replayState,
 			continue
 		}
 		if task.Condition == ConditionMemory {
-			contextReceipt, err := loadoutcontext.ResolveVerifiedContext(store, contextID)
-			if err != nil || !reflect.DeepEqual(contextReceipt.Loadout, plan.Loadout) ||
+			contextReceipt, verified := state.VerifiedContexts[contextID]
+			if !verified || !reflect.DeepEqual(contextReceipt.Loadout, plan.Loadout) ||
 				contextReceipt.Context.Agent != plan.Agent || contextReceipt.Context.Task != task.TaskID {
 				state.Issues = append(state.Issues, prefix+"memory trial does not bind the sealed loadout context")
 				continue

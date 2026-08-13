@@ -168,13 +168,18 @@ func TestCompleteBoundPopulationProducesOnlyADescriptiveSignal(t *testing.T) {
 		t.Fatalf("study replay failed: %+v", verification)
 	}
 	loaderCalls := 0
-	replayed := replayWithExecutionLoader(fixture.Store,
-		func(store *ledger.Store) ([]agentbridge.VerifiedExecution, error) {
+	workspaceCalls := 0
+	replayed := replayWithDependencies(fixture.Store,
+		func(store *ledger.Store) agentbridge.VerifiedIndex {
 			loaderCalls++
-			return agentbridge.ListVerifiedExecutions(store)
+			return agentbridge.BuildVerifiedIndex(store)
+		}, func(store *ledger.Store, snapshot WorkspaceSnapshot) error {
+			workspaceCalls++
+			return verifyWorkspaceSnapshotContent(store, snapshot)
 		})
-	if loaderCalls != 1 || len(replayed.Issues) != 0 {
-		t.Fatalf("study replay did not reuse one verified execution index: calls=%d issues=%v", loaderCalls, replayed.Issues)
+	if loaderCalls != 1 || workspaceCalls != 1 || len(replayed.Issues) != 0 {
+		t.Fatalf("study replay did not reuse dependency indexes: executions=%d workspaces=%d issues=%v",
+			loaderCalls, workspaceCalls, replayed.Issues)
 	}
 }
 

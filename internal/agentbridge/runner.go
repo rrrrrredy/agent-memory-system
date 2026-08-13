@@ -170,9 +170,14 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 		return result, err
 	}
 	var stagedExecutableErr error
-	if current, hashErr := hashFile(stagedCodex); hashErr != nil ||
-		current.SHA256 != codexArtifact.SHA256 || current.Bytes != codexArtifact.Bytes {
-		stagedExecutableErr = errors.New("staged Codex executable changed before task execution")
+	if options.beforeExecutableCheck != nil {
+		stagedExecutableErr = options.beforeExecutableCheck(stagedCodex)
+	}
+	if stagedExecutableErr == nil {
+		current, hashErr := hashFile(stagedCodex)
+		if hashErr != nil || current.SHA256 != codexArtifact.SHA256 || current.Bytes != codexArtifact.Bytes {
+			stagedExecutableErr = errors.New("staged Codex executable changed before task execution")
+		}
 	}
 
 	runContext, cancel := context.WithTimeout(ctx, time.Duration(normalized.TimeoutSeconds)*time.Second)

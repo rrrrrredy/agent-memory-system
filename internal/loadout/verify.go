@@ -16,23 +16,39 @@ import (
 )
 
 func Verify(store *ledger.Store) VerificationReport {
+	_, report := buildVerifiedContexts(store)
+	return report
+}
+
+// ListVerifiedContexts returns a snapshot-scoped context index after the
+// complete retrieval and loadout graphs have each been verified once.
+func ListVerifiedContexts(store *ledger.Store) (map[string]ContextReceipt, error) {
+	contexts, report := buildVerifiedContexts(store)
+	if len(report.Issues) != 0 {
+		return nil, fmt.Errorf("loadout context verification failed: %s", strings.Join(report.Issues, "; "))
+	}
+	return contexts, nil
+}
+
+func buildVerifiedContexts(store *ledger.Store) (map[string]ContextReceipt, VerificationReport) {
 	report := VerificationReport{
 		SchemaVersion: VerificationSchemaVersion,
 		Issues:        []string{},
 		Privacy:       PrivacyLocalOnly,
 	}
+	contexts := map[string]ContextReceipt{}
 	if store == nil {
 		report.Issues = append(report.Issues, "local evidence store is required")
-		return report
+		return contexts, report
 	}
 	if ledgerReport := store.Verify(); len(ledgerReport.Issues) != 0 {
 		report.Issues = append(report.Issues, "evidence ledger verification failed")
-		return report
+		return contexts, report
 	}
-	retrievalReport := retrieval.Verify(store)
-	if len(retrievalReport.Issues) != 0 {
+	retrievals, retrievalErr := retrieval.ListVerifiedRetrievals(store)
+	if retrievalErr != nil {
 		report.Issues = append(report.Issues, "retrieval receipt verification failed")
-		return report
+		return contexts, report
 	}
 	err := store.VisitRecords(func(record ledger.Record) error {
 		receipt, applies, err := decodeEvent(record.Event)
@@ -43,18 +59,19 @@ func Verify(store *ledger.Store) VerificationReport {
 		if !applies {
 			return nil
 		}
-		if issues := validateReceipt(store, record.Event, receipt); len(issues) != 0 {
+		if issues := validateReceipt(record.Event, receipt, retrievals); len(issues) != 0 {
 			report.Issues = append(report.Issues, issues...)
 			return nil
 		}
 		report.ReceiptsChecked++
+		contexts[receipt.ReceiptID] = receipt
 		return nil
 	})
 	if err != nil {
 		report.Issues = append(report.Issues, "loadout context ledger traversal failed")
 	}
 	sort.Strings(report.Issues)
-	return report
+	return contexts, report
 }
 
 func ResolveVerifiedContext(store *ledger.Store, receiptID string) (ContextReceipt, error) {
@@ -115,7 +132,8 @@ func decodeEvent(event ledger.Event) (ContextReceipt, bool, error) {
 	return receipt, true, nil
 }
 
-func validateReceipt(store *ledger.Store, event ledger.Event, receipt ContextReceipt) []string {
+func validateReceipt(event ledger.Event, receipt ContextReceipt,
+	retrievals map[string]retrieval.Receipt) []string {
 	issues := []string{}
 	add := func(ok bool, message string) {
 		if !ok {
@@ -142,8 +160,8 @@ func validateReceipt(store *ledger.Store, event ledger.Event, receipt ContextRec
 	matches := make([]retrieval.Match, 0, len(receipt.Loadout.Memories))
 	if len(issues) == 0 {
 		for index, reference := range receipt.Loadout.Memories {
-			resolved, err := retrieval.ResolveVerifiedRetrieval(store, receipt.RetrievalReceiptIDs[index])
-			if err != nil || resolved.Request.MemoryID != reference.MemoryID ||
+			resolved, verified := retrievals[receipt.RetrievalReceiptIDs[index]]
+			if !verified || resolved.Request.MemoryID != reference.MemoryID ||
 				!reflect.DeepEqual(resolved.Request.Context, receipt.Context) || len(resolved.Result.Selected) != 1 ||
 				resolved.Result.Selected[0].MemoryID != reference.MemoryID ||
 				resolved.Result.Selected[0].RevisionID != reference.RevisionID ||

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
+	loadoutcontext "github.com/rrrrrredy/agent-memory-system/internal/loadout"
 	"github.com/rrrrrredy/agent-memory-system/internal/retrieval"
 )
 
@@ -136,18 +137,26 @@ type VerificationReport struct {
 }
 
 type VerifiedExecution struct {
-	Request RunRequest
-	Started Started
-	Receipt Receipt
+	Request        RunRequest
+	Started        Started
+	Receipt        Receipt
+	LoadoutContext *loadoutcontext.ContextReceipt
+}
+
+type VerifiedIndex struct {
+	Report          VerificationReport
+	Executions      map[string]VerifiedExecution
+	LoadoutContexts map[string]loadoutcontext.ContextReceipt
 }
 
 type Options struct {
-	CodexPath          string
-	PortableRoot       string
-	ParentEventIDs     []string
-	WorkspaceBinding   *WorkspaceBinding
-	WorkspacePreflight func() error
-	Now                func() time.Time
+	CodexPath             string
+	PortableRoot          string
+	ParentEventIDs        []string
+	WorkspaceBinding      *WorkspaceBinding
+	WorkspacePreflight    func() error
+	beforeExecutableCheck func(string) error
+	Now                   func() time.Time
 }
 
 type ExecutionError struct {

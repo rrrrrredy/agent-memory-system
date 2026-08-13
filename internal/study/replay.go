@@ -33,6 +33,7 @@ type replayState struct {
 	Observations         map[string]map[string]Observation
 	ObservationRecords   map[string]indexedRecord
 	VerifiedExecutions   map[string]agentbridge.VerifiedExecution
+	VerifiedContexts     map[string]loadoutcontext.ContextReceipt
 	Issues               []string
 }
 
@@ -50,17 +51,33 @@ func newReplayState() replayState {
 		Observations:         map[string]map[string]Observation{},
 		ObservationRecords:   map[string]indexedRecord{},
 		VerifiedExecutions:   map[string]agentbridge.VerifiedExecution{},
+		VerifiedContexts:     map[string]loadoutcontext.ContextReceipt{},
 		Issues:               []string{},
 	}
 }
 
 func replay(store *ledger.Store) replayState {
-	return replayWithExecutionLoader(store, agentbridge.ListVerifiedExecutions)
+	return replayWithExecutionLoader(store, agentbridge.BuildVerifiedIndex)
 }
 
-type verifiedExecutionLoader func(*ledger.Store) ([]agentbridge.VerifiedExecution, error)
+type verifiedExecutionLoader func(*ledger.Store) agentbridge.VerifiedIndex
+type workspaceContentVerifier func(*ledger.Store, WorkspaceSnapshot) error
 
 func replayWithExecutionLoader(store *ledger.Store, loadExecutions verifiedExecutionLoader) replayState {
+	return replayWithDependencies(store, loadExecutions, verifyWorkspaceSnapshotContent)
+}
+
+type workspaceContentKey struct {
+	Archive           ledger.BlobRef
+	TreeSHA256        string
+	Format            string
+	Policy            string
+	Files             int
+	UncompressedBytes int64
+}
+
+func replayWithDependencies(store *ledger.Store, loadExecutions verifiedExecutionLoader,
+	verifyWorkspaceContent workspaceContentVerifier) replayState {
 	state := newReplayState()
 	if store == nil {
 		state.Issues = append(state.Issues, "local evidence store is required")
@@ -186,10 +203,24 @@ func replayWithExecutionLoader(store *ledger.Store, loadExecutions verifiedExecu
 		}
 	}
 	taskOwners := map[string]string{}
+	verifiedWorkspaceContent := map[workspaceContentKey]error{}
 	for studyID, plan := range state.Plans {
 		for _, task := range plan.Tasks {
-			if err := verifyWorkspaceSnapshot(store, task.WorkspaceSnapshot, task.WorkingDirectory); err != nil {
+			snapshot := task.WorkspaceSnapshot
+			if err := validateWorkspaceSnapshotEnvelope(snapshot, task.WorkingDirectory); err != nil {
 				state.Issues = append(state.Issues, studyID+"/"+task.TaskID+": sealed workspace snapshot is invalid")
+			} else {
+				key := workspaceContentKey{Archive: snapshot.Archive, TreeSHA256: snapshot.TreeSHA256,
+					Format: snapshot.Format, Policy: snapshot.Policy, Files: snapshot.Files,
+					UncompressedBytes: snapshot.UncompressedBytes}
+				contentErr, checked := verifiedWorkspaceContent[key]
+				if !checked {
+					contentErr = verifyWorkspaceContent(store, snapshot)
+					verifiedWorkspaceContent[key] = contentErr
+				}
+				if contentErr != nil {
+					state.Issues = append(state.Issues, studyID+"/"+task.TaskID+": sealed workspace snapshot is invalid")
+				}
 			}
 			if owner, exists := taskOwners[task.TaskID]; exists && owner != studyID {
 				state.Issues = append(state.Issues,
@@ -199,18 +230,15 @@ func replayWithExecutionLoader(store *ledger.Store, loadExecutions verifiedExecu
 			taskOwners[task.TaskID] = studyID
 		}
 	}
-	verifiedExecutions := map[string]agentbridge.VerifiedExecution{}
-	executions, err := loadExecutions(store)
-	if err != nil {
+	executionIndex := loadExecutions(store)
+	if len(executionIndex.Report.Issues) != 0 {
 		state.Issues = append(state.Issues, "native Agent executions cannot be replayed")
 	} else {
-		for _, execution := range executions {
-			verifiedExecutions[execution.Receipt.ReceiptID] = execution
-		}
-		state.VerifiedExecutions = verifiedExecutions
+		state.VerifiedExecutions = executionIndex.Executions
+		state.VerifiedContexts = executionIndex.LoadoutContexts
 	}
-	validateTrialLinks(store, &state, verifiedExecutions)
-	validateStudyLinks(store, &state, verifiedExecutions)
+	validateTrialLinks(store, &state, state.VerifiedExecutions)
+	validateStudyLinks(store, &state, state.VerifiedExecutions)
 	sort.Strings(state.Issues)
 	return state
 }
@@ -525,8 +553,8 @@ func executionEligibility(store *ledger.Store, state replayState, plan Plan, tas
 		}
 		return ""
 	}
-	contextReceipt, err := loadoutcontext.ResolveVerifiedContext(store, execution.Started.LoadoutContextReceiptID)
-	if err != nil || !reflect.DeepEqual(contextReceipt.Loadout, plan.Loadout) ||
+	contextReceipt := execution.LoadoutContext
+	if contextReceipt == nil || !reflect.DeepEqual(contextReceipt.Loadout, plan.Loadout) ||
 		contextReceipt.Context.Agent != plan.Agent ||
 		contextReceipt.Context.Task != "" && contextReceipt.Context.Task != task.TaskID {
 		return prefix + "memory execution does not bind the sealed loadout"

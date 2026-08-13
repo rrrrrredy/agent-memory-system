@@ -45,8 +45,10 @@ Semantic Versioning after the first tagged public release.
   receipts. Callers cannot submit outcome labels, and synthetic observations
   cannot clear the evaluability gate.
 - Native execution replay streams and deduplicates executable artifact checks,
-  while longitudinal replay indexes verified executions once per ledger
-  snapshot instead of rescanning the full execution population per observation.
+  while longitudinal replay builds one snapshot-scoped index for retrieval,
+  loadout, and native execution evidence. A content-addressed workspace archive
+  is fully verified once per unique sealed snapshot instead of once per task,
+  and observations reuse the verified dependency graph.
 - The dashboard refuses non-loopback listeners, serves summary metadata only,
   exposes no write route, ships no external browser resources, and replaces
   raw verifier errors with stable issue codes so private paths are not returned.

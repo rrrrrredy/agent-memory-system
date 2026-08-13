@@ -51,6 +51,37 @@ func ResolveVerifiedInjection(store *ledger.Store, injectionID string) (Injectio
 	return result, nil
 }
 
+// ListVerifiedRetrievals returns a snapshot-scoped receipt index after the
+// complete retrieval graph has passed replay verification once.
+func ListVerifiedRetrievals(store *ledger.Store) (map[string]Receipt, error) {
+	if store == nil {
+		return nil, errors.New("store is required")
+	}
+	report := Verify(store)
+	if len(report.Issues) != 0 {
+		return nil, fmt.Errorf("retrieval receipt verification failed: %s", strings.Join(report.Issues, "; "))
+	}
+	result := map[string]Receipt{}
+	err := store.VisitRecords(func(record ledger.Record) error {
+		if record.Event.Kind != ledger.KindRetrieval {
+			return nil
+		}
+		var receipt Receipt
+		if err := decodeReceiptEvent(record.Event, &receipt); err != nil {
+			return err
+		}
+		if _, duplicate := result[receipt.ReceiptID]; duplicate {
+			return errors.New("retrieval receipt id appears more than once")
+		}
+		result[receipt.ReceiptID] = receipt
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("index verified retrieval receipts: %w", err)
+	}
+	return result, nil
+}
+
 // ResolveVerifiedRetrieval returns the exact retrieval receipt only after the
 // complete retrieval, injection, and adoption graph has passed replay
 // verification.
