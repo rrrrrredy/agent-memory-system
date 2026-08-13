@@ -157,9 +157,10 @@ func validateTrialLinks(store *ledger.Store, state *replayState) {
 			continue
 		}
 		contextID := trial.Request.LoadoutContextReceiptID
-		expectedRequest := expectedStudyRequest(store, plan, task, contextID)
+		expectedRequest := expectedStudyRequest(task, contextID, trial.Request.WorkingDirectory)
 		if trial.Condition != task.Condition || !reflect.DeepEqual(trial.WorkspaceSnapshot, task.WorkspaceSnapshot) ||
-			!reflect.DeepEqual(trial.Request, expectedRequest) {
+			!reflect.DeepEqual(trial.Request, expectedRequest) ||
+			!validIsolatedWorkspacePath(store, trial.Request.WorkingDirectory) {
 			state.Issues = append(state.Issues, prefix+"trial request differs from the sealed task contract")
 			continue
 		}
@@ -202,7 +203,8 @@ func validateTrialLinks(store *ledger.Store, state *replayState) {
 		startedRecord, startedFound := state.Records[execution.Started.StartedEventID]
 		if err != nil || !startedFound || trialRecord.Index >= startedRecord.Index ||
 			startedRecord.Index >= executionRecord.Index || !hasParent(startedRecord.Record.Event, trial.TrialID) ||
-			!reflect.DeepEqual(execution.Request, trial.Request) {
+			!reflect.DeepEqual(execution.Request, trial.Request) || execution.Started.WorkspaceBinding == nil ||
+			!reflect.DeepEqual(*execution.Started.WorkspaceBinding, workspaceBinding(task.WorkspaceSnapshot)) {
 			state.Issues = append(state.Issues, prefix+"study-bound native execution does not replay")
 			continue
 		}

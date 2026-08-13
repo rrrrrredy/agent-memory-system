@@ -354,6 +354,13 @@ func validateExecution(store *ledger.Store, receiptIndexed indexedRecord, receip
 	add(started.ArgumentsSHA256 == argumentSHA, "Codex argument hash is invalid")
 	add(started.WorkingDirectorySHA256 == sha256Hex([]byte(request.WorkingDirectory)),
 		"working directory hash is invalid")
+	if started.WorkspaceBinding != nil {
+		if validateWorkspaceBinding(*started.WorkspaceBinding) != nil {
+			issues = append(issues, "workspace binding is invalid")
+		} else if _, err := checkedBlob(store, started.WorkspaceBinding.Archive, checked); err != nil {
+			issues = append(issues, "workspace archive blob is invalid")
+		}
+	}
 	expectedParents, parentErr := executionParentIDs(request, withoutString(started.ParentEventIDs, request.LoadoutContextReceiptID))
 	add(parentErr == nil && reflect.DeepEqual(started.ParentEventIDs, expectedParents),
 		"native Agent execution parent bindings are invalid")
@@ -413,6 +420,9 @@ func validateExecution(store *ledger.Store, receiptIndexed indexedRecord, receip
 		case "invalid_jsonl":
 			add(receipt.ProcessExitCode == 0 && parseErr != nil,
 				"invalid JSONL failure does not replay")
+		case "workspace_changed":
+			add(receipt.ProcessExitCode != 0 && receipt.ProcessExitCode != 124,
+				"workspace preflight failure exit code is invalid")
 		case "executable_changed":
 		default:
 			issues = append(issues, "failed receipt kind is unsupported")

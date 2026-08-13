@@ -148,21 +148,26 @@ operator while making supported cherry-picking and post-hoc labeling paths
 auditable and fail-closed.
 
 Prospective studies seal the population, complete native request fields,
-content-addressed working-directory snapshots, immutable Agent-message
-acceptance hashes, deterministic balanced assignment, Agent, elapsed period,
-and exact loadout before execution. The supported runner atomically writes one
-single-use task reservation before the process and always writes a terminal
-record. It materializes the sealed workspace privately and binds the native
-execution graph to the reservation. Direct receipts, second reservations,
-changed source directories, and failed or missing terminals are ineligible.
+content-addressed snapshots of regular files outside `.git`, `.hg`, `.svn`, and
+`.agentmem`, immutable Agent-message acceptance hashes, deterministic balanced
+assignment, Agent, elapsed period, and exact loadout before execution. The
+supported runner atomically writes one single-use task reservation before the
+process and always writes a terminal record. It verifies the archive content
+address, materializes the canonical tree in a random per-run directory outside
+the evidence store, checks it before the native start and immediately before
+launch, binds the archive and tree to the start, and removes it after the
+terminal. Direct receipts, second reservations, changed source directories,
+workspace changes caught by either preflight, and failed or missing terminals
+are ineligible.
 
 A built-in evaluator derives a dedicated outcome-evidence event from the
 complete immutable Agent-message blob; the caller cannot supply a label or
 arbitrary tool result, and synthetic observations remain non-evaluable. The
 system does not detect undisclosed rehearsal outside the supported command or
-forgery by a local administrator. Task selection and operator behavior are not
-independently blinded, so a complete report is a descriptive association rather
-than a causal claim.
+forgery by a local administrator. A compromised OS or malicious process under
+the same account can still race after the final workspace preflight. Task
+selection and operator behavior are not independently blinded, so a complete
+report is a descriptive association rather than a causal claim.
 
 The evaluator binds its executable, system prompt, tool registry, harness, and
 adapter artifacts, then freezes episode generation, the corpus, the complete

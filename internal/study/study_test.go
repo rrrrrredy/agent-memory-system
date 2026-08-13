@@ -45,6 +45,12 @@ func runStudyTestHelper() {
 		fmt.Fprintln(os.Stderr, "missing prompt")
 		os.Exit(5)
 	}
+	if target := os.Getenv("STUDY_WORKSPACE_CAPTURE"); target != "" {
+		data, err := os.ReadFile("task-input.txt")
+		if err != nil || os.WriteFile(target, data, 0o600) != nil {
+			os.Exit(6)
+		}
+	}
 	fmt.Println(`{"type":"thread.started","thread_id":"study-thread"}`)
 	fmt.Println(`{"type":"turn.started"}`)
 	fmt.Println(`{"type":"item.completed","item":{"id":"message","type":"agent_message","text":"study answer"}}`)
@@ -220,6 +226,8 @@ func TestStudyRunUsesTheSealedWorkspaceSnapshotAfterTheSourceChanges(t *testing.
 	if err := os.WriteFile(sealedPath, []byte("changed after assignment\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	capture := filepath.Join(t.TempDir(), "executed-workspace.txt")
+	t.Setenv("STUDY_WORKSPACE_CAPTURE", capture)
 	result, err := RunTask(context.Background(), fixture.Store, created.Plan.StudyID, task.TaskID,
 		RunTaskOptions{PortableRoot: fixture.Repository, CodexPath: fixture.Executable,
 			Now: fixedStudyClock(start.Add(time.Hour))})
@@ -229,12 +237,37 @@ func TestStudyRunUsesTheSealedWorkspaceSnapshotAfterTheSourceChanges(t *testing.
 	if result.Trial.Request.WorkingDirectory == fixture.Workspace {
 		t.Fatal("study executed in the mutable source workspace")
 	}
-	materialized, err := os.ReadFile(filepath.Join(result.Trial.Request.WorkingDirectory, "task-input.txt"))
+	materialized, err := os.ReadFile(capture)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(materialized) != "sealed before assignment\n" {
 		t.Fatalf("study did not execute the sealed workspace bytes: %q", materialized)
+	}
+	if _, err := os.Stat(result.Trial.Request.WorkingDirectory); !os.IsNotExist(err) {
+		t.Fatalf("isolated study workspace was not removed after its terminal result: %v", err)
+	}
+}
+
+func TestStudyRejectsAWorkspaceArchiveThatNoLongerMatchesItsContentAddress(t *testing.T) {
+	fixture := newStudyFixture(t)
+	created := createStudyPlan(t, fixture, time.Date(2026, 8, 6, 14, 0, 0, 0, time.UTC), 1)
+	task := taskWithCondition(t, created.Plan, ConditionBaseline)
+	archivePath := filepath.Join(fixture.Store.Root(), filepath.FromSlash(task.WorkspaceSnapshot.Archive.RelativePath))
+	data, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data[len(data)/2] ^= 1
+	if err := os.WriteFile(archivePath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if report := Verify(fixture.Store); len(report.Issues) == 0 {
+		t.Fatal("study replay accepted a replaced content-addressed workspace archive")
+	}
+	if _, err := RunTask(context.Background(), fixture.Store, created.Plan.StudyID, task.TaskID,
+		RunTaskOptions{PortableRoot: fixture.Repository, CodexPath: fixture.Executable}); err == nil {
+		t.Fatal("study execution accepted a replaced content-addressed workspace archive")
 	}
 }
 
@@ -554,20 +587,18 @@ func writeStudyRevision(t *testing.T, root, text string) portable.Revision {
 	return revision
 }
 
-func TestMaterializedWorkspaceDestinationUsesCanonicalEvidenceRoot(t *testing.T) {
+func TestReservedWorkspaceIsOutsideEvidenceAndRemoved(t *testing.T) {
 	fixture := newStudyFixture(t)
-	store := fixture.Store
-	resolved, err := filepath.EvalSymlinks(store.Root())
+	workspace, cleanup, err := reserveIsolatedWorkspace(fixture.Store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan := Plan{StudyID: "study-" + strings.Repeat("a", 64)}
-	task := PlannedTask{TaskID: "canonical-workspace"}
-	want := filepath.Join(resolved, "state", "study-workspaces", strings.Repeat("a", 64), task.TaskID, "workspace")
-	if got := materializedWorkspaceDestination(store, plan, task); got != want {
-		t.Fatalf("materialized workspace path was not canonicalized: got %q want %q", got, want)
+	if !validIsolatedWorkspacePath(fixture.Store, workspace) || pathsOverlap(workspace, fixture.Store.Root()) {
+		t.Fatalf("reserved workspace is not isolated from evidence: %q", workspace)
 	}
-	if !pathWithin(materializedWorkspaceRoot(store), want) {
-		t.Fatal("canonical workspace destination escaped its canonical root")
+	root := filepath.Dir(workspace)
+	cleanup()
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("reserved workspace root was not removed: %v", err)
 	}
 }

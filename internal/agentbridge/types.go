@@ -49,6 +49,15 @@ type Artifact struct {
 	Blob   ledger.BlobRef `json:"blob"`
 }
 
+type WorkspaceBinding struct {
+	Archive           ledger.BlobRef `json:"archive"`
+	TreeSHA256        string         `json:"tree_sha256"`
+	Format            string         `json:"format"`
+	Policy            string         `json:"policy"`
+	Files             int            `json:"files"`
+	UncompressedBytes int64          `json:"uncompressed_bytes"`
+}
+
 type BoundEvent struct {
 	EventID      string `json:"event_id"`
 	RecordSHA256 string `json:"record_sha256"`
@@ -80,6 +89,7 @@ type Started struct {
 	EnvironmentNamesSHA256  string                      `json:"environment_names_sha256"`
 	EnvironmentNamesCount   int                         `json:"environment_names_count"`
 	WorkingDirectorySHA256  string                      `json:"working_directory_sha256"`
+	WorkspaceBinding        *WorkspaceBinding           `json:"workspace_binding,omitempty"`
 	ParentEventIDs          []string                    `json:"parent_event_ids"`
 	LoadoutContextReceiptID string                      `json:"loadout_context_receipt_id,omitempty"`
 	MemoryReferences        []retrieval.MemoryReference `json:"memory_references"`
@@ -132,10 +142,12 @@ type VerifiedExecution struct {
 }
 
 type Options struct {
-	CodexPath      string
-	PortableRoot   string
-	ParentEventIDs []string
-	Now            func() time.Time
+	CodexPath          string
+	PortableRoot       string
+	ParentEventIDs     []string
+	WorkspaceBinding   *WorkspaceBinding
+	WorkspacePreflight func() error
+	Now                func() time.Time
 }
 
 type ExecutionError struct {

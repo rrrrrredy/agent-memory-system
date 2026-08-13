@@ -480,11 +480,15 @@ func executionEligibility(store *ledger.Store, state replayState, plan Plan, tas
 		terminal.Execution.RecordSHA256 != receiptRecord.Record.RecordHash ||
 		trial.Plan.EventID != plan.StudyID || trial.Plan.RecordSHA256 != planRecord.Record.RecordHash ||
 		trial.Condition != task.Condition || !reflect.DeepEqual(trial.WorkspaceSnapshot, task.WorkspaceSnapshot) ||
-		!reflect.DeepEqual(trial.Request, execution.Request) || !hasParent(startedRecord.Record.Event, trial.TrialID) {
+		!reflect.DeepEqual(trial.Request, execution.Request) || !hasParent(startedRecord.Record.Event, trial.TrialID) ||
+		execution.Started.WorkspaceBinding == nil ||
+		!reflect.DeepEqual(*execution.Started.WorkspaceBinding, workspaceBinding(task.WorkspaceSnapshot)) {
 		return prefix + "execution does not replay from the sealed one-shot trial"
 	}
-	expectedRequest := expectedStudyRequest(store, plan, task, execution.Request.LoadoutContextReceiptID)
-	if !reflect.DeepEqual(execution.Request, expectedRequest) {
+	expectedRequest := expectedStudyRequest(task, execution.Request.LoadoutContextReceiptID,
+		execution.Request.WorkingDirectory)
+	if !reflect.DeepEqual(execution.Request, expectedRequest) ||
+		!validIsolatedWorkspacePath(store, execution.Request.WorkingDirectory) {
 		return prefix + "execution request differs from the sealed snapshot task contract"
 	}
 	for otherStudyID, otherObservations := range state.Observations {

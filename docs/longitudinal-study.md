@@ -44,10 +44,12 @@ agentmem study create \
 ```
 
 Creation verifies and embeds the complete current loadout, snapshots every
-working directory into a private content-addressed tar archive, derives a stable
-content-hash assignment, counterbalances baseline and memory conditions, and
-appends the complete task contracts in one plan event. File timestamps and
-source changes after creation cannot change the sealed bytes used for execution.
+regular file in each working directory into a private content-addressed tar
+archive except paths containing `.git`, `.hg`, `.svn`, or `.agentmem`, derives
+a stable content-hash assignment, counterbalances baseline and memory
+conditions, and appends the complete task contracts in one plan event. File
+timestamps and source changes after creation cannot change the sealed bytes used
+for execution. Tasks that depend on excluded VCS metadata are not supported.
 
 ## Execute assigned tasks
 
@@ -72,13 +74,17 @@ receipt, and study terminal all descend from the reservation. A receipt created
 through the general `agent run` command is not eligible for a study.
 
 The native receipt preserves the exact request, rendered prompt, Agent message,
-local executable bytes, process result, and visible Codex JSONL. The sealed
-workspace is materialized in a private temporary directory for that run. It does not
-authenticate the remote model/provider or provider-private reasoning. Task
-selection is not blind or independently randomized; both limits remain part of
-the descriptive claim boundary. The supported workflow guarantees the first
-study-bound attempt, not the absence of undisclosed rehearsal outside the tool;
-that remains inside the honest-local-operator assumption.
+local executable bytes, process result, and visible Codex JSONL. The archive
+content address and canonical regular-file tree are verified before the native
+start and again immediately before process launch; the start binds both. The
+sealed tree is materialized in a per-run temporary directory outside the
+evidence store and removed after its terminal result. This does not authenticate
+the remote model/provider or provider-private reasoning. Task selection is not
+blind or independently randomized; both limits remain part of the descriptive
+claim boundary. The supported workflow guarantees the first study-bound
+attempt, not the absence of undisclosed rehearsal or a same-permission mutation
+after the final preflight; those remain inside the honest-local-operator
+assumption.
 
 ## Record an outcome
 

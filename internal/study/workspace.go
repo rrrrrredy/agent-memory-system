@@ -2,6 +2,9 @@ package study
 
 import (
 	"archive/tar"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rrrrrredy/agent-memory-system/internal/agentbridge"
 	"github.com/rrrrrredy/agent-memory-system/internal/ledger"
 )
 
@@ -25,6 +29,25 @@ type workspaceEntry struct {
 	path     string
 	relative string
 	info     fs.FileInfo
+}
+
+type workspaceTreeEntry struct {
+	Kind   string `json:"kind"`
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256,omitempty"`
+	Bytes  int64  `json:"bytes,omitempty"`
+}
+
+type workspaceTree struct {
+	Entries           []workspaceTreeEntry
+	SHA256            string
+	Files             int
+	UncompressedBytes int64
+}
+
+type countedReader struct {
+	reader io.Reader
+	bytes  int64
 }
 
 func snapshotWorkspace(store *ledger.Store, root string) (WorkspaceSnapshot, error) {
@@ -94,6 +117,14 @@ func snapshotWorkspace(store *ledger.Store, root string) (WorkspaceSnapshot, err
 		return snapshot, archiveErr
 	}
 	snapshot.Archive = reference
+	tree, err := inspectWorkspaceArchive(store, snapshot.Archive, "")
+	if err != nil {
+		return snapshot, err
+	}
+	if tree.Files != snapshot.Files || tree.UncompressedBytes != snapshot.UncompressedBytes {
+		return snapshot, errors.New("workspace archive measurements differ from the source snapshot")
+	}
+	snapshot.TreeSHA256 = tree.SHA256
 	return snapshot, validateWorkspaceSnapshotEnvelope(snapshot, root)
 }
 
@@ -153,7 +184,7 @@ func writeWorkspaceArchive(writer *io.PipeWriter, entries []workspaceEntry) erro
 func validateWorkspaceSnapshotEnvelope(snapshot WorkspaceSnapshot, sourcePath string) error {
 	if snapshot.SchemaVersion != WorkspaceSnapshotSchema || snapshot.Format != WorkspaceArchiveFormat ||
 		snapshot.Policy != WorkspaceSnapshotPolicy || snapshot.SourcePathSHA256 != digest([]byte(sourcePath)) ||
-		!validSHA256(snapshot.Archive.SHA256) || snapshot.Archive.Bytes < 1 ||
+		!validSHA256(snapshot.Archive.SHA256) || snapshot.Archive.Bytes < 1 || !validSHA256(snapshot.TreeSHA256) ||
 		strings.TrimSpace(snapshot.Archive.RelativePath) == "" || snapshot.Files < 0 ||
 		snapshot.Files > maximumWorkspaceFiles || snapshot.UncompressedBytes < 0 ||
 		snapshot.UncompressedBytes > maximumWorkspaceBytes {
@@ -166,144 +197,250 @@ func verifyWorkspaceSnapshot(store *ledger.Store, snapshot WorkspaceSnapshot, so
 	if err := validateWorkspaceSnapshotEnvelope(snapshot, sourcePath); err != nil {
 		return err
 	}
-	input, err := store.OpenBlob(snapshot.Archive)
+	tree, err := inspectWorkspaceArchive(store, snapshot.Archive, "")
 	if err != nil {
 		return err
 	}
-	files, bytesRead, err := walkWorkspaceArchive(tar.NewReader(input), "")
-	closeErr := input.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	if files != snapshot.Files || bytesRead != snapshot.UncompressedBytes {
+	if tree.Files != snapshot.Files || tree.UncompressedBytes != snapshot.UncompressedBytes || tree.SHA256 != snapshot.TreeSHA256 {
 		return errors.New("workspace archive measurements differ from the sealed snapshot")
 	}
 	return nil
 }
 
-func materializedWorkspaceRoot(store *ledger.Store) string {
-	evidenceRoot := store.Root()
-	if resolved, err := filepath.EvalSymlinks(evidenceRoot); err == nil {
-		evidenceRoot = resolved
+func reserveIsolatedWorkspace(store *ledger.Store) (string, func(), error) {
+	root, err := os.MkdirTemp("", "agentmem-study-")
+	if err != nil {
+		return "", nil, err
 	}
-	return filepath.Join(evidenceRoot, "state", "study-workspaces")
+	cleanup := func() { _ = os.RemoveAll(root) }
+	if err := os.Chmod(root, 0o700); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	root = resolved
+	if pathsOverlap(root, store.Root()) {
+		cleanup()
+		return "", nil, errors.New("isolated study workspace overlaps the evidence store")
+	}
+	return filepath.Join(root, "workspace"), cleanup, nil
 }
 
-func materializedWorkspaceDestination(store *ledger.Store, plan Plan, task PlannedTask) string {
-	return filepath.Join(materializedWorkspaceRoot(store), strings.TrimPrefix(plan.StudyID, "study-"), task.TaskID, "workspace")
-}
-
-func materializeWorkspace(store *ledger.Store, plan Plan, task PlannedTask) (string, error) {
+func materializeWorkspace(store *ledger.Store, task PlannedTask, destination string) error {
 	if err := verifyWorkspaceSnapshot(store, task.WorkspaceSnapshot, task.WorkingDirectory); err != nil {
-		return "", err
+		return err
 	}
-	root := materializedWorkspaceRoot(store)
-	destination := materializedWorkspaceDestination(store, plan, task)
-	base := filepath.Dir(destination)
-	if !pathWithin(root, destination) {
-		return "", errors.New("materialized workspace path escaped the evidence state directory")
+	if err := os.Mkdir(destination, 0o700); err != nil {
+		return err
 	}
-	if err := os.MkdirAll(base, 0o700); err != nil {
-		return "", err
-	}
-	temporary, err := os.MkdirTemp(base, ".materialize-")
+	tree, err := inspectWorkspaceArchive(store, task.WorkspaceSnapshot.Archive, destination)
 	if err != nil {
-		return "", err
+		return err
 	}
-	defer os.RemoveAll(temporary)
-	input, err := store.OpenBlob(task.WorkspaceSnapshot.Archive)
+	if tree.Files != task.WorkspaceSnapshot.Files || tree.UncompressedBytes != task.WorkspaceSnapshot.UncompressedBytes ||
+		tree.SHA256 != task.WorkspaceSnapshot.TreeSHA256 {
+		return errors.New("materialized workspace differs from the sealed snapshot")
+	}
+	return verifyMaterializedWorkspace(destination, task.WorkspaceSnapshot)
+}
+
+func inspectWorkspaceArchive(store *ledger.Store, reference ledger.BlobRef, destination string) (workspaceTree, error) {
+	input, err := store.OpenBlob(reference)
 	if err != nil {
-		return "", err
+		return workspaceTree{}, err
 	}
-	files, bytesRead, extractErr := walkWorkspaceArchive(tar.NewReader(input), temporary)
+	hasher := sha256.New()
+	measured := &countedReader{reader: io.TeeReader(input, hasher)}
+	tree, walkErr := walkWorkspaceArchive(tar.NewReader(measured), destination)
+	if walkErr == nil {
+		_, walkErr = io.Copy(io.Discard, measured)
+	}
 	closeErr := input.Close()
-	if extractErr != nil {
-		return "", extractErr
+	if walkErr != nil {
+		return workspaceTree{}, walkErr
 	}
 	if closeErr != nil {
-		return "", closeErr
+		return workspaceTree{}, closeErr
 	}
-	if files != task.WorkspaceSnapshot.Files || bytesRead != task.WorkspaceSnapshot.UncompressedBytes {
-		return "", errors.New("materialized workspace measurements differ from the sealed snapshot")
+	if measured.bytes != reference.Bytes || hex.EncodeToString(hasher.Sum(nil)) != reference.SHA256 {
+		return workspaceTree{}, errors.New("workspace archive bytes differ from their content address")
 	}
-	if err := os.RemoveAll(destination); err != nil {
-		return "", err
-	}
-	if err := os.Rename(temporary, destination); err != nil {
-		return "", err
-	}
-	return destination, nil
+	return tree, nil
 }
 
-func walkWorkspaceArchive(archive *tar.Reader, destination string) (int, int64, error) {
+func (reader *countedReader) Read(buffer []byte) (int, error) {
+	count, err := reader.reader.Read(buffer)
+	reader.bytes += int64(count)
+	return count, err
+}
+
+func walkWorkspaceArchive(archive *tar.Reader, destination string) (workspaceTree, error) {
 	seen := map[string]struct{}{}
-	files := 0
-	var bytesRead int64
+	tree := workspaceTree{Entries: []workspaceTreeEntry{}}
 	for {
 		header, err := archive.Next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return 0, 0, err
+			return workspaceTree{}, err
 		}
 		name := path.Clean(strings.TrimSuffix(header.Name, "/"))
 		if name == "." || path.IsAbs(name) || name == ".." || strings.HasPrefix(name, "../") || strings.ContainsRune(name, 0) {
-			return 0, 0, errors.New("workspace archive contains an unsafe path")
+			return workspaceTree{}, errors.New("workspace archive contains an unsafe path")
 		}
 		if _, duplicate := seen[name]; duplicate {
-			return 0, 0, errors.New("workspace archive contains a duplicate path")
+			return workspaceTree{}, errors.New("workspace archive contains a duplicate path")
 		}
 		seen[name] = struct{}{}
 		target := ""
 		if destination != "" {
 			target = filepath.Join(destination, filepath.FromSlash(name))
 			if !pathWithin(destination, target) {
-				return 0, 0, errors.New("workspace archive escaped its materialization root")
+				return workspaceTree{}, errors.New("workspace archive escaped its materialization root")
 			}
 		}
 		switch header.Typeflag {
 		case tar.TypeDir:
+			tree.Entries = append(tree.Entries, workspaceTreeEntry{Kind: "directory", Path: name})
 			if destination != "" {
-				if err := os.MkdirAll(target, fs.FileMode(header.Mode)&0o777); err != nil {
-					return 0, 0, err
+				if err := os.MkdirAll(target, 0o700); err != nil {
+					return workspaceTree{}, err
 				}
 			}
 		case tar.TypeReg, tar.TypeRegA:
-			files++
-			bytesRead += header.Size
-			if files > maximumWorkspaceFiles || bytesRead > maximumWorkspaceBytes || header.Size < 0 {
-				return 0, 0, errors.New("workspace archive exceeds the safety limit")
+			if header.Size < 0 {
+				return workspaceTree{}, errors.New("workspace archive contains a negative file size")
 			}
+			tree.Files++
+			tree.UncompressedBytes += header.Size
+			if tree.Files > maximumWorkspaceFiles || tree.UncompressedBytes > maximumWorkspaceBytes {
+				return workspaceTree{}, errors.New("workspace archive exceeds the safety limit")
+			}
+			fileHasher := sha256.New()
 			if destination == "" {
-				if _, err := io.CopyN(io.Discard, archive, header.Size); err != nil {
-					return 0, 0, err
+				if _, err := io.CopyN(fileHasher, archive, header.Size); err != nil {
+					return workspaceTree{}, err
 				}
-				continue
+			} else {
+				if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+					return workspaceTree{}, err
+				}
+				mode := fs.FileMode(0o600) | (fs.FileMode(header.Mode) & 0o100)
+				file, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+				if err != nil {
+					return workspaceTree{}, err
+				}
+				_, copyErr := io.CopyN(io.MultiWriter(file, fileHasher), archive, header.Size)
+				closeErr := file.Close()
+				if copyErr != nil {
+					return workspaceTree{}, copyErr
+				}
+				if closeErr != nil {
+					return workspaceTree{}, closeErr
+				}
 			}
-			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-				return 0, 0, err
-			}
-			file, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, fs.FileMode(header.Mode)&0o777)
-			if err != nil {
-				return 0, 0, err
-			}
-			_, copyErr := io.CopyN(file, archive, header.Size)
-			closeErr := file.Close()
-			if copyErr != nil {
-				return 0, 0, copyErr
-			}
-			if closeErr != nil {
-				return 0, 0, closeErr
-			}
+			tree.Entries = append(tree.Entries, workspaceTreeEntry{Kind: "file", Path: name,
+				SHA256: hex.EncodeToString(fileHasher.Sum(nil)), Bytes: header.Size})
 		default:
-			return 0, 0, errors.New("workspace archive contains an unsupported entry type")
+			return workspaceTree{}, errors.New("workspace archive contains an unsupported entry type")
 		}
 	}
-	return files, bytesRead, nil
+	return finalizeWorkspaceTree(tree)
+}
+
+func verifyMaterializedWorkspace(root string, snapshot WorkspaceSnapshot) error {
+	tree, err := inspectMaterializedWorkspace(root)
+	if err != nil {
+		return err
+	}
+	if tree.Files != snapshot.Files || tree.UncompressedBytes != snapshot.UncompressedBytes || tree.SHA256 != snapshot.TreeSHA256 {
+		return errors.New("materialized workspace tree differs from the sealed snapshot")
+	}
+	return nil
+}
+
+func inspectMaterializedWorkspace(root string) (workspaceTree, error) {
+	tree := workspaceTree{Entries: []workspaceTreeEntry{}}
+	err := filepath.WalkDir(root, func(itemPath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(root, itemPath)
+		if err != nil || relative == "." {
+			return err
+		}
+		name := filepath.ToSlash(relative)
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
+			return errors.New("materialized workspace contains an unsupported entry")
+		}
+		if info.IsDir() {
+			tree.Entries = append(tree.Entries, workspaceTreeEntry{Kind: "directory", Path: name})
+			return nil
+		}
+		file, err := os.Open(itemPath)
+		if err != nil {
+			return err
+		}
+		hasher := sha256.New()
+		bytesRead, copyErr := io.Copy(hasher, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		tree.Files++
+		tree.UncompressedBytes += bytesRead
+		if tree.Files > maximumWorkspaceFiles || tree.UncompressedBytes > maximumWorkspaceBytes {
+			return errors.New("materialized workspace exceeds the safety limit")
+		}
+		tree.Entries = append(tree.Entries, workspaceTreeEntry{Kind: "file", Path: name,
+			SHA256: hex.EncodeToString(hasher.Sum(nil)), Bytes: bytesRead})
+		return nil
+	})
+	if err != nil {
+		return workspaceTree{}, err
+	}
+	return finalizeWorkspaceTree(tree)
+}
+
+func finalizeWorkspaceTree(tree workspaceTree) (workspaceTree, error) {
+	sort.Slice(tree.Entries, func(i, j int) bool {
+		if tree.Entries[i].Path == tree.Entries[j].Path {
+			return tree.Entries[i].Kind < tree.Entries[j].Kind
+		}
+		return tree.Entries[i].Path < tree.Entries[j].Path
+	})
+	data, err := json.Marshal(tree.Entries)
+	if err != nil {
+		return workspaceTree{}, err
+	}
+	tree.SHA256 = digest(data)
+	return tree, nil
+}
+
+func workspaceBinding(snapshot WorkspaceSnapshot) agentbridge.WorkspaceBinding {
+	return agentbridge.WorkspaceBinding{Archive: snapshot.Archive, TreeSHA256: snapshot.TreeSHA256,
+		Format: snapshot.Format, Policy: snapshot.Policy, Files: snapshot.Files,
+		UncompressedBytes: snapshot.UncompressedBytes}
+}
+
+func validIsolatedWorkspacePath(store *ledger.Store, workspace string) bool {
+	if store == nil || !filepath.IsAbs(workspace) || filepath.Base(workspace) != "workspace" ||
+		pathsOverlap(workspace, store.Root()) {
+		return false
+	}
+	return strings.HasPrefix(filepath.Base(filepath.Dir(workspace)), "agentmem-study-")
 }
 
 func excludedWorkspacePath(relative string) bool {

@@ -135,6 +135,18 @@ func validateArtifact(artifact Artifact) error {
 	return nil
 }
 
+func validateWorkspaceBinding(binding WorkspaceBinding) error {
+	if !validSHA256(binding.Archive.SHA256) || binding.Archive.Bytes < 1 ||
+		strings.TrimSpace(binding.Archive.RelativePath) == "" || !validSHA256(binding.TreeSHA256) ||
+		strings.TrimSpace(binding.Format) == "" || len(binding.Format) > 64 ||
+		strings.TrimSpace(binding.Policy) == "" || len(binding.Policy) > 128 ||
+		binding.Files < 0 || binding.Files > 100000 || binding.UncompressedBytes < 0 ||
+		binding.UncompressedBytes > int64(4*1024*1024*1024) {
+		return errors.New("native Agent workspace binding is invalid")
+	}
+	return nil
+}
+
 func stageExecutable(store *ledger.Store, destination string, artifact Artifact) error {
 	if err := validateArtifact(artifact); err != nil {
 		return err

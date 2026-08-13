@@ -258,27 +258,34 @@ identity. It MUST preserve terminal failures and MUST NOT authenticate a remote
 provider, server-side model, account, or provider-hidden reasoning.
 
 A prospective study MUST append its complete task and cluster identities, every
-native request field, a private content-addressed snapshot of each complete
-working directory, immutable acceptance assertions, Agent, exact current
-loadout, minimum elapsed period, deterministic assignment policy, and all
-assignments before any eligible execution. Task IDs MUST be unique across the
-evidence store. Baseline tasks MUST have no memory receipt. Memory tasks MUST
-bind a verified context receipt for the exact embedded loadout.
+native request field, a private content-addressed snapshot of every regular file
+outside paths containing `.git`, `.hg`, `.svn`, or `.agentmem`, immutable
+acceptance assertions, Agent, exact current loadout, minimum elapsed period,
+deterministic assignment policy, and all assignments before any eligible
+execution. Tasks that depend on excluded VCS metadata are outside this protocol.
+Task IDs MUST be unique across the evidence store. Baseline tasks MUST have no
+memory receipt. Memory tasks MUST bind a verified context receipt for the exact
+embedded loadout.
 
 The supported study runner MUST atomically append one single-use reservation
 before starting the local process. That reservation MUST bind the plan, task,
 condition, exact request, workspace snapshot, and loadout. A start failure,
 timeout, nonzero exit, or missing result MUST append a terminal failure and
 consume the reservation. A direct native receipt or a second reservation MUST
-be ineligible. The runner MUST materialize the sealed workspace in a private
-temporary directory and bind the native start, visible events, receipt, and
-study terminal as causal descendants. Later changes to the source directory
-MUST NOT affect the executed bytes.
+be ineligible. The runner MUST verify the exact archive content address,
+materialize the sealed regular-file tree in a per-run temporary directory
+outside the evidence store, and verify that tree before recording the native
+start and again immediately before process launch. The native start MUST bind
+the archive, canonical tree digest, snapshot policy, and measurements. A failed
+second preflight MUST append a native failure receipt and study terminal without
+launching the process. Every terminal path MUST remove the temporary tree.
+Later changes to the source directory MUST NOT affect the executed bytes.
 
 Within the honest-local-operator boundary this enforces the first study-bound
 attempt. It cannot prove that no undisclosed rehearsal occurred outside the
-supported command and MUST NOT be described as enforcing the first execution
-performed by a local administrator.
+supported command or prevent a malicious same-permission process from racing
+after the final preflight, and MUST NOT be described as enforcing the first
+execution performed by a local administrator or resisting a compromised OS.
 
 The outcome MUST be derived by the supported built-in evaluator from the
 complete immutable Agent-message blob and prospectively sealed acceptance assertions.

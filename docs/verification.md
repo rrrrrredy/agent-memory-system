@@ -118,18 +118,24 @@ placeholder.
 ### Prospective longitudinal observation
 
 `agentmem study create` seals the complete task and cluster population, every
-prompt and native run setting, a content-addressed snapshot of each working
-directory, immutable Agent-message SHA-256 acceptance assertions, exact
-loadout, minimum elapsed period, Agent, and deterministic balanced assignment
-before eligible execution. `agentmem study run` writes one single-use task
-reservation before Codex starts, materializes the private snapshot, and writes
-a terminal record even for start errors, timeouts, nonzero exits, and missing
-results. Direct native receipts and second reservations are ineligible.
-`study observe` accepts only a completed reserved execution, requires its
-request and causal chain to match every sealed field, hashes the complete Agent
-message, derives the outcome with the built-in evaluator, and binds a dedicated
-replayable outcome event. The caller cannot submit a result. Undisclosed runs
-outside the supported study command remain within the honest-operator boundary.
+prompt and native run setting, a content-addressed snapshot of every regular
+file outside `.git`, `.hg`, `.svn`, and `.agentmem`, immutable Agent-message
+SHA-256 acceptance assertions, exact loadout, minimum elapsed period, Agent,
+and deterministic balanced assignment before eligible execution. Tasks that
+need excluded VCS metadata are not covered.
+
+`agentmem study run` writes one single-use task reservation before Codex starts,
+materializes the sealed tree in a random temporary directory outside evidence,
+verifies both the archive and tree before the native start and again immediately
+before launch, binds them to the start, and removes the directory after the
+terminal. It writes a terminal record even for start errors, timeouts, nonzero
+exits, missing results, and second-preflight failures. Direct native receipts and
+second reservations are ineligible. `study observe` accepts only a completed
+reserved execution, requires its request and causal chain to match every sealed
+field, hashes the complete Agent message, derives the outcome with the built-in
+evaluator, and binds a dedicated replayable outcome event. The caller cannot
+submit a result. Undisclosed runs and a same-permission race after the final
+preflight remain within the honest-operator boundary.
 
 The report remains `not_evaluable` for an incomplete population, insufficient
 elapsed time, an arm with fewer than two observations, a synthetic observation,

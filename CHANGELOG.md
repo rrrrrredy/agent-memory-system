@@ -36,10 +36,13 @@ Semantic Versioning after the first tagged public release.
 - Native execution stages and re-hashes content-addressed executable bytes,
   records terminal failures without a retry loophole, and labels remote
   provider, model, and private-reasoning authority as unverified.
-- Longitudinal execution seals workspace bytes, writes a single-use reservation
-  before Codex starts, records every terminal failure, and rejects generic or
-  replacement receipts. Callers cannot submit outcome labels, and synthetic
-  observations cannot clear the evaluability gate.
+- Longitudinal execution verifies the archive content address and canonical
+  regular-file tree, materializes it outside evidence in a per-run temporary
+  directory, checks it before the native start and immediately before launch,
+  binds it to the start, and removes it after the terminal. The single-use
+  reservation records every terminal failure and rejects generic or replacement
+  receipts. Callers cannot submit outcome labels, and synthetic observations
+  cannot clear the evaluability gate.
 - The dashboard refuses non-loopback listeners, serves summary metadata only,
   exposes no write route, ships no external browser resources, and replaces
   raw verifier errors with stable issue codes so private paths are not returned.

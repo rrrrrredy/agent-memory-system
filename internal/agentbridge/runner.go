@@ -31,6 +31,17 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 	if err != nil {
 		return result, err
 	}
+	if (options.WorkspaceBinding == nil) != (options.WorkspacePreflight == nil) {
+		return result, errors.New("workspace binding and preflight must be supplied together")
+	}
+	if options.WorkspaceBinding != nil {
+		if err := validateWorkspaceBinding(*options.WorkspaceBinding); err != nil {
+			return result, err
+		}
+		if err := options.WorkspacePreflight(); err != nil {
+			return result, fmt.Errorf("verify sealed workspace before native start: %w", err)
+		}
+	}
 	var useLease *portable.RepositoryLock
 	if normalized.LoadoutContextReceiptID != "" {
 		if strings.TrimSpace(options.PortableRoot) == "" {
@@ -109,6 +120,11 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 	}
 	arguments := buildArguments(normalized)
 	names := environmentNames()
+	var workspaceBinding *WorkspaceBinding
+	if options.WorkspaceBinding != nil {
+		copyBinding := *options.WorkspaceBinding
+		workspaceBinding = &copyBinding
+	}
 	started := Started{
 		SchemaVersion:           StartedSchema,
 		ExecutionID:             executionID,
@@ -125,6 +141,7 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 		EnvironmentNamesSHA256:  environmentNamesSHA256(names),
 		EnvironmentNamesCount:   len(names),
 		WorkingDirectorySHA256:  sha256Hex([]byte(normalized.WorkingDirectory)),
+		WorkspaceBinding:        workspaceBinding,
 		ParentEventIDs:          parents,
 		LoadoutContextReceiptID: normalized.LoadoutContextReceiptID,
 		MemoryReferences:        memoryReferences,
@@ -165,7 +182,16 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 	command.Stdin = strings.NewReader(prompt)
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
-	runErr := command.Run()
+	var preflightErr error
+	if options.WorkspacePreflight != nil {
+		preflightErr = options.WorkspacePreflight()
+	}
+	var runErr error
+	if preflightErr == nil {
+		runErr = command.Run()
+	} else {
+		runErr = preflightErr
+	}
 	exitCode := commandExitCode(runErr, runContext.Err())
 	rawEventsBlob, putErr := store.PutBlob(bytes.NewReader(stdout.Bytes()))
 	if putErr != nil {
@@ -190,6 +216,8 @@ func Run(ctx context.Context, store *ledger.Store, request RunRequest, options O
 	}
 	failureKind := ""
 	switch {
+	case preflightErr != nil:
+		failureKind = "workspace_changed"
 	case runContext.Err() != nil:
 		failureKind = "timeout"
 	case runErr != nil:

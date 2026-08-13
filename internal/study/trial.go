@@ -56,11 +56,12 @@ func RunTask(ctx context.Context, store *ledger.Store, studyID, taskID string, o
 		}
 		contextReceiptID = contextResult.Receipt.ReceiptID
 	}
-	request := agentbridge.RunRequest{SchemaVersion: agentbridge.RunRequestSchema, TaskID: task.TaskID,
-		Prompt: task.Prompt, Model: task.Model, Sandbox: task.Sandbox,
-		WorkingDirectory: materializedWorkspaceDestination(store, plan, task),
-		TimeoutSeconds:   task.TimeoutSeconds, SkipGitRepositoryCheck: true,
-		LoadoutContextReceiptID: contextReceiptID, Privacy: agentbridge.PrivacyLocalOnly}
+	workspace, cleanupWorkspace, err := reserveIsolatedWorkspace(store)
+	if err != nil {
+		return result, err
+	}
+	defer cleanupWorkspace()
+	request := expectedStudyRequest(task, contextReceiptID, workspace)
 	planRecord := state.PlanRecords[studyID].Record
 	reservation := TrialReservation{SchemaVersion: TrialReservationSchema, StudyID: studyID,
 		TaskID: taskID, Condition: task.Condition,
@@ -98,11 +99,14 @@ func RunTask(ctx context.Context, store *ledger.Store, studyID, taskID string, o
 	}
 	result.Trial = reservation
 	result.TrialEvent = BoundEvent{EventID: reservation.TrialID, RecordSHA256: records[0].RecordHash}
-	if _, err := materializeWorkspace(store, plan, task); err != nil {
+	if err := materializeWorkspace(store, task, workspace); err != nil {
 		return finishFailedTrial(store, plan.Agent, result, "workspace_materialization", err, options.Now)
 	}
+	binding := workspaceBinding(task.WorkspaceSnapshot)
 	agentOptions := agentbridge.Options{CodexPath: options.CodexPath,
-		ParentEventIDs: []string{reservation.TrialID}, Now: options.Now}
+		ParentEventIDs: []string{reservation.TrialID}, WorkspaceBinding: &binding,
+		WorkspacePreflight: func() error { return verifyMaterializedWorkspace(workspace, task.WorkspaceSnapshot) },
+		Now:                options.Now}
 	if contextReceiptID != "" {
 		agentOptions.PortableRoot = options.PortableRoot
 	}
@@ -258,10 +262,10 @@ func lookupBoundEvent(store *ledger.Store, eventID string) (BoundEvent, error) {
 	return result, nil
 }
 
-func expectedStudyRequest(store *ledger.Store, plan Plan, task PlannedTask, contextReceiptID string) agentbridge.RunRequest {
+func expectedStudyRequest(task PlannedTask, contextReceiptID, workingDirectory string) agentbridge.RunRequest {
 	return agentbridge.RunRequest{SchemaVersion: agentbridge.RunRequestSchema, TaskID: task.TaskID,
 		Prompt: task.Prompt, Model: task.Model, Sandbox: task.Sandbox,
-		WorkingDirectory: materializedWorkspaceDestination(store, plan, task),
+		WorkingDirectory: workingDirectory,
 		TimeoutSeconds:   task.TimeoutSeconds, SkipGitRepositoryCheck: true,
 		LoadoutContextReceiptID: contextReceiptID, Privacy: agentbridge.PrivacyLocalOnly}
 }

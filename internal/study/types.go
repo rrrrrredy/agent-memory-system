@@ -68,6 +68,7 @@ type WorkspaceSnapshot struct {
 	Format            string         `json:"format"`
 	Policy            string         `json:"policy"`
 	Archive           ledger.BlobRef `json:"archive"`
+	TreeSHA256        string         `json:"tree_sha256"`
 	Files             int            `json:"files"`
 	UncompressedBytes int64          `json:"uncompressed_bytes"`
 }

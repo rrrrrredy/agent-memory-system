@@ -133,6 +133,36 @@ func TestRunPersistsFailedTerminalReceipt(t *testing.T) {
 	}
 }
 
+func TestWorkspaceChangeAfterStartedLeavesFailedTerminalWithoutLaunchingCodex(t *testing.T) {
+	t.Setenv("AGENTBRIDGE_TEST_HELPER", "1")
+	store, workspace, executable := agentBridgeFixture(t)
+	archive, err := store.PutBlob(strings.NewReader("sealed workspace archive"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := WorkspaceBinding{Archive: archive, TreeSHA256: strings.Repeat("a", 64),
+		Format: "tar/v1", Policy: "test/v1", Files: 1, UncompressedBytes: 24}
+	checks := 0
+	result, err := Run(context.Background(), store, testRunRequest(workspace, "Return a verified answer."), Options{
+		CodexPath: executable, WorkspaceBinding: &binding, Now: fixedAgentBridgeClock(),
+		WorkspacePreflight: func() error {
+			checks++
+			if checks == 2 {
+				return errors.New("workspace changed after the native start was recorded")
+			}
+			return nil
+		},
+	})
+	var executionError *ExecutionError
+	if !errors.As(err, &executionError) || checks != 2 || result.Receipt.Outcome != OutcomeFailed ||
+		result.Receipt.FailureKind != "workspace_changed" || result.Receipt.ProcessExitCode == 0 {
+		t.Fatalf("workspace preflight failure was not terminal: result=%+v checks=%d err=%v", result, checks, err)
+	}
+	if report := Verify(store); len(report.Issues) != 0 || report.ReceiptsChecked != 1 {
+		t.Fatalf("workspace preflight failure does not replay: %+v", report)
+	}
+}
+
 func TestRunRejectsUnknownLoadoutReceiptBeforeExecution(t *testing.T) {
 	t.Setenv("AGENTBRIDGE_TEST_HELPER", "1")
 	store, workspace, executable := agentBridgeFixture(t)

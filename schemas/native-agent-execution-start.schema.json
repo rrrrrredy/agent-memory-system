@@ -32,6 +32,7 @@
     "environment_names_sha256": {"$ref": "#/$defs/sha256"},
     "environment_names_count": {"type": "integer", "minimum": 1},
     "working_directory_sha256": {"$ref": "#/$defs/sha256"},
+    "workspace_binding": {"$ref": "#/$defs/workspace_binding"},
     "parent_event_ids": {
       "type": "array", "maxItems": 8, "uniqueItems": true,
       "items": {"type": "string", "minLength": 1, "maxLength": 512}
@@ -55,6 +56,19 @@
         "sha256": {"$ref": "#/$defs/sha256"},
         "bytes": {"type": "integer", "minimum": 1},
         "blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"}
+      }
+    },
+    "workspace_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archive", "tree_sha256", "format", "policy", "files", "uncompressed_bytes"],
+      "properties": {
+        "archive": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+        "tree_sha256": {"$ref": "#/$defs/sha256"},
+        "format": {"type": "string", "minLength": 1, "maxLength": 64},
+        "policy": {"type": "string", "minLength": 1, "maxLength": 128},
+        "files": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "uncompressed_bytes": {"type": "integer", "minimum": 0, "maximum": 4294967296}
       }
     },
     "bound_event": {
