@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-study-verification.schema.json",
+  "title": "Longitudinal study verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "studies_checked", "observations_checked", "issues", "privacy"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-study-verification/v1alpha1"},
+    "studies_checked": {"type": "integer", "minimum": 0},
+    "observations_checked": {"type": "integer", "minimum": 0},
+    "issues": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "privacy": {"const": "local_only"}
+  }
+}

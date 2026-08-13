@@ -3,6 +3,65 @@
 All notable changes will be documented in this file. The project follows
 Semantic Versioning after the first tagged public release.
 
+## [0.3.0] - 2026-08-13
+
+### Added
+
+- Immutable, content-addressed portable memory loadouts with exact active
+  revision references, Agent allowlists, trusted scope, delivery budgets,
+  stale-head rejection, and composite local context receipts.
+- Immutable candidate review packets that bind displayed text hashes,
+  provenance, generation identity, the current evidence prefix, and review
+  metadata while preserving separate validation and promotion decisions.
+- A native Codex execution bridge that preserves exact local runner and Codex
+  bytes, canonical requests, arguments, raw JSONL, usage, terminal output, and
+  completed or failed receipts, plus complete replay verification.
+- Prospective longitudinal study plans that seal complete native requests,
+  content-addressed workspace snapshots, and immutable acceptance hashes;
+  deterministically counterbalance assignments; reserve one study-bound
+  attempt before execution; derive outcomes from complete replayed
+  Agent-message bytes; and report descriptive results.
+- A loopback-only read-only dashboard for evidence, review, promotion,
+  retrieval, loadout, native-execution, and study verification summaries.
+- Public JSON Schemas and real producer instances for every new v0.3 protocol.
+- A static GitHub Pages product site and a Pages deployment workflow.
+
+### Security
+
+- Loadouts become unusable when any referenced revision is superseded,
+  revoked, missing, or no longer the exact active head; no partial or silent
+  replacement is allowed.
+- Loadout-backed native execution requires an exact verified context receipt
+  and holds the portable repository use lock through the terminal receipt.
+- Native execution stages and re-hashes content-addressed executable bytes,
+  records terminal failures without a retry loophole, and labels remote
+  provider, model, and private-reasoning authority as unverified.
+- Longitudinal execution verifies the archive content address and canonical
+  regular-file tree, materializes it outside evidence, portable memory, and Git
+  worktrees in a per-run temporary directory, checks it before the native start
+  and immediately before launch, binds it to the start, and reports any cleanup
+  failure after the terminal. The single-use
+  reservation records every terminal failure and rejects generic or replacement
+  receipts. Callers cannot submit outcome labels, and synthetic observations
+  cannot clear the evaluability gate.
+- Native execution replay streams and deduplicates executable artifact checks,
+  while longitudinal replay builds one snapshot-scoped index for retrieval,
+  loadout, and native execution evidence. A content-addressed workspace archive
+  is fully verified once per unique sealed snapshot instead of once per task,
+  and observations reuse the verified dependency graph.
+- The dashboard refuses non-loopback listeners, serves summary metadata only,
+  exposes no write route, ships no external browser resources, and replaces
+  raw verifier errors with stable issue codes so private paths are not returned.
+
+### Known limits
+
+- Native process receipts prove the supported local execution graph, not the
+  identity or behavior of a remote provider or server-side model.
+- Claude Code remains protocol-conformant without an equivalent native
+  execution receipt. OpenCode runtime coverage remains hosted and provider-free.
+- No completed real-world longitudinal study is claimed in this release;
+  eligible reports are descriptive associations, not causal certification.
+
 ## [0.2.0] - 2026-08-12
 
 ### Added

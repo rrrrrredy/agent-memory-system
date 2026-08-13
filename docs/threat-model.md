@@ -11,6 +11,8 @@ Status: baseline for implementation and review, 2026-08-04.
 - Device identities, synchronization credentials, encryption keys, and backup
   recovery material.
 - Evaluation results used to decide whether a memory policy is safe.
+- Portable loadouts, native execution receipts, and prospective study records
+  used to repeat or assess memory delivery.
 
 ## Trust boundaries
 
@@ -23,6 +25,9 @@ Status: baseline for implementation and review, 2026-08-04.
 7. Optional encrypted evidence leaves the device for a separate backup backend.
 8. An explicitly selected blind assessment payload may cross the network to the
    fixed OpenAI Responses endpoint after an exact payload-ID confirmation.
+9. An exact local Codex process consumes a canonical request and may contact a
+   remote provider outside this product's independent authority.
+10. A read-only operational summary is served on a local loopback socket.
 
 Private Git hosting is an access-control layer, not permission to upload raw
 evidence. A local artifact marked `local_only` describes its canonical storage;
@@ -65,6 +70,12 @@ is active.
 Automatic Git synchronization is a finite scheduled process protected by those
 locks, not a resident daemon. A daemon remains out of scope without a stronger
 cross-process lifecycle and signed-checkpoint design.
+
+Native execution stores and replays the exact local runner and Codex bytes,
+request, argument vector, raw JSONL, output, usage, and terminal state. That
+closes supported local artifact-substitution and self-reported-run paths. It
+does not withstand a fully compromised operating system or independently
+authenticate remote provider behavior.
 
 ### Secret exfiltration
 
@@ -136,6 +147,29 @@ the supported flow. The security claim therefore assumes an honest local
 operator while making supported cherry-picking and post-hoc labeling paths
 auditable and fail-closed.
 
+Prospective studies seal the population, complete native request fields,
+content-addressed snapshots of regular files outside `.git`, `.hg`, `.svn`, and
+`.agentmem`, immutable Agent-message acceptance hashes, deterministic balanced
+assignment, Agent, elapsed period, and exact loadout before execution. The
+supported runner atomically writes one single-use task reservation before the
+process and always writes a terminal record. It verifies the archive content
+address, materializes the canonical tree in a random per-run directory outside
+the evidence store, portable memory repository, and every detected Git worktree,
+checks it before the native start and immediately before launch, binds the
+archive and tree to the start, and surfaces any post-terminal cleanup failure.
+Direct receipts, second reservations, changed source directories,
+workspace changes caught by either preflight, and failed or missing terminals
+are ineligible.
+
+A built-in evaluator derives a dedicated outcome-evidence event from the
+complete immutable Agent-message blob; the caller cannot supply a label or
+arbitrary tool result, and synthetic observations remain non-evaluable. The
+system does not detect undisclosed rehearsal outside the supported command or
+forgery by a local administrator. A compromised OS or malicious process under
+the same account can still race after the final workspace preflight. Task
+selection and operator behavior are not independently blinded, so a complete
+report is a descriptive association rather than a causal claim.
+
 The evaluator binds its executable, system prompt, tool registry, harness, and
 adapter artifacts, then freezes episode generation, the corpus, the complete
 promotion projection, oracle registry, and capture snapshot in local evidence
@@ -177,6 +211,10 @@ Controls:
 - complete portable-repository verification with fail-closed reads;
 - compaction continuity tests;
 - no-memory versus memory outcome evaluation.
+- immutable loadouts that bind exact active revision heads, approved Agents,
+  trusted scope, and delivery budgets;
+- complete composite loadout receipts with no stale or partial fallback;
+- a loopback-only dashboard that serves summary metadata and rejects writes.
 
 ### Backup compromise or unrecoverability
 
@@ -202,3 +240,7 @@ never written into an archive or sidecar.
   evidence.
 - Recovering provider-private reasoning never exposed to the local runtime.
 - Treating an LLM judgment as a cryptographic or factual proof.
+- Authenticating a remote provider or model solely from a local Codex process.
+- Preventing another process running as the same local user from reaching the
+  loopback dashboard. The dashboard is not exposed remotely and is not an
+  authentication boundary.

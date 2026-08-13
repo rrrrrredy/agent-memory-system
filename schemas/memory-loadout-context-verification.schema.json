@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/memory-loadout-context-verification.schema.json",
+  "title": "Composite loadout context verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "receipts_checked", "issues", "privacy"],
+  "properties": {
+    "schema_version": {"const": "memory-loadout-context-verification/v1alpha1"},
+    "receipts_checked": {"type": "integer", "minimum": 0},
+    "issues": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "privacy": {"const": "local_only"}
+  }
+}

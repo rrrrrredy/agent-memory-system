@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/native-agent-execution-result.schema.json",
+  "title": "Native Codex execution result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "receipt", "privacy"],
+  "properties": {
+    "schema_version": {"const": "native-agent-execution-result/v1alpha1"},
+    "receipt": {"$ref": "native-agent-execution-receipt.schema.json"},
+    "privacy": {"const": "local_only"}
+  }
+}

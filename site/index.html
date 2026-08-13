@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Memory System — Memory that can show its work</title>
+  <meta name="description" content="A local-first, evidence-backed continuous memory system for Codex, Claude Code, and OpenCode.">
+  <meta name="theme-color" content="#0f6869">
+  <link rel="canonical" href="https://rrrrrredy.github.io/agent-memory-system/">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230f6869'/%3E%3Cpath d='M19 21a10 10 0 0 1 18-6 10 10 0 0 1 14 10 10 10 0 0 1-4 18 10 10 0 0 1-18 4 10 10 0 0 1-16-8 10 10 0 0 1 6-18Z' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Agent Memory System">
+  <meta property="og:description" content="Memory that can show its work.">
+  <meta property="og:url" content="https://rrrrrredy.github.io/agent-memory-system/">
+  <style>
+    :root {
+      --ink: #102033;
+      --muted: #526273;
+      --teal: #0f6869;
+      --teal-dark: #084f51;
+      --teal-soft: #e8f3f2;
+      --blue: #236d9b;
+      --amber: #c97805;
+      --amber-soft: #fff7ea;
+      --red: #c84a3d;
+      --line: #d8dedf;
+      --surface: #fffefa;
+      --paper: #faf9f5;
+      --shadow: 0 18px 44px rgba(16, 32, 51, .08);
+      --radius: 18px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; min-width: 320px; background:
+      radial-gradient(circle at 11% 12%, rgba(201,120,5,.06), transparent 26rem),
+      radial-gradient(circle at 86% 20%, rgba(15,104,105,.08), transparent 30rem), var(--paper); }
+    a { color: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    .skip { position: absolute; left: -999px; top: 0; z-index: 20; padding: .8rem 1rem; background: var(--ink); color: white; }
+    .skip:focus { left: 1rem; top: 1rem; }
+    .shell { width: min(1420px, calc(100% - 40px)); margin: 0 auto; }
+    header { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid rgba(216,222,223,.9); background: rgba(250,249,245,.9); backdrop-filter: blur(16px); }
+    nav { min-height: 76px; display: flex; align-items: center; gap: 26px; }
+    .brand { display: flex; align-items: center; gap: 13px; text-decoration: none; font-weight: 760; font-size: 1.12rem; white-space: nowrap; }
+    .mark { width: 43px; height: 43px; border: 1.5px solid var(--teal); border-radius: 14px; display: grid; place-items: center; background: white; box-shadow: 0 8px 24px rgba(15,104,105,.09); }
+    .mark svg { width: 27px; height: 27px; }
+    .version { padding: .32rem .58rem; border: 1px solid #aeb9bb; border-radius: 8px; color: var(--teal-dark); font-size: .75rem; font-weight: 680; }
+    .navlinks { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+    .navlinks a { padding: .72rem .82rem; text-decoration: none; font-size: .9rem; color: #26384a; border-radius: 9px; }
+    .navlinks a:hover, .navlinks a:focus-visible { background: white; outline: none; }
+    .actions { display: flex; gap: 10px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: .75rem 1.05rem; border: 1px solid #aeb8ba; border-radius: 10px; background: white; text-decoration: none; font-weight: 700; font-size: .9rem; transition: transform .16s ease, box-shadow .16s ease; }
+    .button:hover, .button:focus-visible { transform: translateY(-1px); box-shadow: 0 9px 24px rgba(16,32,51,.1); outline: none; }
+    .button.primary { color: white; background: linear-gradient(135deg, var(--teal), var(--teal-dark)); border-color: var(--teal-dark); }
+    .hero { padding: 76px 0 48px; display: grid; grid-template-columns: minmax(300px, .78fr) minmax(640px, 1.35fr); gap: 54px; align-items: center; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 16px; color: var(--teal-dark); font-weight: 760; font-size: .82rem; letter-spacing: .07em; text-transform: uppercase; }
+    .eyebrow::before { content: ""; width: 28px; height: 2px; background: var(--teal); }
+    h1 { margin: 0; max-width: 570px; font-size: clamp(3.1rem, 6.7vw, 6rem); line-height: .99; letter-spacing: -.065em; font-weight: 790; }
+    .lead { max-width: 620px; margin: 25px 0 20px; color: #27394b; font-size: clamp(1.05rem, 1.8vw, 1.32rem); line-height: 1.55; }
+    .bullets { list-style: none; margin: 0 0 27px; padding: 0; display: grid; gap: 10px; color: #243648; }
+    .bullets li { display: flex; gap: 10px; align-items: flex-start; }
+    .check { flex: 0 0 20px; width: 20px; height: 20px; margin-top: 2px; border: 1.5px solid var(--teal); color: var(--teal); border-radius: 50%; display: grid; place-items: center; font-size: .72rem; font-weight: 850; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    .flow { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; }
+    .flow::before { content: ""; position: absolute; top: 94px; left: 10%; right: 10%; border-top: 2px dashed #22435b; opacity: .6; z-index: 0; }
+    .stage { position: relative; z-index: 1; text-align: center; }
+    .stage h2 { margin: 0 0 6px; font-size: 1rem; line-height: 1.25; }
+    .stage p { min-height: 40px; margin: 0 auto 12px; color: var(--muted); font-size: .8rem; line-height: 1.4; }
+    .orb { width: 138px; height: 138px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center; background: var(--teal-soft); border: 1px solid rgba(15,104,105,.08); box-shadow: inset 0 0 0 13px rgba(255,255,255,.35); }
+    .stage:first-child .orb { background: #fff2df; color: var(--amber); }
+    .stage:last-child .orb { background: #eaf4fa; color: var(--blue); }
+    .orb svg { width: 74px; height: 74px; stroke: currentColor; }
+    .note { min-height: 75px; padding: 12px 10px; display: grid; place-items: center; border: 1px dashed rgba(15,104,105,.55); border-radius: 10px; background: rgba(255,255,255,.7); font-size: .78rem; line-height: 1.45; color: #294054; }
+    .stage:first-child .note { border-color: rgba(201,120,5,.55); }
+    .stage:last-child .note { border-color: rgba(35,109,155,.55); }
+    section { scroll-margin-top: 96px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 1.9fr; gap: 15px; margin: 28px 0 18px; }
+    .card, .metric { border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.76); box-shadow: 0 1px 0 rgba(255,255,255,.9) inset; }
+    .card { padding: 25px 23px; }
+    .card-head { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; font-weight: 760; }
+    .card-icon { width: 41px; height: 41px; display: grid; place-items: center; border-radius: 12px; background: var(--teal-soft); color: var(--teal); font-size: 1.35rem; }
+    .card:nth-child(2) .card-icon { color: var(--amber); background: var(--amber-soft); }
+    .card p { margin: 0; color: #344658; font-size: .94rem; line-height: 1.55; }
+    .metric { padding: 0 22px 20px; border-style: dashed; border-color: var(--teal); }
+    .metric-title { display: flex; align-items: center; gap: 9px; padding: 18px 0 13px; border-bottom: 1px solid var(--line); font-weight: 760; }
+    .numbers { display: grid; grid-template-columns: repeat(4, 1fr); padding: 18px 0; }
+    .number { text-align: center; border-right: 1px solid var(--line); }
+    .number:last-child { border: 0; }
+    .number strong { display: block; font-size: clamp(2rem, 3vw, 3.2rem); line-height: 1; color: var(--teal); letter-spacing: -.04em; }
+    .number:nth-child(3) strong { color: var(--amber); }
+    .number:nth-child(4) strong { color: var(--red); }
+    .number span { display: block; margin-top: 8px; font-weight: 700; }
+    .metric p { margin: 0; color: #344658; font-size: .88rem; line-height: 1.5; }
+    .evidence-link { display: inline-flex; margin-top: 13px; color: var(--teal-dark); font-size: .86rem; font-weight: 760; text-underline-offset: 3px; }
+    .evidence-link:hover, .evidence-link:focus-visible { color: var(--teal); outline-offset: 4px; }
+    .warning { display: grid; grid-template-columns: auto auto 1fr; gap: 18px; align-items: center; margin: 18px 0 60px; padding: 17px 24px; border: 1px solid #ebcfaa; border-radius: 12px; background: var(--amber-soft); color: #3c3b37; font-size: .9rem; }
+    .warning strong { color: #9a5900; }
+    .warning .divider { width: 1px; height: 24px; background: #e3c18c; }
+    .section-head { max-width: 780px; margin: 0 auto 34px; text-align: center; }
+    .section-head h2 { margin: 0 0 12px; font-size: clamp(2rem, 4vw, 3.2rem); letter-spacing: -.04em; }
+    .section-head p { margin: 0; color: var(--muted); font-size: 1.02rem; line-height: 1.6; }
+    .features { padding: 72px 0; border-top: 1px solid var(--line); }
+    .feature-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .feature { padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: white; }
+    .feature small { display: block; color: var(--teal); font-weight: 790; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }
+    .feature h3 { margin: 0 0 10px; font-size: 1.08rem; }
+    .feature p { margin: 0; color: var(--muted); line-height: 1.55; font-size: .9rem; }
+    .architecture { padding: 72px 0; }
+    .pipeline { display: grid; grid-template-columns: repeat(7, minmax(110px, 1fr)); gap: 10px; align-items: stretch; }
+    .pipe { position: relative; padding: 19px 15px; min-height: 125px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.78); }
+    .pipe:not(:last-child)::after { content: "→"; position: absolute; right: -12px; top: 48px; z-index: 2; color: var(--teal); font-weight: 850; }
+    .pipe span { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: var(--teal-soft); color: var(--teal); font-size: .78rem; font-weight: 800; }
+    .pipe h3 { margin: 13px 0 6px; font-size: .91rem; }
+    .pipe p { margin: 0; color: var(--muted); font-size: .75rem; line-height: 1.4; }
+    .cta { margin: 25px 0 74px; padding: 46px; display: flex; align-items: center; gap: 30px; border-radius: 22px; background: linear-gradient(135deg, #0e5f61, #0b4d5c); color: white; box-shadow: var(--shadow); }
+    .cta h2 { margin: 0 0 8px; font-size: clamp(1.7rem, 3vw, 2.6rem); letter-spacing: -.035em; }
+    .cta p { margin: 0; color: #d8eeee; line-height: 1.55; }
+    .cta .hero-actions { margin-left: auto; flex-wrap: nowrap; }
+    .cta .button { border-color: rgba(255,255,255,.5); }
+    footer { border-top: 1px solid var(--line); }
+    .footer { min-height: 90px; display: flex; align-items: center; gap: 20px; color: #425365; font-size: .86rem; }
+    .footer a { text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+    .footer-links { margin-left: auto; display: flex; gap: 25px; }
+    @media (max-width: 1120px) {
+      .navlinks { display: none; }
+      .hero { grid-template-columns: 1fr; }
+      h1 { max-width: 760px; }
+      .flow { max-width: 850px; }
+      .grid { grid-template-columns: repeat(3, 1fr); }
+      .metric { grid-column: 1 / -1; }
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+      .pipeline { grid-template-columns: repeat(4, 1fr); }
+      .pipe:not(:last-child)::after { display: none; }
+    }
+    @media (max-width: 720px) {
+      .shell { width: min(100% - 28px, 1420px); }
+      nav { min-height: 66px; gap: 12px; }
+      .brand { font-size: .98rem; }
+      .mark { width: 38px; height: 38px; }
+      .actions { display: none; }
+      .actions .button:first-child { display: none; }
+      .button { min-height: 42px; padding: .68rem .88rem; }
+      .hero { padding: 48px 0 34px; gap: 42px; }
+      h1 { font-size: clamp(3rem, 15vw, 4.6rem); }
+      .flow { grid-template-columns: repeat(2, 1fr); gap: 26px 12px; }
+      .flow::before { display: none; }
+      .orb { width: 116px; height: 116px; }
+      .orb svg { width: 60px; height: 60px; }
+      .grid { grid-template-columns: 1fr; }
+      .metric { grid-column: auto; }
+      .numbers { grid-template-columns: repeat(2, 1fr); gap: 18px 0; }
+      .number:nth-child(2) { border-right: 0; }
+      .warning { grid-template-columns: auto 1fr; }
+      .warning .divider { display: none; }
+      .feature-grid, .pipeline { grid-template-columns: 1fr; }
+      .pipe { min-height: 0; }
+      .cta { padding: 30px 24px; display: block; }
+      .cta .hero-actions { margin: 24px 0 0; flex-wrap: wrap; }
+      .footer { padding: 24px 0; align-items: flex-start; }
+      .footer-links { display: grid; grid-template-columns: repeat(2, auto); gap: 12px 20px; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header>
+    <nav class="shell" aria-label="Primary navigation">
+      <a class="brand" href="#overview" aria-label="Agent Memory System home">
+        <span class="mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11a5 5 0 0 1 9-3 5 5 0 0 1 7 5 5 5 0 0 1-2 9 5 5 0 0 1-9 2 5 5 0 0 1-8-4 5 5 0 0 1 3-9Z"/><path d="M12 8v17m8-17v17M6 16h19M12 12l8 8m0-8-8 8"/></svg></span>
+        <span>Agent Memory System</span>
+        <span class="version">v0.3.0</span>
+      </a>
+      <div class="navlinks">
+        <a href="#overview">Overview</a><a href="#how">How it works</a><a href="#benchmarks">Benchmarks</a><a href="#architecture">Architecture</a>
+      </div>
+      <div class="actions">
+        <a class="button" href="https://github.com/rrrrrredy/agent-memory-system">GitHub ↗</a>
+        <a class="button primary" href="https://github.com/rrrrrredy/agent-memory-system/releases">Releases</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section id="overview" class="hero shell">
+      <div>
+        <div class="eyebrow">Evidence before memory</div>
+        <h1>Memory that can show its work.</h1>
+        <p class="lead">A local-first, evidence-backed continuous memory system for Codex, Claude Code, and OpenCode.</p>
+        <ul class="bullets">
+          <li><span class="check">✓</span><span>Preserve raw evidence locally in an append-only ledger</span></li>
+          <li><span class="check">✓</span><span>Promote only reviewed, redacted memories</span></li>
+          <li><span class="check">✓</span><span>Sync portable memory through private Git</span></li>
+          <li><span class="check">✓</span><span>Measure whether retrieval improves later tasks</span></li>
+        </ul>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/rrrrrredy/agent-memory-system#try-the-complete-lifecycle">⌁&nbsp; Get started</a>
+          <a class="button" href="https://github.com/rrrrrredy/agent-memory-system/tree/main/docs">▤&nbsp; Read the docs</a>
+        </div>
+      </div>
+      <div class="flow" aria-label="Memory lifecycle">
+        <article class="stage"><h2>Local evidence</h2><p>Raw, append-only, integrity-checked, and kept on your machine.</p><div class="orb"><svg viewBox="0 0 80 80" fill="none" stroke-width="2"><path d="M14 21h28l8 8h16v37H14z"/><path d="M23 14h27l10 10v15M28 25h14M28 33h20M26 51h28M26 58h20"/></svg></div><div class="note">Unredacted notes, logs, traces, and artifacts stay local.</div></article>
+        <article class="stage"><h2>Reviewed memory</h2><p>Operator-attested, redacted, ready to share.</p><div class="orb"><svg viewBox="0 0 80 80" fill="none" stroke-width="2"><rect x="16" y="10" width="48" height="58" rx="5"/><path d="m25 27 5 5 9-10m-14 24 5 5 9-10m7-14h10m-10 19h10"/></svg></div><div class="note">Policy requires human inspection; caller identity is not authenticated.</div></article>
+        <article class="stage"><h2>Private Git</h2><p>Versioned memory under your control.</p><div class="orb"><svg viewBox="0 0 80 80" fill="none" stroke-width="2"><path d="M40 11 66 38 40 66 14 38z"/><circle cx="31" cy="29" r="4"/><circle cx="49" cy="48" r="4"/><path d="M31 33v13a5 5 0 0 0 5 5h9m-14-5 18-18"/></svg></div><div class="note">Portable, auditable, conflict-aware revisions.</div></article>
+        <article class="stage"><h2>Coding agents</h2><p>Codex, Claude Code, and OpenCode.</p><div class="orb"><svg viewBox="0 0 80 80" fill="none" stroke-width="2"><rect x="10" y="14" width="60" height="50" rx="5"/><path d="M10 27h60M19 21h1m7 0h1m7 0h1M28 39l-8 7 8 7m8 0h18"/></svg></div><div class="note">Retrieve what helps. Record what was delivered.</div></article>
+      </div>
+    </section>
+
+    <section id="benchmarks" class="shell">
+      <div class="grid">
+        <article class="card"><div class="card-head"><span class="card-icon">◇</span>Privacy boundary</div><p>Raw evidence never leaves your machine unless you explicitly create a separate encrypted backup. Git receives only promoted portable memory.</p></article>
+        <article class="card"><div class="card-head"><span class="card-icon">⛓</span>Evidence chain</div><p>Every promoted memory links back to local sources and review records. Provenance is preserved without publishing private transcripts.</p></article>
+        <article class="card"><div class="card-head"><span class="card-icon">⌕</span>Cross-agent retrieval</div><p>One verified memory format supports consistent retrieval across Codex, Claude Code, and OpenCode integration surfaces.</p></article>
+        <article class="metric"><div class="metric-title">▥ Retrieval impact <span style="font-weight:500;color:var(--muted)">(frozen synthetic capability suite)</span></div><div class="numbers"><div class="number"><strong>20</strong><span>tasks</span></div><div class="number"><strong>19</strong><span>wins</span></div><div class="number"><strong>1</strong><span>tie</span></div><div class="number"><strong>0</strong><span>losses</span></div></div><p>Observed Codex results compare paired runs with and without verified memory across a sealed set of deterministic tasks. The aggregate receipt binds hashes and summary counts; raw execution evidence stays local and cannot be independently reconstructed from the public receipt.</p><a class="evidence-link" href="https://github.com/rrrrrredy/agent-memory-system/blob/main/evals/results/codex-memory-capability-v1-2026-08-12.json">Inspect the aggregate receipt →</a></article>
+      </div>
+      <div class="warning"><strong>△ &nbsp;Limitations</strong><span class="divider"></span><span>This capability suite is not longitudinal efficacy certification. Results may not generalize to different tasks, future models, or long-term use; the system reports insufficient prospective evidence as <code>not_evaluable</code>.</span></div>
+    </section>
+
+    <section id="how" class="features">
+      <div class="shell">
+        <div class="section-head"><h2>Strict where trust matters. Practical where work happens.</h2><p>The system separates capture, judgment, distribution, delivery, and measurement so one convenient shortcut cannot silently become trusted memory.</p></div>
+        <div class="feature-grid">
+          <article class="feature"><small>Capture</small><h3>Append-only local evidence</h3><p>Source bytes, normalized events, completeness gaps, and capture receipts stay in a hash-chained local store.</p></article>
+          <article class="feature"><small>Review</small><h3>Evidence-bound review packets</h3><p>A concise local packet shows the exact candidate, support, conflicts, and content hash without combining validation and promotion attestations.</p></article>
+          <article class="feature"><small>Distribution</small><h3>Verified memory loadouts</h3><p>Named, immutable sets bind exact active revisions, agent eligibility, scope, and budgets for reproducible task context.</p></article>
+          <article class="feature"><small>Measurement</small><h3>Prospective longitudinal studies</h3><p>Requests, regular-file workspace snapshots, and acceptance hashes are sealed before execution. Archive and tree hashes are verified around launch; reused reservations, failed or missing trials, missing arms, and short duration remain not evaluable.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="architecture" class="architecture shell">
+      <div class="section-head"><h2>One evidence path, seven explicit boundaries.</h2><p>Raw threads are not portable memory, a retrieved memory is not proof of adoption, and a green test is not longitudinal evidence.</p></div>
+      <div class="pipeline">
+        <article class="pipe"><span>01</span><h3>Agent trajectory</h3><p>Locally exposed task events and source bytes.</p></article>
+        <article class="pipe"><span>02</span><h3>Evidence ledger</h3><p>Append-only records, gaps, and integrity checks.</p></article>
+        <article class="pipe"><span>03</span><h3>Episodes</h3><p>Reconstructed task attempts and compaction checkpoints.</p></article>
+        <article class="pipe"><span>04</span><h3>Candidates</h3><p>Evidence-backed claims awaiting judgment.</p></article>
+        <article class="pipe"><span>05</span><h3>Promotion</h3><p>Separate operator attestation, redaction, immutable revision.</p></article>
+        <article class="pipe"><span>06</span><h3>Private Git</h3><p>Portable revisions and explicit loadouts.</p></article>
+        <article class="pipe"><span>07</span><h3>Delivery</h3><p>Scoped retrieval, injection, adoption, outcome.</p></article>
+      </div>
+    </section>
+
+    <section class="shell cta">
+      <div><h2>Keep the evidence private. Carry the useful memory forward.</h2><p>MIT licensed, cross-platform, and designed to fail closed when a claim cannot be verified.</p></div>
+      <div class="hero-actions"><a class="button" href="https://github.com/rrrrrredy/agent-memory-system">View source</a><a class="button primary" href="https://github.com/rrrrrredy/agent-memory-system/releases">Download</a></div>
+    </section>
+  </main>
+
+  <footer><div class="shell footer"><span>© 2026 Agent Memory System · MIT</span><div class="footer-links"><a href="https://github.com/rrrrrredy/agent-memory-system/tree/main/docs">Docs</a><a href="https://github.com/rrrrrredy/agent-memory-system/discussions">Discussions</a><a href="https://github.com/rrrrrredy/agent-memory-system/blob/main/CONTRIBUTING.md">Contribute</a><a href="https://huggingface.co/spaces/RedinGhost/agent-memory-system">HF mirror</a></div></div></footer>
+</body>
+</html>

@@ -23,6 +23,7 @@ const (
 type repositoryState struct {
 	revisions map[string]Revision
 	heads     map[string]Revision
+	loadouts  map[string]Loadout
 }
 
 func InitRepository(root string) error {
@@ -104,15 +105,22 @@ func IsDataPath(relative string) bool {
 	case repositoryManifestName, "README.md", ".gitattributes", ".gitignore":
 		return true
 	}
-	_, _, valid := identityFromRevisionPath(strings.Split(relative, "/"))
-	return valid
+	parts := strings.Split(relative, "/")
+	if _, _, valid := identityFromRevisionPath(parts); valid {
+		return true
+	}
+	return validLoadoutPath(parts)
 }
 
 func loadRepository(root string) (VerificationReport, *repositoryState) {
 	report := VerificationReport{
 		SchemaVersion: VerificationSchemaVersion, Issues: []VerificationIssue{}, Privacy: PortablePrivacy,
 	}
-	state := &repositoryState{revisions: map[string]Revision{}, heads: map[string]Revision{}}
+	state := &repositoryState{
+		revisions: map[string]Revision{},
+		heads:     map[string]Revision{},
+		loadouts:  map[string]Loadout{},
+	}
 	if strings.TrimSpace(root) == "" {
 		addIssue(&report, VerificationIssue{Code: "repository_root_invalid", Message: "portable repository root is required"})
 		return finalizeReport(report), state
@@ -163,7 +171,7 @@ func loadRepository(root string) (VerificationReport, *repositoryState) {
 			if len(parts) == 1 && (parts[0] == ".git" || parts[0] == ".agentmem") {
 				return filepath.SkipDir
 			}
-			if parts[0] == "memories" {
+			if parts[0] == "memories" || parts[0] == "loadouts" {
 				return nil
 			}
 			if len(parts) == 1 {
@@ -185,6 +193,39 @@ func loadRepository(root string) (VerificationReport, *repositoryState) {
 			if _, known := expected[parts[0]]; !known {
 				addIssue(&report, VerificationIssue{Code: "unexpected_path", Message: "portable repository contains an unsupported root file"})
 			}
+			return nil
+		}
+		if validLoadoutPath(parts) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				addIssue(&report, VerificationIssue{
+					Code: "repository_read_error", Message: "portable loadout is unreadable",
+				})
+				return nil
+			}
+			report.FilesChecked++
+			loadout, err := parseLoadout(data)
+			if err != nil {
+				addIssue(&report, VerificationIssue{
+					Code: "invalid_loadout", Message: "portable loadout failed canonical validation",
+				})
+				return nil
+			}
+			if filepath.Clean(relative) != loadoutRelativePath(loadout.LoadoutID) {
+				addIssue(&report, VerificationIssue{
+					Code: "loadout_path_mismatch", LoadoutID: loadout.LoadoutID,
+					Message: "portable loadout identity does not match its path",
+				})
+				return nil
+			}
+			if _, duplicate := state.loadouts[loadout.LoadoutID]; duplicate {
+				addIssue(&report, VerificationIssue{
+					Code: "duplicate_loadout", LoadoutID: loadout.LoadoutID,
+					Message: "portable loadout identity appears more than once",
+				})
+				return nil
+			}
+			state.loadouts[loadout.LoadoutID] = loadout
 			return nil
 		}
 		memoryID, revisionID, validPath := identityFromRevisionPath(parts)
@@ -219,6 +260,7 @@ func loadRepository(root string) (VerificationReport, *repositoryState) {
 		addIssue(&report, VerificationIssue{Code: "repository_read_error", Message: "portable repository traversal failed"})
 	}
 	validateRepositoryState(&report, state)
+	validateLoadoutState(&report, state)
 	return finalizeReport(report), state
 }
 
@@ -283,6 +325,24 @@ func validateRepositoryState(report *VerificationReport, state *repositoryState)
 		}
 	}
 	validateSemanticHeads(report, state.heads)
+}
+
+func validateLoadoutState(report *VerificationReport, state *repositoryState) {
+	ids := make([]string, 0, len(state.loadouts))
+	for id := range state.loadouts {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		loadout := state.loadouts[id]
+		if err := validateLoadoutHistory(loadout, state.revisions); err != nil {
+			addIssue(report, VerificationIssue{
+				Code: "invalid_loadout_reference", LoadoutID: id, Message: err.Error(),
+			})
+			continue
+		}
+		report.LoadoutsChecked++
+	}
 }
 
 func hasCycle(revisions []Revision, all map[string]Revision) bool {
@@ -380,6 +440,9 @@ func finalizeReport(report VerificationReport) VerificationReport {
 		a, b := report.Issues[left], report.Issues[right]
 		if a.Code != b.Code {
 			return a.Code < b.Code
+		}
+		if a.LoadoutID != b.LoadoutID {
+			return a.LoadoutID < b.LoadoutID
 		}
 		if a.MemoryID != b.MemoryID {
 			return a.MemoryID < b.MemoryID

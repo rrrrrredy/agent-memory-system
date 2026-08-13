@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/candidate-review-packet-build-result.schema.json",
+  "title": "Candidate review packet build result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "packet_id", "generation", "items", "relative_path", "written", "privacy"],
+  "properties": {
+    "schema_version": {"const": "candidate-review-packet-build-result/v1alpha1"},
+    "packet_id": {"type": "string", "pattern": "^review-packet-[a-f0-9]{64}$"},
+    "generation": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$"},
+    "items": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "relative_path": {
+      "type": "string", "pattern": "^derived/review-packets/review-packet-[a-f0-9]{64}\\.json$"
+    },
+    "written": {"type": "boolean"},
+    "privacy": {"const": "local_only"}
+  }
+}

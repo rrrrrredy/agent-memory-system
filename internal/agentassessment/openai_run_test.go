@@ -53,7 +53,7 @@ func TestControlledOpenAIRunPreservesExactExchangeAndCreatesProvisionalAssessmen
 	fixed := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
 	result, err := RunOpenAIAssessment(context.Background(), store, OpenAIRunOptions{
 		ProjectionID: projection.ProjectionID, Model: "gpt-5.4-mini",
-		ConfirmRemoteDisclosureID: payload.PayloadID, APIKey: "sk-test-key-not-real",
+		ConfirmRemoteDisclosureID: payload.PayloadID, Credential: "sk-test-key-not-real",
 		client: newOpenAIHTTPClient(), endpoint: server.URL, now: func() time.Time { return fixed },
 		loadVerified: fixedOpenAILoader(projection, projectionBytes, payload, payloadBytes),
 	})
@@ -192,7 +192,7 @@ func TestControlledOpenAIRunBlocksDisclosureAndSensitiveTextBeforeNetwork(t *tes
 			}
 			_, err = RunOpenAIAssessment(context.Background(), store, OpenAIRunOptions{
 				ProjectionID: projection.ProjectionID, Model: model,
-				ConfirmRemoteDisclosureID: confirmation, APIKey: test.apiKey,
+				ConfirmRemoteDisclosureID: confirmation, Credential: test.apiKey,
 				client: server.Client(), endpoint: server.URL,
 				loadVerified: fixedOpenAILoader(projection, projectionBytes, payload, payloadBytes),
 			})
@@ -224,7 +224,7 @@ func TestControlledOpenAIRunRejectsRedirectWithoutForwardingAuthorization(t *tes
 	}
 	result, err := RunOpenAIAssessment(context.Background(), store, OpenAIRunOptions{
 		ProjectionID: projection.ProjectionID, Model: "gpt-5.4-mini",
-		ConfirmRemoteDisclosureID: payload.PayloadID, APIKey: "sk-test-key-not-real",
+		ConfirmRemoteDisclosureID: payload.PayloadID, Credential: "sk-test-key-not-real",
 		client: newOpenAIHTTPClient(), endpoint: source.URL,
 		loadVerified: fixedOpenAILoader(projection, projectionBytes, payload, payloadBytes),
 	})
@@ -259,7 +259,7 @@ func TestControlledOpenAIRunPreservesToolOutputButDoesNotAssessIt(t *testing.T) 
 	}
 	result, err := RunOpenAIAssessment(context.Background(), store, OpenAIRunOptions{
 		ProjectionID: projection.ProjectionID, Model: "gpt-5.4-mini",
-		ConfirmRemoteDisclosureID: payload.PayloadID, APIKey: "sk-test-key-not-real",
+		ConfirmRemoteDisclosureID: payload.PayloadID, Credential: "sk-test-key-not-real",
 		client: server.Client(), endpoint: server.URL,
 		loadVerified: fixedOpenAILoader(projection, projectionBytes, payload, payloadBytes),
 	})
@@ -349,7 +349,7 @@ func TestControlledOpenAIRunPreservesRejectedResponsesWithoutAssessment(t *testi
 			}
 			result, runErr := RunOpenAIAssessment(context.Background(), store, OpenAIRunOptions{
 				ProjectionID: projection.ProjectionID, Model: "gpt-5.4-mini",
-				ConfirmRemoteDisclosureID: payload.PayloadID, APIKey: "sk-test-key-not-real",
+				ConfirmRemoteDisclosureID: payload.PayloadID, Credential: "sk-test-key-not-real",
 				client: server.Client(), endpoint: server.URL,
 				loadVerified: fixedOpenAILoader(projection, projectionBytes, payload, payloadBytes),
 			})
@@ -415,7 +415,7 @@ func TestControlledOpenAIRunPreservesTransportFailureWithoutAssessment(t *testin
 	}
 	result, runErr := RunOpenAIAssessment(context.Background(), store, OpenAIRunOptions{
 		ProjectionID: projection.ProjectionID, Model: "gpt-5.4-mini",
-		ConfirmRemoteDisclosureID: payload.PayloadID, APIKey: "sk-test-key-not-real",
+		ConfirmRemoteDisclosureID: payload.PayloadID, Credential: "sk-test-key-not-real",
 		client: client, endpoint: "https://api.openai.invalid/v1/responses",
 		loadVerified: fixedOpenAILoader(projection, projectionBytes, payload, payloadBytes),
 	})
@@ -448,7 +448,7 @@ func TestControlledOpenAIRunMarksPartialResponseCapture(t *testing.T) {
 	}
 	result, runErr := RunOpenAIAssessment(context.Background(), store, OpenAIRunOptions{
 		ProjectionID: projection.ProjectionID, Model: "gpt-5.4-mini",
-		ConfirmRemoteDisclosureID: payload.PayloadID, APIKey: "sk-test-key-not-real",
+		ConfirmRemoteDisclosureID: payload.PayloadID, Credential: "sk-test-key-not-real",
 		client: client, endpoint: "https://api.openai.invalid/v1/responses",
 		loadVerified: fixedOpenAILoader(projection, projectionBytes, payload, payloadBytes),
 	})

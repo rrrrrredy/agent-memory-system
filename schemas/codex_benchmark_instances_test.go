@@ -14,6 +14,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if os.Getenv("AGENTMEM_SCHEMA_AGENTBRIDGE_HELPER") == "1" {
+		runSchemaAgentBridgeHelper()
+		return
+	}
 	if os.Getenv("AGENTMEM_SCHEMA_CODEXBENCH_HELPER") == "1" {
 		runSchemaCodexBenchmarkHelper()
 		return

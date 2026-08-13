@@ -23,6 +23,7 @@ import (
 	"github.com/rrrrrredy/agent-memory-system/internal/candidates"
 	"github.com/rrrrrredy/agent-memory-system/internal/capturesupervisor"
 	"github.com/rrrrrredy/agent-memory-system/internal/codexbench"
+	"github.com/rrrrrredy/agent-memory-system/internal/dashboard"
 	"github.com/rrrrrredy/agent-memory-system/internal/diagnostics"
 	"github.com/rrrrrredy/agent-memory-system/internal/episodes"
 	"github.com/rrrrrredy/agent-memory-system/internal/evaluation"
@@ -69,6 +70,8 @@ func nestedCommandGroupHelp(args []string) (error, bool) {
 		return nil, false
 	}
 	switch strings.Join(args[:len(args)-1], " ") {
+	case "agent run":
+		return agentRunUsageError(), true
 	case "capture hook":
 		return captureHookUsageError(), true
 	case "capture supervisor":
@@ -220,8 +223,14 @@ func run(args []string) error {
 		return runCommandGroup(args, promoteUsageError, runPromote)
 	case "rule-approval":
 		return runCommandGroup(args, ruleApprovalUsageError, runRuleApproval)
+	case "study":
+		return runCommandGroup(args, studyUsageError, runStudy)
 	case "portable":
 		return runCommandGroup(args, portableUsageError, runPortable)
+	case "loadout":
+		return runCommandGroup(args, loadoutUsageError, runLoadout)
+	case "agent":
+		return runCommandGroup(args, agentUsageError, runAgent)
 	case "recall":
 		return runCommandGroup(args, recallUsageError, runRecall)
 	case "serve":
@@ -388,9 +397,17 @@ func runInject(args []string) error {
 }
 
 func runServe(args []string) error {
-	if args[0] != "mcp" {
+	switch args[0] {
+	case "mcp":
+		return runServeMCP(args[1:])
+	case "dashboard":
+		return runServeDashboard(args[1:])
+	default:
 		return serveUsageError()
 	}
+}
+
+func runServeMCP(args []string) error {
 	flags := flag.NewFlagSet("serve mcp", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
 	repository := flags.String("repo", "", "portable memory repository root (required)")
@@ -400,7 +417,7 @@ func runServe(args []string) error {
 	scopeRepository := flags.String("scope-repository", "", "trusted logical repository scope")
 	scopeProject := flags.String("scope-project", "", "trusted logical project scope")
 	scopeTask := flags.String("scope-task", "", "trusted logical task scope")
-	if err := flags.Parse(args[1:]); err != nil {
+	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *root == "" || *repository == "" || *agent == "" {
@@ -414,10 +431,31 @@ func runServe(args []string) error {
 		Agent:        ledger.Agent(*agent),
 		ThreadID:     *thread,
 		SessionID:    *session,
-		Repository:   *scopeRepository,
-		Project:      *scopeProject,
-		Task:         *scopeTask,
+
+		Repository: *scopeRepository,
+		Project:    *scopeProject,
+		Task:       *scopeTask,
 	})
+}
+func runServeDashboard(args []string) error {
+	flags := flag.NewFlagSet("serve dashboard", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	repository := flags.String("repo", "", "portable memory repository root (required)")
+	listen := flags.String("listen", "127.0.0.1:8765", "loopback listen address")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *repository == "" {
+		return errors.New("serve dashboard requires --root and --repo")
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	fmt.Fprintf(os.Stderr, "Agent Memory System dashboard: http://%s\n", *listen)
+	return dashboard.Serve(ctx, store, *listen, dashboard.Options{Repository: *repository})
 }
 
 func runRecall(args []string) error {
@@ -1501,11 +1539,13 @@ func runAgentAssessment(args []string) error {
 		if err != nil {
 			return err
 		}
+		assessmentOptions := agentassessment.OpenAIRunOptions{
+			ProjectionID: *projectionID, Model: *model,
+			ConfirmRemoteDisclosureID: *confirmation,
+		}
+		assessmentOptions.Credential = os.Getenv("OPENAI_API_KEY")
 		result, runErr := agentassessment.RunOpenAIAssessment(context.Background(), store,
-			agentassessment.OpenAIRunOptions{
-				ProjectionID: *projectionID, Model: *model,
-				ConfirmRemoteDisclosureID: *confirmation, APIKey: os.Getenv("OPENAI_API_KEY"),
-			})
+			assessmentOptions)
 		if result.AttemptID != "" {
 			if err := encodeIndented(result); err != nil {
 				return err
@@ -2185,6 +2225,8 @@ func runReview(args []string) error {
 	switch args[0] {
 	case "list":
 		return runReviewList(args[1:])
+	case "packet":
+		return runReviewPacket(args[1:])
 	case "decide":
 		return runReviewDecide(args[1:])
 	case "apply":
@@ -2742,7 +2784,7 @@ func runImport(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: agentmem <version|onboard|status|compatibility|init|doctor|import|inject|capture|backup|derive|eval|review|promote|rule-approval|portable|recall|serve|sync> [options]")
+	return errors.New("usage: agentmem <version|onboard|status|compatibility|init|doctor|import|inject|capture|backup|derive|eval|review|promote|rule-approval|portable|loadout|agent|study|recall|serve|sync> [options]")
 }
 
 func onboardUsageError() error {
@@ -2754,7 +2796,7 @@ func backupUsageError() error {
 }
 
 func reviewUsageError() error {
-	return errors.New("usage: agentmem review <list|decide|apply|status|verify> [options]")
+	return errors.New("usage: agentmem review <list|packet|decide|apply|status|verify> [options]")
 }
 
 func promoteUsageError() error {
@@ -2769,12 +2811,27 @@ func portableUsageError() error {
 	return errors.New("usage: agentmem portable <init|export|verify> [options]")
 }
 
+func loadoutUsageError() error {
+	return errors.New("usage: agentmem loadout <create|list|verify|context> [options]")
+}
+
+func agentUsageError() error {
+	return errors.New("usage: agentmem agent <run|verify> [options]")
+}
+
+func agentRunUsageError() error {
+	return errors.New("usage: agentmem agent run codex --root <local-evidence-directory> --file <request.json> --codex <executable> [--repo <portable-memory-directory>]")
+}
+func studyUsageError() error {
+	return errors.New("usage: agentmem study <create|run|observe|report|verify> [options]")
+}
+
 func recallUsageError() error {
 	return errors.New("usage: agentmem recall <search|get|context|adoption|verify> [options]")
 }
 
 func serveUsageError() error {
-	return errors.New("usage: agentmem serve mcp --root <local-evidence-directory> --repo <portable-memory-directory> --agent <agent>")
+	return errors.New("usage: agentmem serve <mcp|dashboard> [options]")
 }
 
 func syncUsageError() error {

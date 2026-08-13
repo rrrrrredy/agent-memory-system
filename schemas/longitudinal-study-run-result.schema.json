@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/longitudinal-study-run-result.schema.json",
+  "title": "Longitudinal Study Run Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "trial", "trial_event", "terminal", "terminal_event", "privacy"],
+  "properties": {
+    "schema_version": {"const": "longitudinal-study-run-result/v1alpha1"},
+    "trial": {"$ref": "longitudinal-study-trial-reservation.schema.json"},
+    "trial_event": {"$ref": "longitudinal-study-observation.schema.json#/$defs/bound_event"},
+    "execution": {"$ref": "native-agent-execution-result.schema.json"},
+    "terminal": {"$ref": "longitudinal-study-trial-terminal.schema.json"},
+    "terminal_event": {"$ref": "longitudinal-study-observation.schema.json#/$defs/bound_event"},
+    "privacy": {"const": "local_only"}
+  }
+}

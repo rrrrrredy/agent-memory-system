@@ -17,10 +17,12 @@ It is built for a harder question than “what should the agent remember?”:
 > What evidence supports this memory, is it still current, and can another
 > machine use it without receiving the private transcript?
 
-Version **0.2.0** implements storage, derivation, review, memory lifecycle,
-private Git synchronization, retrieval, encrypted recovery, and evaluation
-controls. Runtime adapters remain version-sensitive. The system fails closed
-when evidence is incomplete or a compatibility claim cannot be verified.
+Version **0.3.0** adds immutable memory loadouts, evidence-bound review packets,
+replay-verifiable local Codex execution receipts, prospective longitudinal
+study records, and a loopback-only read-only dashboard to the storage,
+derivation, review, private Git, retrieval, recovery, and evaluation foundation.
+Runtime adapters remain version-sensitive. The system fails closed when
+evidence is incomplete or a compatibility claim cannot be verified.
 
 ## Why this is different
 
@@ -36,6 +38,8 @@ flowchart LR
     E --> F["Promote, supersede, or revoke"]
     F --> G["Private Git memory repository"]
     G --> H["Bounded cross-agent retrieval"]
+    H --> I["Immutable memory loadouts"]
+    I --> J["Native receipts and prospective studies"]
 ```
 
 Raw transcripts, tool output, exposed reasoning, and local paths remain in the
@@ -61,6 +65,19 @@ history.
 - Retrieval verifies the complete portable repository, applies exact scope and
   result limits plus estimated-token and UTF-8 byte budgets, and records what
   was delivered.
+- A memory loadout names exact active revision heads. Supersession or revocation
+  makes the old loadout stale instead of silently substituting new content.
+  Loadout-backed native execution holds the portable repository use lock from
+  freshness verification through the terminal receipt.
+- Review packets freeze the displayed candidate text, provenance, generation,
+  and evidence prefix without combining validation and promotion authority.
+- Native Codex receipts bind exact local executable bytes, request, JSONL,
+  output, usage, and terminal state; they do not authenticate the remote
+  provider, server-side model, or hidden reasoning.
+- Prospective studies seal every request, acceptance assertion, and workspace
+  snapshot before execution. A single-use study reservation is written before
+  Codex starts; failures consume it, and outcomes replay the complete
+  Agent-message bytes. Reports remain descriptive rather than causal.
 - Raw evidence backup is optional, encrypted with age, and completely separate
   from the readable memory repository.
 - `AGENTS.md`, Skills, and other rule surfaces are never changed without a
@@ -93,8 +110,9 @@ go build -o ./bin/agentmem ./cmd/agentmem
 ./bin/agentmem version
 ```
 
-Tagged releases provide checksum-verified Windows and macOS installers. See
-[install, upgrade, and uninstall](docs/install.md).
+Tagged releases provide checksum-verified Windows, macOS, and Linux archives;
+the supported installers target Windows and macOS. See [install, upgrade, and
+uninstall](docs/install.md).
 
 ## Try the complete lifecycle
 
@@ -144,6 +162,9 @@ version probe does not hide a working offline importer.
 | Review and memory lifecycle | Evidence-bound caller attestations, promotion, supersession, revocation, secret scanning, and conflict tests; caller identity is not authenticated |
 | Cross-device memory | Private Git history verification, offline use, divergence handling, recovery, and hosted Windows/macOS/Linux tests |
 | Native Codex memory diagnostic | A frozen 20-cluster synthetic suite ran 20 paired authenticated `codex exec` tasks with sealed no-tools policy and verified retrieval injections: 19 wins, 1 tie, 0 losses; baseline 1/20, memory 20/20; one-sided sign-test p=0.0000019073. This is bounded capability evidence, not longitudinal certification; see the [aggregate receipt](evals/results/codex-memory-capability-v1-2026-08-12.json) |
+| Native Codex process receipts | Exact local Codex and runner bytes, request, arguments, raw JSONL, usage, output, and terminal state are replayed; provider, model, and private reasoning are not independently attested |
+| Portable loadouts | Content-addressed exact revision sets, scope, Agent allowlist, budgets, stale-head rejection, and composite delivery receipts |
+| Prospective studies | Pre-sealed requests and workspace snapshots, immutable Agent-message acceptance hashes, deterministic balanced assignment, one single-use study-bound attempt, and replay-derived outcomes; no completed real-world longitudinal efficacy claim is made |
 | Learning efficacy | Frozen-corpus metrics and replay are implemented; efficacy certification remains blocked unless task execution is independently verified |
 
 Run a local, non-mutating runtime probe:
@@ -188,12 +209,51 @@ agentmem serve mcp --root <evidence> --repo <private-memory> --agent codex
 Codex, Claude Code, and OpenCode consume the same portable protocol. Their
 native hooks or plugins are optional; CLI and MCP remain the stable boundary.
 
+## Operational memory
+
+Create a reusable, exact set of promoted revisions:
+
+```text
+agentmem loadout create --repo <private-memory> --name "Release checks" \
+  --scope-kind project --scope-value example-project --agent codex \
+  --memory <memory-id>
+agentmem loadout context --root <evidence> --repo <private-memory> \
+  --loadout <loadout-id> --agent codex --scope-project example-project
+```
+
+Build one immutable review surface before promotion:
+
+```text
+agentmem review packet --root <evidence> --status review_ready --limit 20
+agentmem promote candidate --root <evidence> --candidate <candidate-id> \
+  --packet <review-packet-path-or-id> --approver local-user \
+  --reason "Approved after reviewing the bound packet."
+```
+
+Run and replay a local Codex process from a versioned request:
+
+```text
+agentmem agent run codex --root <evidence> --file <request.json> \
+  --codex <codex-executable>
+agentmem agent verify --root <evidence>
+```
+
+The local dashboard exposes verification summaries only:
+
+```text
+agentmem serve dashboard --root <evidence> --repo <private-memory>
+```
+
+See [loadouts](docs/loadouts.md), [native execution](docs/native-execution.md),
+[longitudinal studies](docs/longitudinal-study.md), and the
+[dashboard](docs/dashboard.md).
+
 ## Storage boundaries
 
 | Zone | Contains | May enter Git? |
 | --- | --- | --- |
 | Local evidence | Exact transcripts, tool output, exposed reasoning, normalized events, gaps, receipts | No |
-| Portable memory | Attested and redacted Markdown/YAML revisions | Separate private repository only |
+| Portable memory | Attested and redacted Markdown/YAML revisions plus immutable loadouts | Separate private repository only |
 | Encrypted backup | Complete local evidence snapshot | Optional backup backend, never the memory repository |
 
 Do not copy `~/.codex`, Agent state databases, session directories, or the local
@@ -207,6 +267,8 @@ local index, never as Git-merged canonical data.
 - It does not automatically promote model-written claims.
 - It does not silently merge semantic conflicts.
 - It does not prove that retrieval improves work merely because retrieval ran.
+- It does not turn a descriptive longitudinal association into causal or
+  independently provider-certified efficacy.
 - It does not modify Agent rules or install hooks without explicit approval.
 
 ## Repository map
@@ -217,7 +279,12 @@ local index, never as Git-merged canonical data.
 - `internal/episodes`, `internal/candidates`: reconstruction and extraction
 - `internal/review`, `internal/promotion`: attested decisions and memory lifecycle
 - `internal/portable`, `internal/gitsync`: portable projection and private Git
-- `internal/retrieval`, `internal/mcpserver`: bounded query and delivery
+- `internal/loadout`, `internal/retrieval`, `internal/mcpserver`: exact loadouts,
+  bounded query, and delivery receipts
+- `internal/reviewpacket`: immutable candidate review surfaces
+- `internal/agentbridge`: replay-verifiable local Codex process evidence
+- `internal/study`: prospective assignment, observation, and descriptive reports
+- `internal/dashboard`: loopback-only read-only operational summary
 - `internal/codexbench`: sealed native Codex baseline/memory diagnostics
 - `internal/evaluation`: frozen corpora, paired trials, metrics, and replay
 - `internal/backup`, `internal/diagnostics`: encrypted recovery and integrity

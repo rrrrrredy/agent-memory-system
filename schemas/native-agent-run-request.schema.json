@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/native-agent-run-request.schema.json",
+  "title": "Native Codex execution request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "task_id", "prompt", "model", "sandbox", "working_directory",
+    "timeout_seconds", "skip_git_repository_check", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "native-agent-run-request/v1alpha1"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
+    "prompt": {"type": "string", "minLength": 1, "maxLength": 131072},
+    "model": {"type": "string", "minLength": 1, "maxLength": 128},
+    "sandbox": {"enum": ["read-only", "workspace-write"]},
+    "working_directory": {"type": "string", "minLength": 1, "pattern": "^[^\\x00]+$"},
+    "timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+    "skip_git_repository_check": {"type": "boolean"},
+    "loadout_context_receipt_id": {"type": "string", "pattern": "^loadout-context-.+", "maxLength": 512},
+    "privacy": {"const": "local_only"}
+  }
+}

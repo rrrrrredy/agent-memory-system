@@ -94,8 +94,13 @@ func Export(store *ledger.Store, repositoryRoot string, options ExportOptions) (
 		SchemaVersion: VerificationSchemaVersion, Issues: []VerificationIssue{}, Privacy: PortablePrivacy,
 		RevisionsChecked: len(combined),
 	}
-	combinedState := &repositoryState{revisions: combined, heads: map[string]Revision{}}
+	combinedState := &repositoryState{
+		revisions: combined,
+		heads:     map[string]Revision{},
+		loadouts:  existing.loadouts,
+	}
 	validateRepositoryState(&combinedReport, combinedState)
+	validateLoadoutState(&combinedReport, combinedState)
 	combinedReport = finalizeReport(combinedReport)
 	if len(combinedReport.Issues) != 0 {
 		return result, fmt.Errorf("portable export would create a conflict: %s", combinedReport.Issues[0].Message)
@@ -347,6 +352,15 @@ func AcquireRepositoryLock(repositoryRoot string) (*RepositoryLock, error) {
 		return nil, fmt.Errorf("close portable repository lock: %w", err)
 	}
 	return &RepositoryLock{path: path}, nil
+}
+
+// AcquireRepositoryUseLease takes the same exclusive lock used by every
+// portable-repository mutation. A caller must hold the lease from current-head
+// verification until the consumer has durably bound and finished using the
+// selected bytes. This prevents a concurrent export, sync, loadout creation,
+// supersession, or revocation from invalidating an in-flight delivery.
+func AcquireRepositoryUseLease(repositoryRoot string) (*RepositoryLock, error) {
+	return AcquireRepositoryLock(repositoryRoot)
 }
 
 func (lock *RepositoryLock) Release() error {

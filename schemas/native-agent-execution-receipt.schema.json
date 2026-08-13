@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/native-agent-execution-receipt.schema.json",
+  "title": "Replayable local native Codex execution receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "receipt_id", "execution_id", "task_id", "started", "raw_events_blob",
+    "events", "tool_calls", "usage", "process_exit_code", "outcome", "reasoning_visibility",
+    "provider_authority", "started_at", "finished_at", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "native-agent-execution-receipt/v1alpha1"},
+    "receipt_id": {"type": "string", "pattern": "^native-agent-receipt-[a-f0-9]{64}$"},
+    "execution_id": {"type": "string", "pattern": "^native-agent-execution-.+"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9._-]{1,128}$"},
+    "started": {"$ref": "native-agent-execution-start.schema.json#/$defs/bound_event"},
+    "raw_events_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "agent_message_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "stderr_blob": {"$ref": "evidence-event.schema.json#/$defs/blob_ref"},
+    "thread_id": {"type": "string", "minLength": 1},
+    "events": {"type": "integer", "minimum": 0},
+    "tool_calls": {"type": "integer", "minimum": 0},
+    "usage": {"$ref": "native-agent-execution-start.schema.json#/$defs/usage"},
+    "process_exit_code": {"type": "integer"},
+    "outcome": {"enum": ["completed", "failed"]},
+    "failure_kind": {"enum": ["timeout", "process_exit", "invalid_jsonl", "executable_changed"]},
+    "reasoning_visibility": {"enum": ["summary_only", "not_exposed"]},
+    "provider_authority": {
+      "const": "local_codex_cli_process; remote_provider_model_and_private_reasoning_not_independently_attested"
+    },
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "privacy": {"const": "local_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"outcome": {"const": "completed"}}, "required": ["outcome"]},
+      "then": {
+        "required": ["agent_message_blob", "thread_id"],
+        "properties": {"process_exit_code": {"const": 0}, "failure_kind": false}
+      }
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "failed"}}, "required": ["outcome"]},
+      "then": {"required": ["failure_kind"]}
+    },
+    {
+      "if": {"properties": {"failure_kind": {"const": "timeout"}}, "required": ["failure_kind"]},
+      "then": {"properties": {"process_exit_code": {"const": 124}}}
+    },
+    {
+      "if": {"properties": {"failure_kind": {"const": "process_exit"}}, "required": ["failure_kind"]},
+      "then": {"properties": {"process_exit_code": {"not": {"enum": [0, 124]}}}}
+    },
+    {
+      "if": {"properties": {"failure_kind": {"const": "invalid_jsonl"}}, "required": ["failure_kind"]},
+      "then": {"properties": {"process_exit_code": {"const": 0}}}
+    }
+  ]
+}

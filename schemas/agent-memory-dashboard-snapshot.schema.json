@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/agent-memory-dashboard-snapshot.schema.json",
+  "title": "Local read-only dashboard snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "ready", "evidence", "reviews", "promotions", "retrieval", "loadout_contexts", "native_executions", "loadouts", "studies", "study_reports", "issues", "privacy_boundary", "privacy"],
+  "properties": {
+    "schema_version": {"const": "agent-memory-dashboard-snapshot/v1alpha1"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "ready": {"type": "boolean"},
+    "evidence": {"$ref": "#/$defs/evidence_verification"},
+    "reviews": {"$ref": "#/$defs/review_verification"},
+    "promotions": {"$ref": "#/$defs/promotion_verification"},
+    "retrieval": {"$ref": "#/$defs/retrieval_verification"},
+    "loadout_contexts": {"$ref": "memory-loadout-context-verification.schema.json"},
+    "native_executions": {"$ref": "native-agent-execution-verification.schema.json"},
+    "loadouts": {"$ref": "portable-memory-loadout-list.schema.json"},
+    "studies": {"$ref": "longitudinal-study-verification.schema.json"},
+    "study_reports": {"type": "array", "items": {"$ref": "longitudinal-study-report.schema.json"}},
+    "issues": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "privacy_boundary": {"const": "summary metadata only; raw transcripts, tool payloads, reasoning, memory text, secrets, local paths, and raw verifier errors are not served"},
+    "privacy": {"const": "local_only"}
+  },
+  "$defs": {
+    "string_issues": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "evidence_verification": {
+      "type": "object", "additionalProperties": false,
+      "required": ["records_checked", "blobs_checked", "issues"],
+      "properties": {
+        "records_checked": {"type": "integer", "minimum": 0},
+        "blobs_checked": {"type": "integer", "minimum": 0},
+        "last_record_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "issues": {"$ref": "#/$defs/string_issues"}
+      }
+    },
+    "review_verification": {
+      "type": "object", "additionalProperties": false,
+      "required": ["records_checked", "issues"],
+      "properties": {
+        "records_checked": {"type": "integer", "minimum": 0},
+        "last_record_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "issues": {"$ref": "#/$defs/string_issues"}
+      }
+    },
+    "promotion_verification": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "records_checked", "memories_checked", "issues"],
+      "properties": {
+        "schema_version": {"const": "memory-promotion-verification/v1alpha1"},
+        "records_checked": {"type": "integer", "minimum": 0},
+        "memories_checked": {"type": "integer", "minimum": 0},
+        "last_record_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "issues": {"$ref": "#/$defs/string_issues"}
+      }
+    },
+    "retrieval_verification": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "retrievals_checked", "injections_checked", "adoptions_checked", "open_retrieval_ids", "issues", "privacy"],
+      "properties": {
+        "schema_version": {"const": "memory-receipt-verification/v1alpha1"},
+        "retrievals_checked": {"type": "integer", "minimum": 0},
+        "injections_checked": {"type": "integer", "minimum": 0},
+        "adoptions_checked": {"type": "integer", "minimum": 0},
+        "open_retrieval_ids": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "issues": {"$ref": "#/$defs/string_issues"},
+        "privacy": {"const": "local_only"}
+      }
+    }
+  }
+}

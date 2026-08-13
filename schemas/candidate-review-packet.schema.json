@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/candidate-review-packet.schema.json",
+  "title": "Evidence-bound candidate review packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "packet_id", "created_at", "generation", "candidates_sha256",
+    "source_evidence_records", "source_evidence_sha256", "current_evidence_records",
+    "current_evidence_sha256", "items", "privacy"
+  ],
+  "properties": {
+    "schema_version": {"const": "candidate-review-packet/v1alpha1"},
+    "packet_id": {"type": "string", "pattern": "^review-packet-[a-f0-9]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "generation": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$"},
+    "candidates_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_evidence_records": {"type": "integer", "minimum": 1},
+    "source_evidence_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "current_evidence_records": {"type": "integer", "minimum": 1},
+    "current_evidence_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "items": {
+      "type": "array", "minItems": 1, "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidate", "text_sha256", "review_status"],
+        "properties": {
+          "candidate": {"$ref": "candidate.schema.json"},
+          "text_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "review_status": {"enum": ["pending", "validated", "rejected", "quarantined"]},
+          "last_review_record_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    },
+    "privacy": {"const": "local_only"}
+  }
+}

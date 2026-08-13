@@ -30,17 +30,18 @@ Before building release artifacts:
 ## Build release artifacts
 
 Run the manually dispatched `release-build` workflow with the exact SemVer label
-from the first versioned `CHANGELOG.md` entry, such as `v0.2.0`, on `main`.
+from the first versioned `CHANGELOG.md` entry, such as `v0.3.0`, on `main`.
 The workflow refuses a different ref, a stale `main` commit, or any historical
 version other than that current entry. It verifies that
 one successful `ci.yml` push run on protected `main` contains every required job,
 scans protected `main` and tag history, and builds Windows, macOS, and Linux
-archives for amd64 and arm64. Separate GitHub-hosted Windows and macOS jobs then
-download the exact staging artifact, verify its checksum, execute the embedded
-version metadata, and run the full quickstart with the archived binary. Only
-after both jobs pass does the workflow write `SHA256SUMS`,
-`REQUIRED_CHECKS.json`, hosted acceptance receipts, and `PROVENANCE.json` into a
-14-day verified release artifact.
+archives for amd64 and arm64. Separate GitHub-hosted Windows, macOS, and Linux
+jobs then download the exact staging artifact, verify its checksum, execute the
+embedded version metadata, and run the full quickstart with the archived
+binary. The build job writes the staging `SHA256SUMS`; only after all three
+acceptance jobs pass does the workflow assemble the final 14-day candidate with
+that checksum file, `REQUIRED_CHECKS.json`, hosted acceptance receipts, and
+`PROVENANCE.json`.
 
 The workflow cannot push a tag or create a release.
 
@@ -59,13 +60,13 @@ Before publishing:
 
 1. download the candidate artifact from GitHub Actions;
 2. verify `SHA256SUMS` and inspect at least one archive;
-3. inspect the hosted Windows and macOS acceptance receipts and confirm both
-   bind the exact archive checksum, `agentmem version`, and quickstart result;
+3. inspect the hosted Windows, macOS, and Linux acceptance receipts and confirm
+   all three bind the exact archive checksum, `agentmem version`, and quickstart result;
 4. confirm the `main` head has not changed since the candidate build; and
 5. obtain an explicit owner decision to create the tag and GitHub Release.
 
 Only then create the annotated SemVer tag and publish the already inspected
-archives. A prerelease tag contains a hyphen, such as `v0.2.0-alpha.1`, and
+archives. A prerelease tag contains a hyphen, such as `v0.3.0-alpha.1`, and
 must be marked as a GitHub prerelease so the `latest` installer path does not
 select it.
 
@@ -76,7 +77,8 @@ After publication:
 1. download `SHA256SUMS` and at least one archive from the public release rather
    than reusing a local file;
 2. verify the archive checksum;
-3. install on Windows and macOS using the pinned tag and run `agentmem version`;
+3. install on Windows and macOS using the pinned tag, execute the matching Linux
+   archive, and run `agentmem version` on each platform;
 4. inspect one archive to confirm the documented integration assets are
    present; and
 5. run a new-device recovery-integrity check without enabling hooks, plugins,

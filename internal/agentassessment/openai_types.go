@@ -102,7 +102,7 @@ type OpenAIRunOptions struct {
 	ProjectionID              string
 	Model                     string
 	ConfirmRemoteDisclosureID string
-	APIKey                    string
+	Credential                string
 	client                    *http.Client
 	endpoint                  string
 	now                       func() time.Time

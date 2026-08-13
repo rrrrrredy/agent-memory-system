@@ -60,6 +60,36 @@ that the referenced event exists, is complete, hash-valid, and has the required
 event kind. The caller attests that the event is semantically relevant
 to the candidate. The software does not infer or prove that semantic relation.
 
+## Immutable review packets
+
+For a bounded, repeatable review surface, build a local packet from the current
+verified generation:
+
+```text
+agentmem review packet \
+  --root <local-evidence-directory> \
+  --status review_ready \
+  --limit 20
+```
+
+The content-addressed packet freezes candidate text and content hashes,
+supporting provenance, generation identity, the complete evidence-ledger
+prefix, and current review metadata. It remains local-only and can be opened as
+readable JSON before a decision.
+
+Promotion can consume the exact packet instead of a separately copied text
+hash:
+
+```text
+agentmem promote candidate --root <local-evidence-directory> \
+  --candidate <candidate-id> --packet <packet-path-or-id> \
+  --approver <caller-id> --reason "Approved after reviewing the bound packet."
+```
+
+The command replays the packet and current validation. The packet does not
+perform validation, authenticate the caller, authorize a rule change, or make
+a stale generation current.
+
 Global scope uses `*`. Agent scope names one supported adapter: `codex`,
 `claude_code`, `opencode`, or `unknown`. Repository, project, and task scopes
 use their stable local identifiers. Scope values cannot contain line breaks.

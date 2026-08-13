@@ -124,6 +124,11 @@ jobs:
           ./internal/portable
           ./internal/retrieval
           ./internal/capturesupervisor
+          ./internal/agentbridge
+          ./internal/loadout
+          ./internal/reviewpacket
+          ./internal/study
+          ./internal/dashboard
 
   fuzz-smoke:
     runs-on: ubuntu-latest

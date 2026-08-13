@@ -4,9 +4,9 @@
   "title": "Release candidate provenance",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "version", "commit", "observed_main", "ref", "repository", "workflow_run_id", "sha256sums_sha256", "required_checks_sha256", "windows_acceptance_sha256", "macos_acceptance_sha256", "required_checks", "hosted_acceptance"],
+  "required": ["schema_version", "version", "commit", "observed_main", "ref", "repository", "workflow_run_id", "sha256sums_sha256", "required_checks_sha256", "windows_acceptance_sha256", "macos_acceptance_sha256", "linux_acceptance_sha256", "required_checks", "hosted_acceptance"],
   "properties": {
-    "schema_version": {"const": "agentmem-release-provenance/v1alpha1"},
+    "schema_version": {"const": "agentmem-release-provenance/v1alpha2"},
     "version": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
     "commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
     "observed_main": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
@@ -17,16 +17,18 @@
     "required_checks_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "windows_acceptance_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "macos_acceptance_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "linux_acceptance_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "required_checks": {"$ref": "agentmem-required-checks.schema.json"},
     "hosted_acceptance": {
       "type": "array",
-      "minItems": 2,
-      "maxItems": 2,
+      "minItems": 3,
+      "maxItems": 3,
       "uniqueItems": true,
       "items": {"$ref": "agentmem-candidate-acceptance.schema.json"},
       "allOf": [
         {"contains": {"properties": {"os": {"const": "windows"}}, "required": ["os"]}, "minContains": 1, "maxContains": 1},
-        {"contains": {"properties": {"os": {"const": "macos"}}, "required": ["os"]}, "minContains": 1, "maxContains": 1}
+        {"contains": {"properties": {"os": {"const": "macos"}}, "required": ["os"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"os": {"const": "linux"}}, "required": ["os"]}, "minContains": 1, "maxContains": 1}
       ]
     }
   }

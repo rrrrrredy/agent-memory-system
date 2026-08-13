@@ -4,9 +4,9 @@
   "title": "Synthetic quickstart smoke receipt",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "fixture_sha256", "simulated_attestations", "gaps_appended", "doctor_ready", "review_ready", "revisions_written", "active_memories", "selected_memories"],
+  "required": ["schema_version", "fixture_sha256", "simulated_attestations", "gaps_appended", "doctor_ready", "review_ready", "revisions_written", "active_memories", "selected_memories", "review_packet_items", "loadouts_checked", "loadout_selected_memories"],
   "properties": {
-    "schema_version": {"const": "quickstart-smoke/v1alpha1"},
+    "schema_version": {"const": "quickstart-smoke/v1alpha2"},
     "fixture_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "simulated_attestations": {"const": true},
     "gaps_appended": {"const": 0},
@@ -14,6 +14,9 @@
     "review_ready": {"const": 1},
     "revisions_written": {"const": 1},
     "active_memories": {"const": 1},
-    "selected_memories": {"const": 1}
+    "selected_memories": {"const": 1},
+    "review_packet_items": {"const": 1},
+    "loadouts_checked": {"const": 1},
+    "loadout_selected_memories": {"const": 1}
   }
 }

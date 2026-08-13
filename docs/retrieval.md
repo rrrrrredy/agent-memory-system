@@ -66,6 +66,29 @@ agentmem recall verify --root <local-evidence-directory>
 records the exact delivered text. These local receipts include the raw query and
 local repository identity and never enter the portable Git repository.
 
+## Exact portable loadouts
+
+A loadout is a content-addressed ordered set of exact active portable revision
+heads with an Agent allowlist, trusted scope, and delivery budgets. It is useful
+when the same reviewed context should be repeated without relying on a new
+lexical search.
+
+```text
+agentmem loadout create --repo <portable-memory-directory> \
+  --name "Release checks" --scope-kind project \
+  --scope-value example-project --agent codex --memory <memory-id>
+
+agentmem loadout context --root <local-evidence-directory> \
+  --repo <portable-memory-directory> --loadout <loadout-id> \
+  --agent codex --scope-project example-project
+```
+
+The context command re-verifies the complete repository and exact heads, then
+records one composite receipt plus the underlying exact retrieval receipts.
+Superseding or revoking a referenced memory makes the old loadout unusable;
+there is no partial delivery or silent substitution. See [portable memory
+loadouts](loadouts.md).
+
 ## MCP
 
 Run one local stdio server for the Agent and trusted logical scope:
