@@ -38,7 +38,7 @@ func runLoadoutCreate(args []string) error {
 	byteBudget := flags.Int("byte-budget", portable.DefaultLoadoutByteBudget, "maximum UTF-8 bytes")
 	var agents repeatedStrings
 	var memories repeatedStrings
-	flags.Var(&agents, "agent", "approved agent: codex, claude_code, or opencode (repeatable)")
+	flags.Var(&agents, "agent", "approved agent: codex, claude_code, opencode, or deepseek_harness (repeatable)")
 	flags.Var(&memories, "memory", "exact active memory id in delivery order (repeatable)")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -54,7 +54,8 @@ func runLoadoutCreate(args []string) error {
 	parsedAgents := make([]ledger.Agent, 0, len(agents))
 	for _, value := range agents {
 		agent := ledger.Agent(value)
-		if agent != ledger.AgentCodex && agent != ledger.AgentClaudeCode && agent != ledger.AgentOpenCode {
+		if agent != ledger.AgentCodex && agent != ledger.AgentClaudeCode &&
+			agent != ledger.AgentOpenCode && agent != ledger.AgentDeepSeekHarness {
 			return fmt.Errorf("unsupported loadout agent %q", value)
 		}
 		parsedAgents = append(parsedAgents, agent)
@@ -113,7 +114,7 @@ func runLoadoutContext(args []string) error {
 	root := flags.String("root", "", "local evidence root (required)")
 	repository := flags.String("repo", "", "portable memory repository root (required)")
 	loadoutID := flags.String("loadout", "", "loadout id (required)")
-	agent := flags.String("agent", "", "codex, claude_code, or opencode (required)")
+	agent := flags.String("agent", "", "codex, claude_code, opencode, or deepseek_harness (required)")
 	thread := flags.String("thread", "", "optional source thread id")
 	session := flags.String("session", "", "optional source session id")
 	scopeRepository := flags.String("scope-repository", "", "trusted logical repository scope")

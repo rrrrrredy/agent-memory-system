@@ -22,7 +22,7 @@
   "properties": {
     "schema_version": {"const": "episode/v1alpha1"},
     "episode_id": {"type": "string", "pattern": "^episode-[a-f0-9]{64}$"},
-    "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
+    "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness", "unknown"]},
     "thread_id": {"type": "string", "minLength": 1},
     "started_at": {"type": "string", "format": "date-time"},
     "ended_at": {"type": "string", "format": "date-time"},

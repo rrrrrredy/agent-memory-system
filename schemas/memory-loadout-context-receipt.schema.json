@@ -9,7 +9,7 @@
       "additionalProperties": false,
       "required": ["agent", "channel"],
       "properties": {
-        "agent": {"enum": ["codex", "claude_code", "opencode"]},
+        "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness"]},
         "thread_id": {"type": "string", "minLength": 1},
         "session_id": {"type": "string", "minLength": 1},
         "repository": {"type": "string", "minLength": 1},

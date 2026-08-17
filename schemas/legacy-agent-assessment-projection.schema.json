@@ -85,7 +85,7 @@
             "evaluation_run", "gap", "unknown"
           ]
         },
-        "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
+        "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness", "unknown"]},
         "completeness": {"enum": ["complete", "partial", "missing", "unknown"]},
         "payload_sha256": {"$ref": "#/$defs/sha256"},
         "payload_bytes": {"type": "integer", "minimum": 0, "maximum": 65536},

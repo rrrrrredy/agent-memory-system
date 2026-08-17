@@ -124,6 +124,33 @@ func TestProbeFailsClosedOnUnexecutableAndEmptyVersionCommands(t *testing.T) {
 	}
 }
 
+func TestProbeReportsDeepSeekHarnessCommunityBundleBoundary(t *testing.T) {
+	report := Probe(context.Background(), Options{
+		Agents: []ledger.Agent{ledger.AgentDeepSeekHarness},
+		LookPath: func(command string) (string, error) {
+			if command != "dsh" {
+				t.Fatalf("unexpected command: %s", command)
+			}
+			return command, nil
+		},
+		RunVersion: func(context.Context, string) ([]byte, error) {
+			return []byte("dsh 0.1.0-rc.6"), nil
+		},
+		ReadFile: func(string) ([]byte, error) { return []byte("dsh-runtime"), nil },
+	})
+	if !report.Ready || len(report.Agents) != 1 {
+		t.Fatalf("unexpected report: %+v", report)
+	}
+	item := report.Agents[0]
+	if item.Agent != ledger.AgentDeepSeekHarness || item.Command != "dsh" ||
+		item.RuntimeStatus != RuntimeAvailable || !item.HistoryImportAvailable ||
+		item.ExecutionEvidence != "community_bundle_protocol_only" ||
+		len(item.CaptureModes) != 2 || len(item.RetrievalModes) != 2 ||
+		item.ProviderIndependentlyAttested {
+		t.Fatalf("DeepSeek Harness boundary was misreported: %+v", item)
+	}
+}
+
 func TestProbeMarksCodexVerifiedOnlyAfterReplayableNativeReceipt(t *testing.T) {
 	t.Setenv("AGENTMEM_COMPATIBILITY_HELPER", "1")
 	store, err := ledger.Init(filepath.Join(t.TempDir(), "evidence"))

@@ -151,7 +151,8 @@ func requestContext(config Config, threadID, sessionID string) retrieval.Context
 
 func validAgent(agent ledger.Agent) bool {
 	return agent == ledger.AgentCodex || agent == ledger.AgentClaudeCode ||
-		agent == ledger.AgentOpenCode || agent == ledger.AgentUnknown
+		agent == ledger.AgentOpenCode || agent == ledger.AgentDeepSeekHarness ||
+		agent == ledger.AgentUnknown
 }
 
 func toolAnnotations() *mcp.ToolAnnotations {

@@ -22,6 +22,7 @@ agentmem loadout create \
   --scope-value example-project \
   --agent codex \
   --agent claude_code \
+  --agent deepseek_harness \
   --memory <memory-id-1> \
   --memory <memory-id-2> \
   --token-budget 1200 \

@@ -66,7 +66,7 @@
           "if": {"properties": {"kind": {"const": "agent"}}, "required": ["kind"]},
           "then": {
             "properties": {
-              "value": {"enum": ["codex", "claude_code", "opencode", "unknown"]}
+              "value": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness", "unknown"]}
             }
           }
         }

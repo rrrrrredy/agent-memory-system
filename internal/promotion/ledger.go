@@ -474,7 +474,9 @@ func validScope(scope review.Scope) bool {
 		return scope.Value == "*"
 	case review.ScopeAgent:
 		return scope.Value == string(ledger.AgentCodex) || scope.Value == string(ledger.AgentClaudeCode) ||
-			scope.Value == string(ledger.AgentOpenCode) || scope.Value == string(ledger.AgentUnknown)
+			scope.Value == string(ledger.AgentOpenCode) ||
+			scope.Value == string(ledger.AgentDeepSeekHarness) ||
+			scope.Value == string(ledger.AgentUnknown)
 	case review.ScopeRepository, review.ScopeProject, review.ScopeTask:
 		return true
 	default:

@@ -24,7 +24,7 @@
       "additionalProperties": false,
       "required": ["agent", "channel"],
       "properties": {
-        "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
+        "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness", "unknown"]},
         "thread_id": {"type": "string"},
         "session_id": {"type": "string"},
         "repository": {"type": "string"},

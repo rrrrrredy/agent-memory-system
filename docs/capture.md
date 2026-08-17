@@ -15,6 +15,11 @@ without a fixed transcript-size cutoff.
 
 OpenCode keeps its native export plus append-only plugin path described in
 [`adapters/opencode/CAPABILITIES.md`](../adapters/opencode/CAPABILITIES.md).
+DeepSeek Harness uses the independently published community Bundle described in
+[`adapters/deepseekharness/CAPABILITIES.md`](../adapters/deepseekharness/CAPABILITIES.md)
+and [`integrations/deepseek-harness`](../integrations/deepseek-harness). It
+captures the exact native `session/event` object into crash-safe local segments
+and backfills the persistence backend's verbatim artifact when available.
 
 ## Hook commands
 
@@ -59,6 +64,16 @@ The current upstream contracts are documented by
 [Claude Code hooks](https://code.claude.com/docs/en/hooks). `agentmem` does not
 install either configuration. Enabling a hook still requires explicit user
 approval.
+
+The DeepSeek Harness Bundle is separately opt-in through `captureDir`; it does
+not use these command-hook handlers and is not managed by `agentmem capture
+supervisor`. Import its spool explicitly:
+
+```text
+agentmem import deepseek-harness-events \
+  --root <local-evidence-directory> \
+  --path <deepseek-harness-capture-directory>
+```
 
 ## Reconciliation
 

@@ -110,6 +110,7 @@ type Result struct {
 // line. Multiple projections may point at the same exact source bytes.
 type Projection struct {
 	Key                string
+	StableIdentity     string
 	Kind               ledger.EventKind
 	ObservedAt         time.Time
 	Reasoning          *ledger.ReasoningCapture
@@ -617,7 +618,9 @@ func queueProjection(
 	}
 	parts := []string{sourcePathHash, effectiveThreadID, strconv.FormatInt(byteStart, 10),
 		strconv.FormatInt(byteEnd, 10), hex.EncodeToString(rawDigest[:])}
-	if projection.Key != "" {
+	if strings.TrimSpace(projection.StableIdentity) != "" {
+		parts = []string{projection.StableIdentity}
+	} else if projection.Key != "" {
 		parts = append(parts, projection.Key)
 	}
 	eventID := DeterministicID(spec.IDNamespace+"-event", parts...)

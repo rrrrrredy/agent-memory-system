@@ -59,8 +59,8 @@ func Process(reader io.Reader, config Config) (Output, error) {
 		return output, errors.New("hook injection requires local evidence and portable memory roots")
 	}
 	if config.Agent != ledger.AgentCodex && config.Agent != ledger.AgentClaudeCode &&
-		config.Agent != ledger.AgentOpenCode {
-		return output, errors.New("hook injection supports codex, claude_code, or opencode")
+		config.Agent != ledger.AgentOpenCode && config.Agent != ledger.AgentDeepSeekHarness {
+		return output, errors.New("hook injection supports codex, claude_code, opencode, or deepseek_harness")
 	}
 	data, err := io.ReadAll(io.LimitReader(reader, MaximumInputBytes+1))
 	if err != nil {
@@ -98,6 +98,8 @@ func Process(reader io.Reader, config Config) (Output, error) {
 		channel = retrieval.ChannelClaudeHook
 	} else if config.Agent == ledger.AgentOpenCode {
 		channel = retrieval.ChannelOpenCodePlugin
+	} else if config.Agent == ledger.AgentDeepSeekHarness {
+		channel = retrieval.ChannelHarness
 	}
 	contextResult, contextErr := retrieval.BuildContext(store, config.PortableRoot, retrieval.Request{
 		SchemaVersion: retrieval.RequestSchemaVersion,

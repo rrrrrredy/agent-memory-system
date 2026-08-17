@@ -1,0 +1,10 @@
+{
+  "schema_version": "dsh-agent-memory-source-integrity/v1",
+  "files": [
+    {
+      "source": "integrations/opencode/crash-safe-jsonl.mjs",
+      "bundled": "lib/crash-safe-jsonl.js",
+      "sha256": "a442bf9ef9bc8c259963c50488833e222b60e7f79e971f10a87e0050f8111c02"
+    }
+  ]
+}

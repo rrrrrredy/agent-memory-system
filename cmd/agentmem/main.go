@@ -16,6 +16,7 @@ import (
 
 	"github.com/rrrrrredy/agent-memory-system/adapters/claudecode"
 	"github.com/rrrrrredy/agent-memory-system/adapters/codex"
+	"github.com/rrrrrredy/agent-memory-system/adapters/deepseekharness"
 	"github.com/rrrrrredy/agent-memory-system/adapters/opencode"
 	"github.com/rrrrrredy/agent-memory-system/internal/agentassessment"
 	"github.com/rrrrrredy/agent-memory-system/internal/autosync"
@@ -364,6 +365,8 @@ func runInject(args []string) error {
 		agent = ledger.AgentClaudeCode
 	case "opencode":
 		agent = ledger.AgentOpenCode
+	case "deepseek-harness":
+		agent = ledger.AgentDeepSeekHarness
 	default:
 		return injectUsageError()
 	}
@@ -411,7 +414,7 @@ func runServeMCP(args []string) error {
 	flags := flag.NewFlagSet("serve mcp", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
 	repository := flags.String("repo", "", "portable memory repository root (required)")
-	agent := flags.String("agent", "", "codex, claude_code, opencode, or unknown (required)")
+	agent := flags.String("agent", "", "codex, claude_code, opencode, deepseek_harness, or unknown (required)")
 	thread := flags.String("thread", "", "optional default source thread id")
 	session := flags.String("session", "", "optional default source session id")
 	scopeRepository := flags.String("scope-repository", "", "trusted logical repository scope")
@@ -494,7 +497,7 @@ func addRecallFlags(flags *flag.FlagSet) recallFlags {
 	return recallFlags{
 		root:            flags.String("root", "", "local evidence root (required)"),
 		repository:      flags.String("repo", "", "portable memory repository root (required)"),
-		agent:           flags.String("agent", string(ledger.AgentUnknown), "codex, claude_code, opencode, or unknown"),
+		agent:           flags.String("agent", string(ledger.AgentUnknown), "codex, claude_code, opencode, deepseek_harness, or unknown"),
 		thread:          flags.String("thread", "", "optional source thread id"),
 		session:         flags.String("session", "", "optional source session id"),
 		scopeRepository: flags.String("scope-repository", "", "trusted logical repository scope"),
@@ -607,7 +610,7 @@ func runRecallAdoption(args []string) error {
 	flags := flag.NewFlagSet("recall adoption", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
 	requestPath := flags.String("file", "", "adoption request JSON file, or - for stdin (required)")
-	agent := flags.String("agent", string(ledger.AgentUnknown), "codex, claude_code, opencode, or unknown")
+	agent := flags.String("agent", string(ledger.AgentUnknown), "codex, claude_code, opencode, deepseek_harness, or unknown")
 	thread := flags.String("thread", "", "optional source thread id")
 	session := flags.String("session", "", "optional source session id")
 	channel := flags.String("channel", string(retrieval.ChannelCLI), "delivery channel")
@@ -1121,7 +1124,7 @@ func runEvaluationSUT(args []string) error {
 	}
 	flags := flag.NewFlagSet("eval sut bind", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
-	agent := flags.String("agent", "", "agent: codex, claude_code, or opencode (required)")
+	agent := flags.String("agent", "", "agent: codex, claude_code, opencode, or deepseek_harness (required)")
 	provider := flags.String("provider", "", "model provider identity (required)")
 	model := flags.String("model", "", "model identity (required)")
 	systemPromptPath := flags.String("system-prompt", "", "exact system prompt artifact (required)")
@@ -2744,7 +2747,8 @@ func captureAgent(value string) (ledger.Agent, error) {
 func runImport(args []string) error {
 	agent := args[0]
 	if agent != "codex" && agent != "claude" && agent != "claude-home" &&
-		agent != "opencode-export" && agent != "opencode-events" {
+		agent != "opencode-export" && agent != "opencode-events" &&
+		agent != "deepseek-harness-events" {
 		return importUsageError()
 	}
 	flags := flag.NewFlagSet("import "+agent, flag.ContinueOnError)
@@ -2774,6 +2778,9 @@ func runImport(args []string) error {
 	case "opencode-events":
 		result, err = opencode.ImportEventPath(store, *path,
 			opencode.EventOptions{FullReconcile: *full})
+	case "deepseek-harness-events":
+		result, err = deepseekharness.ImportEventPath(store, *path,
+			deepseekharness.EventOptions{FullReconcile: *full})
 	}
 	if err != nil {
 		return err
@@ -2895,9 +2902,9 @@ func captureSupervisorUsageError() error {
 }
 
 func importUsageError() error {
-	return errors.New("usage: agentmem import <codex|claude|claude-home|opencode-export|opencode-events> --root <local-evidence-directory> --path <source-file-or-directory>")
+	return errors.New("usage: agentmem import <codex|claude|claude-home|opencode-export|opencode-events|deepseek-harness-events> --root <local-evidence-directory> --path <source-file-or-directory>")
 }
 
 func injectUsageError() error {
-	return errors.New("usage: agentmem inject <codex|claude-code|opencode> --root <local-evidence-directory> --repo <portable-memory-directory>")
+	return errors.New("usage: agentmem inject <codex|claude-code|opencode|deepseek-harness> --root <local-evidence-directory> --repo <portable-memory-directory>")
 }

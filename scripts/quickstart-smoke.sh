@@ -70,6 +70,13 @@ recall=$("$binary" recall search --root "$evidence" --repo "$memory" --agent cod
 printf '%s\n' "$recall" | jq -e --arg id "$memory_id" '.selected | any(.memory_id == $id)' >/dev/null
 loadout_context=$("$binary" loadout context --root "$evidence" --repo "$memory" --loadout "$loadout_id" --agent codex --scope-project example-project)
 printf '%s\n' "$loadout_context" | jq -e --arg id "$memory_id" '(.receipt.memories | any(.memory_id == $id)) and .receipt.content_bytes > 0' >/dev/null
+harness_input=$(jq -n -c \
+  --arg cwd "$root" \
+  --arg prompt "$query" \
+  '{session_id:"synthetic-deepseek-harness-session",cwd:$cwd,hook_event_name:"UserPromptSubmit",turn_id:"quickstart:1",prompt:$prompt,source:"dsh-agent-pre-step"}')
+harness_output=$(printf '%s\n' "$harness_input" | "$binary" inject deepseek-harness --root "$evidence" --repo "$memory" --scope-project example-project)
+printf '%s\n' "$harness_output" | jq -e --arg text "$(jq -r '.expected_candidate_text' "$manifest")" \
+  '.continue == true and (.hookSpecificOutput.additionalContext | type == "string" and contains($text))' >/dev/null
 
 jq -n -c \
   --arg fixture "$(jq -r '.rollout_sha256' "$manifest")" \

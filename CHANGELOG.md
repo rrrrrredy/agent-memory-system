@@ -3,6 +3,46 @@
 All notable changes will be documented in this file. The project follows
 Semantic Versioning after the first tagged public release.
 
+## [0.3.1] - 2026-08-17
+
+### Added
+
+- A `deepseek_harness` Agent type across the CLI, compatibility report,
+  retrieval, review, promotion, portable memory, loadouts, MCP, and public JSON
+  Schemas.
+- `agentmem import deepseek-harness-events` for exact community-Bundle event
+  spools and persistence artifacts, with stable cross-source deduplication and
+  explicit gaps for unknown or malformed records.
+- `agentmem inject deepseek-harness` for bounded retrieval of verified, active,
+  promoted memory from a complete portable repository.
+- A separately distributable scoped Agent Memory community Bundle, with
+  separately opt-in crash-safe local capture and `agent/pre-step` recall.
+- Windows and Linux Bundle CI on Node 22.19 and 24, real Cordis/SessionStore/
+  JSONL Persistence composition, real CLI import, and quickstart injection
+  coverage.
+
+### Security
+
+- Raw Harness events and verbatim session artifacts are rejected from Git
+  worktrees, fsynced into local PID-segmented JSONL, and never packaged as npm
+  or release assets.
+- Unsupported persistence, unknown events, torn tails, read failures, and
+  projection failures remain explicit gaps instead of silent omissions.
+- Retrieval uses only user-originated query text and trusted locally configured
+  scopes. Missing executables, timeouts, output overflow, malformed responses,
+  repository verification failures, and empty results fail open without stale,
+  partial, cached, or unverified memory.
+
+### Known limits
+
+- The Agent Memory Bundle is a community Bundle, not an official DeepSeek plugin or
+  certification.
+- DeepSeek Harness support is not part of the capture supervisor, native
+  execution receipt path, or the fixed Codex/Claude Code/OpenCode continuous-
+  evaluation population.
+- Locally exposed reasoning can be preserved as `raw_exposed`; provider-hidden
+  reasoning remains unavailable and is never inferred.
+
 ## [0.3.0] - 2026-08-13
 
 ### Added

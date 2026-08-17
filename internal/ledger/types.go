@@ -11,10 +11,11 @@ const (
 type Agent string
 
 const (
-	AgentCodex      Agent = "codex"
-	AgentClaudeCode Agent = "claude_code"
-	AgentOpenCode   Agent = "opencode"
-	AgentUnknown    Agent = "unknown"
+	AgentCodex           Agent = "codex"
+	AgentClaudeCode      Agent = "claude_code"
+	AgentOpenCode        Agent = "opencode"
+	AgentDeepSeekHarness Agent = "deepseek_harness"
+	AgentUnknown         Agent = "unknown"
 )
 
 type EventKind string

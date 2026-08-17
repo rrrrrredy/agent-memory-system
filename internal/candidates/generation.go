@@ -544,7 +544,8 @@ func validCandidateKind(kind CandidateKind) bool {
 
 func validAgent(agent ledger.Agent) bool {
 	return agent == ledger.AgentCodex || agent == ledger.AgentClaudeCode ||
-		agent == ledger.AgentOpenCode || agent == ledger.AgentUnknown
+		agent == ledger.AgentOpenCode || agent == ledger.AgentDeepSeekHarness ||
+		agent == ledger.AgentUnknown
 }
 
 func validSupport(support SupportType) bool {

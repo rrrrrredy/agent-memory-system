@@ -383,7 +383,9 @@ func validScope(scope Scope) bool {
 		return scope.Value == "*"
 	case ScopeAgent:
 		return scope.Value == string(ledger.AgentCodex) || scope.Value == string(ledger.AgentClaudeCode) ||
-			scope.Value == string(ledger.AgentOpenCode) || scope.Value == string(ledger.AgentUnknown)
+			scope.Value == string(ledger.AgentOpenCode) ||
+			scope.Value == string(ledger.AgentDeepSeekHarness) ||
+			scope.Value == string(ledger.AgentUnknown)
 	case ScopeRepository, ScopeProject, ScopeTask:
 		return true
 	default:

@@ -275,6 +275,7 @@ protocols:
 agentmem import claude-home --root <evidence> --path <claude-home>
 agentmem import opencode-export --root <evidence> --path <export-file-or-directory>
 agentmem import opencode-events --root <evidence> --path <plugin-spool-directory>
+agentmem import deepseek-harness-events --root <evidence> --path <bundle-spool-directory>
 ```
 
 OpenCode is optional. Its pinned runtime smoke runs only on a disposable

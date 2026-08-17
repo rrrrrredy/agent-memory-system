@@ -26,7 +26,7 @@
     "identifier": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,160}$"},
     "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "optional_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"const": ""}]},
-    "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
+    "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness", "unknown"]},
     "evidence": {
       "type": "object",
       "additionalProperties": false,
