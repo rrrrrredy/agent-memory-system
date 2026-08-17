@@ -19,8 +19,9 @@ continuous learning.
 
 ## Complete-process-record requirement
 
-For Codex, Claude Code, and OpenCode, an adapter MUST preserve every artifact
-available to it, including:
+For Codex, Claude Code, OpenCode, and the supported DeepSeek Harness
+event/persistence surface, an adapter MUST preserve every artifact available to
+it, including:
 
 - every user instruction, correction, attachment reference, and feedback item;
 - every model message, commentary update, plan, and final response;
@@ -307,7 +308,7 @@ or independently provider-certified efficacy.
 ### Cross-device and cross-agent reliability
 
 - Windows/macOS bidirectional synchronization;
-- Codex, Claude Code, and OpenCode use the same promoted memory;
+- Codex, Claude Code, OpenCode, and DeepSeek Harness use the same promoted memory;
 - offline operation from a local clone;
 - manual synchronization reliability;
 - automatic synchronization enable, disable, retry, and recovery;

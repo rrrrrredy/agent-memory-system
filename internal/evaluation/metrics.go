@@ -695,7 +695,8 @@ func requireJSONEOF(decoder *json.Decoder) error {
 
 func validAgent(agent ledger.Agent) bool {
 	switch agent {
-	case ledger.AgentCodex, ledger.AgentClaudeCode, ledger.AgentOpenCode, ledger.AgentUnknown:
+	case ledger.AgentCodex, ledger.AgentClaudeCode, ledger.AgentOpenCode,
+		ledger.AgentDeepSeekHarness, ledger.AgentUnknown:
 		return true
 	default:
 		return false

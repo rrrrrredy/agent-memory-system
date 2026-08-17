@@ -19,7 +19,7 @@
     "attempt_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
     "trial_plan_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
     "trial_pair_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
-    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness"]},
     "semantic_key_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
     "task_spec_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
     "acceptance_criteria_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},

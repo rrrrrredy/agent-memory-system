@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Exact current SemVer release label, for example v0.3.0
+        description: Exact current SemVer release label, for example v0.3.1
         required: true
-        default: v0.3.0
+        default: v0.3.1
         type: string
 
 permissions:
@@ -87,6 +87,10 @@ jobs:
             "test (macos-latest)"
             "race"
             "fuzz-smoke"
+            "dsh-bundle-ubuntu-latest-node-22.19.0"
+            "dsh-bundle-ubuntu-latest-node-24.19.0"
+            "dsh-bundle-windows-latest-node-22.19.0"
+            "dsh-bundle-windows-latest-node-24.19.0"
             "opencode-runtime"
             "public-tree-privacy"
           )

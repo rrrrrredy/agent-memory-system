@@ -18,7 +18,7 @@
         "compaction_drift", "retrieval_cost", "paired_outcome"
       ]
     },
-    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness"]},
     "attestor": {
       "type": "object",
       "additionalProperties": false,

@@ -391,7 +391,8 @@ func validCandidatePolarity(polarity candidates.CandidatePolarity) bool {
 
 func validCandidateScope(scope candidates.CandidateScope) bool {
 	return (scope.Agent == ledger.AgentCodex || scope.Agent == ledger.AgentClaudeCode ||
-		scope.Agent == ledger.AgentOpenCode || scope.Agent == ledger.AgentUnknown) &&
+		scope.Agent == ledger.AgentOpenCode || scope.Agent == ledger.AgentDeepSeekHarness ||
+		scope.Agent == ledger.AgentUnknown) &&
 		scope.Status == candidates.ScopeUnconfirmed
 }
 

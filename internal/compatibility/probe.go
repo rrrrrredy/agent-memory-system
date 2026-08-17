@@ -148,7 +148,10 @@ func Probe(ctx context.Context, options Options) Report {
 
 func defaults(options Options) Options {
 	if len(options.Agents) == 0 {
-		options.Agents = []ledger.Agent{ledger.AgentCodex, ledger.AgentClaudeCode, ledger.AgentOpenCode}
+		options.Agents = []ledger.Agent{
+			ledger.AgentCodex, ledger.AgentClaudeCode, ledger.AgentOpenCode,
+			ledger.AgentDeepSeekHarness,
+		}
 	}
 	if options.Timeout <= 0 {
 		options.Timeout = 5 * time.Second
@@ -235,6 +238,14 @@ func integrationContract(agent ledger.Agent) AgentReport {
 		item.Limitations = append(item.Limitations,
 			"OpenCode runtime verification is hosted-only and requires no local installation",
 			"the hosted smoke does not invoke a provider model")
+	case ledger.AgentDeepSeekHarness:
+		item.Command = "dsh"
+		item.CaptureModes = []string{"bundle_event_spool", "verbatim_persistence_backfill"}
+		item.RetrievalModes = []string{"bundle_pre_step_injection", "mcp"}
+		item.ExecutionEvidence = "community_bundle_protocol_only"
+		item.Limitations = append(item.Limitations,
+			"the runtime probe does not prove that the Agent Memory community Bundle is installed or enabled",
+			"the compatibility report does not attest a provider-backed model task")
 	default:
 		item.Command = string(agent)
 		item.HistoryImportAvailable = false

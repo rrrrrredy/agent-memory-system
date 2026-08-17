@@ -569,7 +569,8 @@ func contextGaps(context Context) []string {
 
 func validAgent(agent ledger.Agent) bool {
 	return agent == ledger.AgentCodex || agent == ledger.AgentClaudeCode ||
-		agent == ledger.AgentOpenCode || agent == ledger.AgentUnknown
+		agent == ledger.AgentOpenCode || agent == ledger.AgentDeepSeekHarness ||
+		agent == ledger.AgentUnknown
 }
 
 func validChannel(channel DeliveryChannel) bool {

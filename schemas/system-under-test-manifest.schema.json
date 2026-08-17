@@ -11,7 +11,7 @@
   ],
   "properties": {
     "schema_version": {"const": "system-under-test-manifest/v1alpha2"},
-    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness"]},
     "provider": {"type": "string", "minLength": 1, "maxLength": 160},
     "model": {"type": "string", "minLength": 1, "maxLength": 160},
     "system_prompt_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},

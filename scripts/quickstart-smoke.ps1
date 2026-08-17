@@ -6,7 +6,12 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $Repository = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$TemporaryParent = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+$TemporaryParent = if ($env:AGENTMEM_TEST_TMP) {
+  [System.IO.Path]::GetFullPath($env:AGENTMEM_TEST_TMP)
+} else {
+  [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+}
+$null = New-Item -ItemType Directory -Force -Path $TemporaryParent
 $Root = Join-Path $TemporaryParent ("agentmem-quickstart-" + [guid]::NewGuid().ToString('N'))
 $Evidence = Join-Path $Root 'evidence'
 $Memory = Join-Path $Root 'portable-memory'
@@ -79,6 +84,25 @@ try {
   }
   $LoadoutContext = & $Binary loadout context --root $Evidence --repo $Memory --loadout $Loadout.loadout.loadout_id --agent codex --scope-project example-project | ConvertFrom-Json
   if ($LoadoutContext.receipt.memories.memory_id -notcontains $Promoted.revision.memory_id -or $LoadoutContext.receipt.content_bytes -lt 1) { throw 'loadout context did not deliver the exact promoted memory' }
+
+  $HarnessInput = [pscustomobject]@{
+    session_id = 'synthetic-deepseek-harness-session'
+    cwd = $Root
+    hook_event_name = 'UserPromptSubmit'
+    turn_id = 'quickstart:1'
+    prompt = $Manifest.retrieval_query
+    source = 'dsh-agent-pre-step'
+  } | ConvertTo-Json -Compress
+  $HarnessOutput = $HarnessInput | & $Binary inject deepseek-harness `
+    --root $Evidence `
+    --repo $Memory `
+    --scope-project example-project | ConvertFrom-Json
+  $HarnessContext = $HarnessOutput.hookSpecificOutput.additionalContext
+  if (-not $HarnessOutput.continue -or
+      [string]::IsNullOrWhiteSpace($HarnessContext) -or
+      -not $HarnessContext.Contains($Manifest.expected_candidate_text)) {
+    throw 'DeepSeek Harness injection did not deliver the promoted memory'
+  }
 
   [pscustomobject]@{
     schema_version = 'quickstart-smoke/v1alpha2'

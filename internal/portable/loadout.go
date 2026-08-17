@@ -281,7 +281,8 @@ func canonicalAgents(values []ledger.Agent) []ledger.Agent {
 	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
 	unique := result[:0]
 	for _, value := range result {
-		if value != ledger.AgentCodex && value != ledger.AgentClaudeCode && value != ledger.AgentOpenCode {
+		if value != ledger.AgentCodex && value != ledger.AgentClaudeCode &&
+			value != ledger.AgentOpenCode && value != ledger.AgentDeepSeekHarness {
 			continue
 		}
 		if len(unique) == 0 || unique[len(unique)-1] != value {

@@ -141,7 +141,7 @@
       ],
       "properties": {
         "agent": {
-          "enum": ["codex", "claude_code", "opencode", "unknown"]
+          "enum": ["codex", "claude_code", "opencode", "deepseek_harness", "unknown"]
         },
         "adapter": {
           "type": "string",

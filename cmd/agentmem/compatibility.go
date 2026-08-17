@@ -13,7 +13,7 @@ import (
 func runCompatibility(args []string) error {
 	flags := flag.NewFlagSet("compatibility", flag.ContinueOnError)
 	var values repeatedStrings
-	flags.Var(&values, "agent", "Agent runtime to probe: codex, claude-code, or opencode; repeatable")
+	flags.Var(&values, "agent", "Agent runtime to probe: codex, claude-code, opencode, or deepseek-harness; repeatable")
 	root := flags.String("root", "", "optional local evidence root used to verify native Codex receipts")
 	timeout := flags.Duration("timeout", 5*time.Second, "maximum version-probe duration per Agent")
 	requireAll := flags.Bool("require-all", false, "return a non-zero status unless every requested Agent is executable")
@@ -25,7 +25,7 @@ func runCompatibility(args []string) error {
 	}
 	agents := make([]ledger.Agent, 0, len(values))
 	for _, value := range values {
-		agent, err := captureAgent(value)
+		agent, err := compatibilityAgent(value)
 		if err != nil {
 			return err
 		}
@@ -49,4 +49,19 @@ func runCompatibility(args []string) error {
 		return errors.New("one or more requested Agent runtimes are unavailable")
 	}
 	return nil
+}
+
+func compatibilityAgent(value string) (ledger.Agent, error) {
+	switch value {
+	case "codex":
+		return ledger.AgentCodex, nil
+	case "claude-code":
+		return ledger.AgentClaudeCode, nil
+	case "opencode":
+		return ledger.AgentOpenCode, nil
+	case "deepseek-harness":
+		return ledger.AgentDeepSeekHarness, nil
+	default:
+		return "", errors.New("compatibility --agent must be codex, claude-code, opencode, or deepseek-harness")
+	}
 }

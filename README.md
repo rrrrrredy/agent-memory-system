@@ -159,6 +159,7 @@ version probe does not hide a working offline importer.
 | Codex rollout import | Maintainer-reported private real-rollout acceptance on Windows, plus public loss/compaction fixtures and cross-platform protocol tests; the private run is not independently reproducible from this repository |
 | Claude Code import | Transcript, history, companion, thinking, and unknown-block fixtures on Windows, macOS, and Linux |
 | OpenCode plugin | Pinned OpenCode runtime starts on a GitHub-hosted runner, loads the plugin, captures the matching `session.created` event, imports it, and verifies the ledger; no provider model or secret is used |
+| DeepSeek Harness Bundle | Real Cordis, SessionStore, JSONL Persistence, and `agent/pre-step` composition tests cover verbatim backfill, crash-safe live capture, verified-memory injection, real CLI import, and clean unload; this is community-Bundle evidence, not DeepSeek certification |
 | Review and memory lifecycle | Evidence-bound caller attestations, promotion, supersession, revocation, secret scanning, and conflict tests; caller identity is not authenticated |
 | Cross-device memory | Private Git history verification, offline use, divergence handling, recovery, and hosted Windows/macOS/Linux tests |
 | Native Codex memory diagnostic | A frozen 20-cluster synthetic suite ran 20 paired authenticated `codex exec` tasks with sealed no-tools policy and verified retrieval injections: 19 wins, 1 tie, 0 losses; baseline 1/20, memory 20/20; one-sided sign-test p=0.0000019073. This is bounded capability evidence, not longitudinal certification; see the [aggregate receipt](evals/results/codex-memory-capability-v1-2026-08-12.json) |
@@ -206,8 +207,10 @@ agentmem recall search --root <evidence> --repo <private-memory> --agent codex -
 agentmem serve mcp --root <evidence> --repo <private-memory> --agent codex
 ```
 
-Codex, Claude Code, and OpenCode consume the same portable protocol. Their
-native hooks or plugins are optional; CLI and MCP remain the stable boundary.
+Codex, Claude Code, OpenCode, and DeepSeek Harness consume the same portable
+protocol. Their native hooks, plugins, or Bundles are optional; CLI and MCP
+remain the stable boundary. The DeepSeek Harness community Bundle is documented
+under [`integrations/deepseek-harness`](integrations/deepseek-harness).
 
 ## Operational memory
 
@@ -274,7 +277,7 @@ local index, never as Git-merged canonical data.
 ## Repository map
 
 - `cmd/agentmem`: cross-platform CLI
-- `adapters`: loss-aware Codex, Claude Code, and OpenCode importers
+- `adapters`: loss-aware Codex, Claude Code, OpenCode, and DeepSeek Harness importers
 - `internal/ledger`: append-only evidence and content-addressed blobs
 - `internal/episodes`, `internal/candidates`: reconstruction and extraction
 - `internal/review`, `internal/promotion`: attested decisions and memory lifecycle
@@ -305,7 +308,8 @@ go build ./cmd/agentmem
 
 The CI matrix runs on Ubuntu, Windows, and macOS. Stateful safety packages also
 run with the Go race detector. The OpenCode runtime smoke test installs its
-pinned runtime only inside the disposable hosted runner.
+pinned runtime only inside the disposable hosted runner. The DeepSeek Harness
+Bundle has its own Node 22.19+/24 build, Cordis composition, and package tests.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before changing an adapter, schema, or
 evidence boundary. Never attach real transcripts or raw evidence to an issue.

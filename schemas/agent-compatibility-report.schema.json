@@ -20,11 +20,14 @@
           "native_execution_verified", "execution_evidence", "provider_independently_attested", "limitations"
         ],
         "properties": {
-          "agent": {"enum": ["codex", "claude_code", "opencode"]},
+          "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness"]},
           "command": {"type": "string", "minLength": 1},
           "runtime_status": {"enum": ["available", "blocked", "not_found"]},
           "runtime_issue": {
-            "enum": ["command_not_found", "version_probe_timeout", "version_probe_failed", "empty_version_output"]
+            "enum": [
+              "command_not_found", "executable_read_failed", "version_probe_staging_failed",
+              "version_probe_timeout", "version_probe_failed", "empty_version_output"
+            ]
           },
           "version": {"type": "string", "minLength": 1, "maxLength": 4096},
           "executable_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -33,7 +36,10 @@
           "retrieval_modes": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
           "native_execution_verified": {"type": "boolean"},
           "execution_evidence": {
-            "enum": ["not_verified", "local_replayable_receipt", "adapter_protocol_only", "hosted_runtime_smoke_only", "unsupported"]
+            "enum": [
+              "not_verified", "local_replayable_receipt", "adapter_protocol_only",
+              "hosted_runtime_smoke_only", "community_bundle_protocol_only", "unsupported"
+            ]
           },
           "provider_independently_attested": {"const": false},
           "limitations": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}

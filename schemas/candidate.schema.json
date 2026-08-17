@@ -82,7 +82,7 @@
       "additionalProperties": false,
       "required": ["agent", "status"],
       "properties": {
-        "agent": {"enum": ["codex", "claude_code", "opencode", "unknown"]},
+        "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness", "unknown"]},
         "status": {"const": "unconfirmed"}
       }
     },

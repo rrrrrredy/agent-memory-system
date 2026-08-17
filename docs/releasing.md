@@ -14,8 +14,9 @@ a separate owner action after the candidate has been inspected.
 Before building release artifacts:
 
 1. update `CHANGELOG.md` with the exact SemVer version and date;
-2. require all seven checks on the release commit to pass: Ubuntu, Windows,
-   macOS, race, fuzz-smoke, OpenCode runtime, and public-tree privacy;
+2. require Ubuntu, Windows, macOS, race, fuzz-smoke, OpenCode runtime,
+   public-tree privacy, and all four Windows/Linux by Node 22.19/24 DeepSeek
+   Harness Bundle checks on the release commit to pass;
 3. require the release commit to be the protected `main` head;
 4. require every pull request to scan protected `main`, tags, and its own
    complete reachable history; scan protected `main` and tags again when the
@@ -30,7 +31,7 @@ Before building release artifacts:
 ## Build release artifacts
 
 Run the manually dispatched `release-build` workflow with the exact SemVer label
-from the first versioned `CHANGELOG.md` entry, such as `v0.3.0`, on `main`.
+from the first versioned `CHANGELOG.md` entry, such as `v0.3.1`, on `main`.
 The workflow refuses a different ref, a stale `main` commit, or any historical
 version other than that current entry. It verifies that
 one successful `ci.yml` push run on protected `main` contains every required job,
@@ -51,8 +52,9 @@ Each archive contains:
 - `README.md` and `LICENSE`;
 - versioned schemas and documentation;
 - installer scripts;
-- optional Codex, Claude Code, and OpenCode integration assets; and
-- the three adapter capability contracts.
+- optional Codex, Claude Code, OpenCode, and DeepSeek Harness integration assets;
+  and
+- the four adapter capability contracts.
 
 ## Approve publication
 

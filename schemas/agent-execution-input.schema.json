@@ -11,7 +11,7 @@
   "properties": {
     "schema_version": {"const": "agent-execution-input/v1alpha1"},
     "challenge": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness"]},
     "provider": {"type": "string", "minLength": 1},
     "model": {"type": "string", "minLength": 1},
     "system_prompt": {"type": "string", "contentEncoding": "base64"},

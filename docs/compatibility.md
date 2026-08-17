@@ -21,6 +21,7 @@ A higher level does not imply access to provider-hidden reasoning.
 | Codex | Yes | Local probe plus replay-verifiable native process receipt | Rollout import and exact local execution-receipt path | Authenticated local tasks can be preserved, but provider and server-side model identity are not independently attested |
 | Claude Code | Yes | CLI version probe only | Importer and hook protocol conformance | Not claimed; no equivalent native execution receipt exists |
 | OpenCode | Yes | Pinned disposable hosted runner only | Hosted plugin event to verified ledger | Not claimed; the hosted smoke intentionally uses no provider key and OpenCode is not installed locally |
+| DeepSeek Harness | Yes | Local `dsh` version probe | Community Bundle capture plus verbatim persistence backfill to the verified ledger | Not claimed by the compatibility command; a separate release smoke may exercise a configured provider but is not independent attestation |
 
 The GitHub-hosted macOS job is a real macOS runner. It is not a physical-device
 acceptance and is not described as one.
@@ -31,6 +32,7 @@ acceptance and is not described as one.
 agentmem compatibility
 agentmem compatibility --agent codex --agent claude-code
 agentmem compatibility --agent opencode --require-all
+agentmem compatibility --agent deepseek-harness
 ```
 
 The command reports:
@@ -66,8 +68,11 @@ evidence:
   not become a claimed native task.
 - OpenCode reports `hosted_runtime_smoke_only`; the pinned CI runtime is not a
   local installation and does not invoke a provider model.
+- DeepSeek Harness reports `community_bundle_protocol_only`; executable startup
+  does not prove the Bundle is installed, enabled in the selected profile, or
+  used for a provider-backed task.
 
-All three report `provider_independently_attested=false`. A native Codex receipt
+All four report `provider_independently_attested=false`. A native Codex receipt
 authenticates the supported local process graph, not the remote provider,
 server-side model, account, or provider-hidden reasoning. See
 [native execution](native-execution.md).
@@ -130,6 +135,26 @@ OpenCode and without placing a provider secret in CI. It does not prove a
 provider-backed OpenCode task.
 
 See `adapters/opencode/CAPABILITIES.md` and `integrations/opencode/README.md`.
+
+## DeepSeek Harness
+
+DeepSeek Harness support is an independently published community Bundle. The
+capture path subscribes to the native `session/event` feed and writes exact
+events to crash-safe local JSONL segments outside Git. At startup it also uses
+`listSnapshots` and `readRaw` when the configured persistence backend exposes
+verbatim per-session artifacts. Unsupported persistence, unknown events, and
+read or projection failures remain explicit gaps.
+
+Retrieval runs `agentmem inject deepseek-harness` from `agent/pre-step` and
+appends a formal plugin-originated recall message only after Agent Memory
+verifies the complete portable repository and current promoted revisions. A
+missing CLI, timeout, bounded-output loss, malformed response, or verification
+failure injects nothing and never reuses stale context.
+
+This integration is not part of the capture supervisor, native execution
+receipt path, or the fixed Codex/Claude Code/OpenCode continuous-evaluation
+population. See `adapters/deepseekharness/CAPABILITIES.md` and
+`integrations/deepseek-harness/README.md`.
 
 ## Version changes
 

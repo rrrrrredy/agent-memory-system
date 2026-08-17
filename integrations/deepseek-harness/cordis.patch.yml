@@ -1,0 +1,18 @@
+- insert:
+    - id: agent-memory
+      name: '@rrrrrredy/dsh-agent-memory'
+      config:
+        binary: agentmem
+        captureDir: ""
+        evidenceRoot: ""
+        portableRepo: ""
+        scopeRepository: ""
+        scopeProject: ""
+        scopeTask: ""
+        limit: 5
+        tokenBudget: 600
+        byteBudget: 3072
+        timeoutMs: 3000
+        stdoutMaxBytes: 131072
+        stderrMaxBytes: 131072
+        segmentMaxBytes: 33554432

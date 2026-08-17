@@ -299,7 +299,9 @@ func validScope(kind review.ScopeKind, value string) bool {
 		return value == "*"
 	case review.ScopeAgent:
 		return value == string(ledger.AgentCodex) || value == string(ledger.AgentClaudeCode) ||
-			value == string(ledger.AgentOpenCode) || value == string(ledger.AgentUnknown)
+			value == string(ledger.AgentOpenCode) ||
+			value == string(ledger.AgentDeepSeekHarness) ||
+			value == string(ledger.AgentUnknown)
 	case review.ScopeRepository, review.ScopeProject, review.ScopeTask:
 		return true
 	default:

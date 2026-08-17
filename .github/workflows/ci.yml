@@ -145,6 +145,53 @@ jobs:
           go test ./internal/secretscan
           -run '^$' -fuzz '^FuzzScan$' -fuzztime 10s
 
+  dsh-bundle:
+    name: dsh-bundle-${{ matrix.os }}-node-${{ matrix.node }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        node:
+          - "22.19.0"
+          - "24.19.0"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+          cache-dependency-path: integrations/deepseek-harness/pnpm-lock.yaml
+      - name: Install exact Bundle dependencies
+        working-directory: integrations/deepseek-harness
+        run: pnpm install --frozen-lockfile
+      - name: Verify Bundle protocol and real Cordis composition
+        working-directory: integrations/deepseek-harness
+        run: pnpm verify
+      - name: Build Agent Memory CLI for integration
+        shell: pwsh
+        run: |
+          $suffix = if ($env:RUNNER_OS -eq 'Windows') { '.exe' } else { '' }
+          $binary = Join-Path $env:RUNNER_TEMP ("agentmem" + $suffix)
+          go build -trimpath -o $binary ./cmd/agentmem
+          "AGENTMEM_BINARY=$binary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "AGENT_MEMORY_DSH_TEST_TMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Import a real Bundle spool through the CLI
+        working-directory: integrations/deepseek-harness
+        run: pnpm test:integration
+
   opencode-runtime:
     runs-on: ubuntu-latest
     timeout-minutes: 10

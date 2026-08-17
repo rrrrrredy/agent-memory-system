@@ -22,6 +22,16 @@ func TestUserWorkflowInstancesMatchPublishedSchemas(t *testing.T) {
 			ExecutionEvidence:             "not_verified",
 			ProviderIndependentlyAttested: false,
 			Limitations:                   []string{"Provider-hidden reasoning cannot be recovered."},
+		}, {
+			Agent: ledger.AgentDeepSeekHarness, Command: "dsh",
+			RuntimeStatus: compatibility.RuntimeNotFound, RuntimeIssue: "command_not_found",
+			HistoryImportAvailable:        true,
+			CaptureModes:                  []string{"bundle_event_spool", "verbatim_persistence_backfill"},
+			RetrievalModes:                []string{"bundle_pre_step_injection", "mcp"},
+			NativeExecutionVerified:       false,
+			ExecutionEvidence:             "community_bundle_protocol_only",
+			ProviderIndependentlyAttested: false,
+			Limitations:                   []string{"Provider-hidden reasoning cannot be recovered."},
 		}},
 		Privacy: "local_only",
 	}

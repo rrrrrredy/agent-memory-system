@@ -91,7 +91,7 @@ perform validation, authenticate the caller, authorize a rule change, or make
 a stale generation current.
 
 Global scope uses `*`. Agent scope names one supported adapter: `codex`,
-`claude_code`, `opencode`, or `unknown`. Repository, project, and task scopes
+`claude_code`, `opencode`, `deepseek_harness`, or `unknown`. Repository, project, and task scopes
 use their stable local identifiers. Scope values cannot contain line breaks.
 
 ## Applying a decision

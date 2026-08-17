@@ -26,7 +26,7 @@
       "required": ["source_id", "agent", "kind", "source_config_sha256", "inventory_sha256", "items"],
       "properties": {
         "source_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
-        "agent": {"enum": ["codex", "claude_code", "opencode"]},
+        "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness"]},
         "kind": {"enum": ["codex_rollouts", "claude_home", "opencode_native", "opencode_events"]},
         "source_config_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
         "inventory_sha256": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},

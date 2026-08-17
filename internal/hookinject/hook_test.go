@@ -113,6 +113,49 @@ func TestOpenCodeCompactionCanReuseTheLatestPrompt(t *testing.T) {
 	}
 }
 
+func TestDeepSeekHarnessPromptUsesHarnessChannelAndVerifiedMemory(t *testing.T) {
+	evidenceRoot := t.TempDir()
+	store, err := ledger.Init(evidenceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portableRoot := hookPortableRepository(t,
+		"Use only verified promoted memory in the DeepSeek Harness pre-step.")
+	raw := `{"session_id":"session-dsh","cwd":"D:\\work","hook_event_name":"UserPromptSubmit","turn_id":"turn-2-step-1","prompt":"retrieve verified harness memory","source":"dsh-agent-pre-step"}`
+	output, err := Process(strings.NewReader(raw), Config{
+		EvidenceRoot: evidenceRoot,
+		PortableRoot: portableRoot,
+		Agent:        ledger.AgentDeepSeekHarness,
+		TokenBudget:  500,
+		ByteBudget:   2048,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !output.Continue || output.HookSpecificOutput == nil ||
+		!strings.Contains(output.HookSpecificOutput.AdditionalContext, "verified promoted memory") {
+		t.Fatalf("unexpected DeepSeek Harness injection output: %+v", output)
+	}
+	seenHarnessChannel := false
+	if err := store.VisitRecords(func(record ledger.Record) error {
+		if record.Event.Kind == ledger.KindRetrieval && record.Event.Payload != nil &&
+			record.Event.Payload.Content != nil &&
+			strings.Contains(*record.Event.Payload.Content, `"channel":"harness"`) {
+			seenHarnessChannel = true
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !seenHarnessChannel {
+		t.Fatal("DeepSeek Harness retrieval was not recorded on the harness channel")
+	}
+	if report := retrieval.Verify(store); len(report.Issues) != 0 ||
+		report.RetrievalsChecked != 1 || report.InjectionsChecked != 1 {
+		t.Fatalf("unexpected DeepSeek Harness receipt graph: %+v", report)
+	}
+}
+
 func TestOversizeHookInputFailsOpenAndStoresBoundedPrefixAsBlob(t *testing.T) {
 	evidenceRoot := t.TempDir()
 	store, err := ledger.Init(evidenceRoot)

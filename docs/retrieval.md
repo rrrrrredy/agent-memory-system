@@ -101,9 +101,9 @@ agentmem serve mcp \
   --scope-repository <logical-repository-id>
 ```
 
-Use `claude_code` or `opencode` for the other Agents. Register the command as a
-local stdio MCP server using that Agent's supported configuration. The server
-exposes:
+Use `claude_code`, `opencode`, or `deepseek_harness` for the other Agents.
+Register the command as a local stdio MCP server using that Agent's supported
+configuration. The server exposes:
 
 - `memory_search`: structured ranked results;
 - `memory_get`: one exact active revision;
@@ -186,6 +186,30 @@ contracts are documented in the
 The retrieval plugin does not replace
 `agent-memory-evidence.ts`, native unsanitized exports, or historical
 reconciliation. No plugin is installed automatically.
+
+## Optional DeepSeek Harness Bundle
+
+The DeepSeek Harness community Bundle combines independently enabled capture
+and retrieval paths.
+When both `evidenceRoot` and `portableRepo` are configured, its
+`agent/pre-step` middleware invokes:
+
+```text
+agentmem inject deepseek-harness \
+  --root <local-evidence-directory> \
+  --repo <portable-memory-directory> \
+  --scope-repository <logical-repository-id>
+```
+
+Only messages whose source is the real user contribute query text. The Bundle
+awaits downstream pre-step middleware, verifies one bounded response, and adds
+the result as a formal `plugin: agent-memory` recall message at most once per
+turn. Executable lookup, timeout, output overflow, nonzero exit, malformed JSON,
+repository verification failure, or empty retrieval leaves the downstream
+decision unchanged. There is no cache or stale fallback.
+
+Installation, profile configuration, privacy boundaries, and removal are in
+[`integrations/deepseek-harness/README.md`](../integrations/deepseek-harness/README.md).
 
 ## Adoption and outcomes
 

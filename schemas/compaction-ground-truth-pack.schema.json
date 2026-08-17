@@ -30,7 +30,7 @@
       "properties": {
         "event_id": {"type": "string", "minLength": 1},
         "record_hash": {"$ref": "learning-evaluation-input.schema.json#/$defs/sha256"},
-        "agent": {"enum": ["codex", "claude_code", "opencode"]},
+        "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness"]},
         "expected": {"enum": ["drift", "preserved"]}
       }
     }

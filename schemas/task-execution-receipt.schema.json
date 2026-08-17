@@ -19,7 +19,7 @@
     "trial_pair_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
     "attempt_id": {"$ref": "learning-evaluation-input.schema.json#/$defs/identifier"},
     "condition": {"enum": ["baseline", "memory"]},
-    "agent": {"enum": ["codex", "claude_code", "opencode"]},
+    "agent": {"enum": ["codex", "claude_code", "opencode", "deepseek_harness"]},
     "provider": {"type": "string", "minLength": 1},
     "model": {"type": "string", "minLength": 1},
     "contract": {"$ref": "task-attempt-receipt.schema.json#/$defs/bound_event"},
