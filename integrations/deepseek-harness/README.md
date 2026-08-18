@@ -118,4 +118,4 @@ pnpm pack --pack-destination .pack
 
 `pnpm test:integration` writes a real Bundle spool into an explicit scratch root, imports it with the compiled Agent Memory CLI, and requires a clean `agentmem doctor` result. Set `AGENT_MEMORY_DSH_TEST_TMP` to keep all scratch work on a chosen volume.
 
-The public release evidence records the separate isolated-profile tarball install/remove test and real DeepSeek model smoke. Raw session and memory evidence are excluded from the package and release assets.
+The [0.1.0 public release evidence](release-evidence/0.1.0.md) records the separate isolated-profile public install/remove test and real DeepSeek model smoke. Raw session and memory evidence are excluded from the package and release assets.
