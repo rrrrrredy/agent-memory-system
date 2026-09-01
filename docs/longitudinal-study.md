@@ -11,6 +11,32 @@ execution cannot be ambiguously assigned to two populations.
 The report is intentionally descriptive. It does not claim independent causal,
 provider, or model certification.
 
+## Register an externally executed prospective study
+
+Some controlled studies need conditions that the built-in two-arm runner does
+not implement. For example, Runtime Evolution Workbench compares `no_wiki`,
+`flat_history`, and `persistent_wiki` optimizer contexts. Freeze that study with
+the versioned `runtime-evolution-study.v1` file, then register the exact content
+before the first model execution:
+
+```text
+agentmem study register --root <local-evidence-directory> --file <study.json>
+```
+
+Registration strictly validates all fields, requires at least three replicates
+and three iterations per replicate, binds failure, protection, and transfer
+datasets by SHA-256, and appends one `evaluation_trial_plan` event. Repeating the
+same file is idempotent; reusing the study ID with changed content fails.
+The optional `artifacts` block additionally binds the initial Skill, harness,
+harness tests, output schemas, and security scanner bytes before execution.
+
+This command deliberately does not execute tasks, ingest outcomes, compare
+conditions, or authorize a capability change. The external harness owns those
+functions. Agent Memory preserves only the prospective local evidence that the
+design existed in this exact form. The contracts are
+`schemas/runtime-evolution-study.schema.json` and
+`schemas/runtime-evolution-study-registration.schema.json`.
+
 ## Seal the population
 
 Create a local-only study definition. Task and cluster IDs must be unique and

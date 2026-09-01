@@ -12,6 +12,8 @@ import (
 
 func runStudy(args []string) error {
 	switch args[0] {
+	case "register":
+		return runStudyRegister(args[1:])
 	case "create":
 		return runStudyCreate(args[1:])
 	case "run":
@@ -25,6 +27,39 @@ func runStudy(args []string) error {
 	default:
 		return studyUsageError()
 	}
+}
+
+func runStudyRegister(args []string) error {
+	flags := flag.NewFlagSet("study register", flag.ContinueOnError)
+	root := flags.String("root", "", "local evidence root (required)")
+	file := flags.String("file", "", "frozen external study JSON (required)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *root == "" || *file == "" {
+		return errors.New("study register requires --root and --file")
+	}
+	input, err := os.Open(*file)
+	if err != nil {
+		return err
+	}
+	plan, decodeErr := study.DecodeExternalPlan(input)
+	closeErr := input.Close()
+	if decodeErr != nil {
+		return decodeErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	store, err := ledger.Open(*root)
+	if err != nil {
+		return err
+	}
+	result, err := study.RegisterExternal(store, plan)
+	if err != nil {
+		return err
+	}
+	return encodeIndented(result)
 }
 
 func runStudyCreate(args []string) error {

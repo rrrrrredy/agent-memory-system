@@ -78,6 +78,9 @@ history.
   snapshot before execution. A single-use study reservation is written before
   Codex starts; failures consume it, and outcomes replay the complete
   Agent-message bytes. Reports remain descriptive rather than causal.
+- Externally executed three-condition studies can register a strictly validated,
+  content-bound plan in the same append-only local evidence ledger. Registration
+  preserves provenance only; it grants no execution or result authority.
 - Raw evidence backup is optional, encrypted with age, and completely separate
   from the readable memory repository.
 - `AGENTS.md`, Skills, and other rule surfaces are never changed without a
@@ -248,7 +251,7 @@ agentmem serve dashboard --root <evidence> --repo <private-memory>
 ```
 
 See [loadouts](docs/loadouts.md), [native execution](docs/native-execution.md),
-[longitudinal studies](docs/longitudinal-study.md), and the
+[prospective study registration and longitudinal studies](docs/longitudinal-study.md), and the
 [dashboard](docs/dashboard.md).
 
 ## Storage boundaries
@@ -259,9 +262,9 @@ See [loadouts](docs/loadouts.md), [native execution](docs/native-execution.md),
 | Portable memory | Attested and redacted Markdown/YAML revisions plus immutable loadouts | Separate private repository only |
 | Encrypted backup | Complete local evidence snapshot | Optional backup backend, never the memory repository |
 
-Do not copy `~/.codex`, Agent state databases, session directories, or the local
-evidence root into the memory repository. SQLite may be used as a rebuildable
-local index, never as Git-merged canonical data.
+Do not copy the entire Codex home, Agent state databases, session directories,
+or the local evidence root into the memory repository. SQLite may be used as a
+rebuildable local index, never as Git-merged canonical data.
 
 ## What the project does not claim
 

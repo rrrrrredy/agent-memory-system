@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/runtime-evolution-study.schema.json",
+  "title": "Registered Runtime Evolution Study v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "study_id", "title", "created_at", "scenario", "hypotheses", "conditions", "replicates", "iterations_per_replicate", "source_model", "transfer_models", "datasets", "metrics", "assignment", "candidate_gate", "claim_boundary", "privacy"],
+  "properties": {
+    "schema_version": { "const": "runtime-evolution-study.v1" },
+    "study_id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "scenario": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "hypotheses": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/hypothesis" } },
+    "conditions": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/condition" } },
+    "replicates": { "type": "integer", "minimum": 3, "maximum": 100 },
+    "iterations_per_replicate": { "type": "integer", "minimum": 3, "maximum": 100 },
+    "source_model": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "transfer_models": { "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
+    "datasets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["failure", "protection", "transfer"],
+      "properties": {
+        "failure": { "$ref": "#/$defs/dataset" },
+        "protection": { "$ref": "#/$defs/dataset" },
+        "transfer": { "$ref": "#/$defs/dataset" }
+      }
+    },
+    "metrics": { "type": "array", "minItems": 5, "maxItems": 9, "uniqueItems": true, "items": { "enum": ["task_quality", "tool_calls", "input_tokens", "output_tokens", "wall_time_ms", "rule_lines", "rule_words", "rollback_count", "cross_model_transfer"] } },
+    "assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "seed"],
+      "properties": { "method": { "const": "fixed_seed_round_robin" }, "seed": { "type": "integer" } }
+    },
+    "candidate_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["improve", "tie", "degrade", "security_failure"],
+      "properties": {
+        "improve": { "const": "activate" },
+        "tie": { "const": "hold" },
+        "degrade": { "const": "rollback" },
+        "security_failure": { "const": "block" }
+      }
+    },
+    "artifacts": { "$ref": "#/$defs/artifacts" },
+    "claim_boundary": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "privacy": { "const": "local_only" }
+  },
+  "$defs": {
+    "hypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "direction"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^H[1-9][0-9]*$" },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "direction": { "enum": ["greater", "less", "different", "descriptive"] }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["condition_id", "optimizer_context"],
+      "properties": {
+        "condition_id": { "enum": ["no_wiki", "flat_history", "persistent_wiki"] },
+        "optimizer_context": { "enum": ["current_trace_only", "chronological_history", "pattern_registry"] }
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "cases"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "cases": { "type": "integer", "minimum": 1, "maximum": 100000 }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initial_skill", "harness", "harness_tests", "executor_schema", "optimizer_schema", "security_guard"],
+      "properties": {
+        "initial_skill": { "$ref": "#/$defs/artifact" },
+        "harness": { "$ref": "#/$defs/artifact" },
+        "harness_tests": { "$ref": "#/$defs/artifact" },
+        "executor_schema": { "$ref": "#/$defs/artifact" },
+        "optimizer_schema": { "$ref": "#/$defs/artifact" },
+        "security_guard": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version", "sha256"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 },
+            "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+          }
+        }
+      }
+    }
+  }
+}

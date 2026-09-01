@@ -3,6 +3,24 @@
 All notable changes will be documented in this file. The project follows
 Semantic Versioning after the first tagged public release.
 
+## [Unreleased]
+
+### Added
+
+- Strict, content-bound registration for externally executed prospective
+  studies with exactly three conditions, frozen failure/protection/transfer
+  datasets, implementation hashes, at least three replicates, and at least
+  three iterations.
+- `agentmem study register` plus public JSON Schemas for the canonical
+  registration file and its local append-only evidence record.
+- Idempotent replay for identical registrations and fail-closed conflict
+  handling when the same study identifier is reused with different content.
+
+### Fixed
+
+- Hardened dashboard fixture cleanup against a transient Windows directory
+  removal race exposed by repeated full-suite validation.
+
 ## [0.3.1] - 2026-08-17
 
 ### Added
