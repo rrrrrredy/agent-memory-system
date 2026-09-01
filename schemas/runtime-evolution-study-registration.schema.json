@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rrrrrredy/agent-memory-system/schemas/runtime-evolution-study-registration.schema.json",
+  "title": "Runtime Evolution Study Registration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "study", "event", "file_sha256", "written", "privacy"],
+  "properties": {
+    "schema_version": { "const": "runtime-evolution-study-registration.v1" },
+    "study": { "$ref": "runtime-evolution-study.schema.json" },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "record_sha256"],
+      "properties": {
+        "event_id": { "type": "string", "pattern": "^external-study-[0-9a-f]{64}$" },
+        "record_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "file_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "written": { "type": "boolean" },
+    "privacy": { "const": "local_only" }
+  }
+}

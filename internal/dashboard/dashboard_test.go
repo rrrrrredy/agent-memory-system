@@ -148,6 +148,20 @@ func TestDashboardRedactsPrivatePathsFromEveryFailureSurface(t *testing.T) {
 func dashboardFixture(t *testing.T) (*ledger.Store, string) {
 	t.Helper()
 	root := t.TempDir()
+	t.Cleanup(func() {
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			err := os.RemoveAll(root)
+			if err == nil || errors.Is(err, os.ErrNotExist) {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Errorf("remove dashboard fixture: %v", err)
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	})
 	store, err := ledger.Init(filepath.Join(root, "evidence"))
 	if err != nil {
 		t.Fatal(err)
