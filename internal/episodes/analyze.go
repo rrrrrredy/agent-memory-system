@@ -472,7 +472,7 @@ func classifyNormalizedStatement(normalized string, firstUser bool) string {
 	if containsMarker(normalized, constraintMarkers) {
 		return "constraint"
 	}
-	if firstUser || containsMarker(normalized, goalMarkers) {
+	if firstUser || isExplicitRememberNormalized(normalized) || containsMarker(normalized, goalMarkers) {
 		return "goal"
 	}
 	return ""

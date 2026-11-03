@@ -28,6 +28,7 @@ func runOnboard(args []string) error {
 	path := flags.String("path", "", "Codex rollout file or directory (required)")
 	repository := flags.String("repo", "", "optional separate portable memory repository")
 	full := flags.Bool("full-reconcile", false, "re-read all source bytes and append only changed events")
+	rebuild := flags.Bool("rebuild", false, "re-derive unchanged history with the current extraction rules")
 	shards := flags.Int("shards", 64, "power-of-two derivation shard count (1-256)")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
@@ -53,7 +54,7 @@ func runOnboard(args []string) error {
 	if err != nil {
 		return err
 	}
-	episodeResult, err := episodes.Build(store, episodes.BuildOptions{ShardCount: *shards})
+	episodeResult, err := episodes.Build(store, episodes.BuildOptions{ShardCount: *shards, Rebuild: *rebuild})
 	if err != nil {
 		return err
 	}

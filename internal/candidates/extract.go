@@ -319,20 +319,7 @@ func observationLess(left, right Observation) bool {
 }
 
 func isExplicitRemember(text string) bool {
-	normalized := normalizeText(text)
-	padded := " " + normalized + " "
-	for _, phrase := range []string{" remember ", " remember that ", " please remember ", " from now on "} {
-		if strings.Contains(padded, phrase) {
-			return true
-		}
-	}
-	compact := strings.ReplaceAll(normalized, " ", "")
-	for _, phrase := range []string{"请记住", "记住", "以后都", "从现在开始"} {
-		if strings.Contains(compact, phrase) {
-			return true
-		}
-	}
-	return false
+	return episodes.IsExplicitRemember(text)
 }
 
 func detectPolarity(normalized string) CandidatePolarity {
