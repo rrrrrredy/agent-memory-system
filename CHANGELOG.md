@@ -7,6 +7,8 @@ Semantic Versioning after the first tagged public release.
 
 ### Added
 
+- `--rebuild` on `onboard codex` and `derive episodes` to apply updated
+  extraction rules to unchanged history in an existing evidence store.
 - Strict, content-bound registration for externally executed prospective
   studies with exactly three conditions, frozen failure/protection/transfer
   datasets, implementation hashes, at least three replicates, and at least
@@ -18,6 +20,9 @@ Semantic Versioning after the first tagged public release.
 
 ### Fixed
 
+- Explicit Chinese and English memory requests are retained after the first
+  user turn. Statement admission and candidate extraction now share one rule,
+  without treating recollections or recall questions as memory instructions.
 - Hardened dashboard fixture cleanup against a transient Windows directory
   removal race exposed by repeated full-suite validation.
 

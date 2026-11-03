@@ -266,6 +266,28 @@ Real history may legitimately produce no review-ready candidates. That is a
 safe result. Do not manufacture a memory or weaken the evidence policy. If new
 history is captured later, rerun `onboard` or the explicit derive commands.
 
+## Rebuild after an extraction upgrade
+
+Normal onboarding reuses verified derivations when the history is unchanged.
+After an upgrade that changes extraction rules, use the same evidence directory
+and source path with `--rebuild`:
+
+```text
+agentmem onboard codex --root <existing-evidence-directory> --path <sessions-directory> --rebuild
+agentmem review list --root <existing-evidence-directory> --status review_ready --limit 20
+```
+
+This creates a new episode and candidate generation from the retained evidence,
+so a later-turn request such as `记住我喜欢简洁回答` can be recovered without
+creating a new store. Earlier generations and review records remain available.
+Review the new candidates through the usual workflow. Omit `--rebuild` on
+subsequent routine imports; unchanged history then reuses the new generation.
+
+For already-imported history from any adapter, the lower-level equivalent is
+`agentmem derive episodes --root <evidence> --rebuild`, followed by
+`derive candidates --root <evidence> --episodes <generation_path>` using the
+returned episode generation path.
+
 ## Other Agents
 
 Claude Code and OpenCode sources use the same evidence and portable-memory

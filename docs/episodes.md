@@ -35,6 +35,12 @@ then split it into clauses and normalize whitespace while identifying candidate
 goals, constraints, and corrections. Each statement keeps its source event IDs.
 These statements are observations for evaluation, not validated experience.
 
+Explicit memory requests are retained in any user turn. Requests such as
+`记住…`, `帮我记住…`, `Remember…`, and `Could you please remember…` share the
+same recognition rule with candidate extraction. Corrections and constraints
+keep their original statement kind. Recollections such as `I remember…` and
+questions such as `Do you remember…?` are not explicit memory requests.
+
 Adjacent compaction boundary and summary events are treated as one checkpoint.
 Every active statement is compared with the locally available compacted
 representation using reproducible lexical features. The checkpoint statuses
@@ -61,6 +67,12 @@ Run:
 ```text
 agentmem derive episodes --root <local-evidence-directory>
 ```
+
+Use `--rebuild` after extraction rules change to create a new generation even
+when the history is unchanged. A new generation-attempt record gives the build
+a new ledger prefix; existing generations remain intact. Normal calls continue
+to reuse verified results. `onboard codex --rebuild` also derives candidates in
+the same command.
 
 The command writes a content-verified generation below the local evidence root
 and prints a summary containing counts and file hashes. Episode text can contain

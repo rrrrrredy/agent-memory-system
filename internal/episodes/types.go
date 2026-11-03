@@ -77,6 +77,7 @@ const (
 
 type BuildOptions struct {
 	ShardCount int
+	Rebuild    bool // Retain a new generation even when the evidence is unchanged.
 }
 
 type BuildResult struct {

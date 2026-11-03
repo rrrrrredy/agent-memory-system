@@ -142,6 +142,18 @@ either decision. The [quickstart](docs/quickstart.md) provides complete
 PowerShell and POSIX commands for review, promotion, private Git export, exact
 retrieval, and switching to an existing Codex sessions directory.
 
+For everyday use, keep the same evidence directory and rerun `onboard codex`
+when there is new history. Use `review list` to inspect pending memories and
+`recall context` to supply relevant promoted memories to the next task:
+
+```text
+agentmem recall context --root <evidence> --repo <private-memory> --agent codex --query "the next task"
+```
+
+After upgrading extraction rules, run `onboard codex` once with `--rebuild`
+to reprocess unchanged history in the existing store. See
+[rebuild after an upgrade](docs/quickstart.md#rebuild-after-an-extraction-upgrade).
+
 A runtime probe is optional and never gates history import:
 
 ```powershell

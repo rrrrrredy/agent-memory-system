@@ -2346,6 +2346,7 @@ func runDeriveEpisodes(args []string) error {
 	flags := flag.NewFlagSet("derive episodes", flag.ContinueOnError)
 	root := flags.String("root", "", "local evidence root (required)")
 	shards := flags.Int("shards", 64, "power-of-two work shard count (1-256)")
+	rebuild := flags.Bool("rebuild", false, "re-derive unchanged history with the current extraction rules")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -2356,7 +2357,7 @@ func runDeriveEpisodes(args []string) error {
 	if err != nil {
 		return err
 	}
-	result, err := episodes.Build(store, episodes.BuildOptions{ShardCount: *shards})
+	result, err := episodes.Build(store, episodes.BuildOptions{ShardCount: *shards, Rebuild: *rebuild})
 	if err != nil {
 		return err
 	}
@@ -2795,7 +2796,7 @@ func usageError() error {
 }
 
 func onboardUsageError() error {
-	return errors.New("usage: agentmem onboard codex --root <local-evidence-directory> --path <rollout-file-or-directory> [--repo <portable-memory-directory>]")
+	return errors.New("usage: agentmem onboard codex --root <local-evidence-directory> --path <rollout-file-or-directory> [--repo <portable-memory-directory>] [--rebuild]")
 }
 
 func backupUsageError() error {

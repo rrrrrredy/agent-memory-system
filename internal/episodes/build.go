@@ -45,7 +45,7 @@ func Build(store *ledger.Store, options BuildOptions) (BuildResult, error) {
 	}
 	if audited, ok, err := loadLastAuditedGeneration(store); err != nil {
 		return result, err
-	} else if ok {
+	} else if ok && !options.Rebuild {
 		audited.Reused = true
 		return audited, nil
 	}
