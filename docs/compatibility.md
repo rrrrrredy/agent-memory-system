@@ -107,9 +107,9 @@ state, plaintext thinking blocks, opaque redacted-thinking blocks, tool use,
 and unknown blocks. `claude-home` reconciles the supported home-directory
 sources under one expected-source inventory.
 
-The current public acceptance does not claim an authenticated Claude Code task.
-Users should treat a new Claude Code release as unverified until the adapter
-fixtures and a private local acceptance pass.
+Claude Code coverage includes transcript import and hook-protocol fixtures.
+When a release changes the local format, compare its records with the adapter
+fixtures and update the affected parser and capability documentation.
 
 See `adapters/claudecode/CAPABILITIES.md`.
 
